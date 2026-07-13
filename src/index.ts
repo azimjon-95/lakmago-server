@@ -1,0 +1,43 @@
+import express from 'express';
+import { createServer } from 'http';
+import cors from 'cors';
+import helmet from 'helmet';
+import morgan from 'morgan';
+import { config, connectDB } from './config/index.js';
+import { router } from './routes/index.js';
+import { errorHandler, notFound } from './middleware/error.js';
+import { initSocket } from './sockets/io.js';
+import { handleBotUpdate } from './services/telegram.js';
+
+async function main() {
+  await connectDB();
+
+  const app = express();
+  const httpServer = createServer(app);
+
+  app.use(helmet());
+  app.use(cors({ origin: config.clientOrigin }));
+  app.use(express.json());
+  app.use(morgan('dev'));
+
+  app.get('/health', (_req, res) => res.json({ status: 'ok', service: 'lokmago-api' }));
+
+  // Telegram bot webhook
+  app.post('/bot/webhook', (req, res) => {
+    handleBotUpdate(req.body);
+    res.sendStatus(200);
+  });
+
+  app.use('/api', router);
+
+  app.use(notFound);
+  app.use(errorHandler);
+
+  initSocket(httpServer);
+
+  httpServer.listen(config.port, () => {
+    console.log(`✓ LokmaGo API http://localhost:${config.port}`);
+  });
+}
+
+main();
