@@ -3,7 +3,7 @@ import { config } from '../config/index.js';
 const TG_API = `https://api.telegram.org/bot${config.telegramBotToken}`;
 
 // Foydalanuvchiga push xabar yuborish (buyurtma statusi, bron tasdiqi)
-export async function notifyUser(telegramId: string, text: string): Promise<void> {
+export async function notifyUser(telegramId, text) {
   if (!config.telegramBotToken) {
     console.log(`[telegram demo] ${telegramId}: ${text}`);
     return;
@@ -15,8 +15,8 @@ export async function notifyUser(telegramId: string, text: string): Promise<void
       body: JSON.stringify({
         chat_id: telegramId,
         text,
-        parse_mode: 'HTML',
-      }),
+        parse_mode: 'HTML'
+      })
     });
   } catch (err) {
     console.error('Telegram xabar xatosi:', err);
@@ -24,7 +24,7 @@ export async function notifyUser(telegramId: string, text: string): Promise<void
 }
 
 // WebApp tugmasi bilan xabar (ilovani ochish)
-export async function sendWebAppButton(telegramId: string, webAppUrl: string): Promise<void> {
+export async function sendWebAppButton(telegramId, webAppUrl) {
   if (!config.telegramBotToken) return;
   await fetch(`${TG_API}/sendMessage`, {
     method: 'POST',
@@ -33,22 +33,22 @@ export async function sendWebAppButton(telegramId: string, webAppUrl: string): P
       chat_id: telegramId,
       text: 'LokmaGo — restoran va kafelar. Buyurtma bering, stol bron qiling!',
       reply_markup: {
-        inline_keyboard: [[{ text: '🍽 Ilovani ochish', web_app: { url: webAppUrl } }]],
-      },
-    }),
+        inline_keyboard: [[{ text: '🍽 Ilovani ochish', web_app: { url: webAppUrl } }]]
+      }
+    })
   });
 }
 
 // Bot webhook update'ini qayta ishlash (/start buyrug'i)
-interface TelegramUpdate {
-  message?: {
-    chat: { id: number };
-    text?: string;
-    from?: { id: number; first_name?: string };
-  };
-}
 
-export async function handleBotUpdate(update: TelegramUpdate): Promise<void> {
+
+
+
+
+
+
+
+export async function handleBotUpdate(update) {
   const message = update.message;
   if (!message?.text) return;
 

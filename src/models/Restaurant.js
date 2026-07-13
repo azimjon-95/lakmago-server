@@ -1,4 +1,4 @@
-import { Schema, model, InferSchemaType } from 'mongoose';
+import { Schema, model } from 'mongoose';
 
 const restaurantSchema = new Schema(
   {
@@ -12,17 +12,17 @@ const restaurantSchema = new Schema(
     category: {
       type: String,
       enum: ['milliy', 'fastfood', 'sushi', 'kafe', 'shirinlik'],
-      required: true,
+      required: true
     },
     tint: { type: String, default: '#FAEEDA' },
     icon: { type: String, default: 'ti-tools-kitchen-2' },
     discount: { type: Number },
     isNew: { type: Boolean, default: false },
     isApproved: { type: Boolean, default: false }, // admin tasdiqlashi kerak
-    ownerId: { type: Schema.Types.ObjectId, ref: 'User' },
+    ownerId: { type: Schema.Types.ObjectId, ref: 'User' }
   },
-  { timestamps: true },
+  { timestamps: true }
 );
 
-export type RestaurantDoc = InferSchemaType<typeof restaurantSchema>;
+
 export const Restaurant = model('Restaurant', restaurantSchema);

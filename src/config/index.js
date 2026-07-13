@@ -8,7 +8,7 @@ export const config = {
   mongoUri: process.env.MONGO_URI ?? 'mongodb://localhost:27017/lokmago',
   jwtSecret: process.env.JWT_SECRET ?? 'dev-secret',
   telegramBotToken: process.env.TELEGRAM_BOT_TOKEN ?? '',
-  clientOrigin: process.env.CLIENT_ORIGIN ?? 'http://localhost:5173',
+  clientOrigin: process.env.CLIENT_ORIGIN ?? 'http://localhost:5173'
 };
 
 export async function connectDB() {

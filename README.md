@@ -1,6 +1,6 @@
 # LokmaGo — Backend API
 
-Express + MongoDB (Mongoose) + Socket.IO, TypeScript.
+Express + MongoDB (Mongoose) + Socket.IO, JavaScript (ESM).
 
 ## Ishga tushirish
 

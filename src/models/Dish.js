@@ -1,11 +1,11 @@
-import { Schema, model, InferSchemaType, Types } from 'mongoose';
+import { Schema, model } from 'mongoose';
 
 const optionSchema = new Schema(
   {
     name: { type: String, required: true },
-    price: { type: Number, default: 0 },
+    price: { type: Number, default: 0 }
   },
-  { _id: true },
+  { _id: true }
 );
 
 const optionGroupSchema = new Schema(
@@ -13,9 +13,9 @@ const optionGroupSchema = new Schema(
     title: { type: String, required: true },
     required: { type: Boolean, default: false },
     multiple: { type: Boolean, default: false },
-    options: [optionSchema],
+    options: [optionSchema]
   },
-  { _id: true },
+  { _id: true }
 );
 
 const dishSchema = new Schema(
@@ -35,10 +35,10 @@ const dishSchema = new Schema(
     isHit: { type: Boolean, default: false },
     isTrending: { type: Boolean, default: false },
     isDiscounted: { type: Boolean, default: false },
-    isAvailable: { type: Boolean, default: true },
+    isAvailable: { type: Boolean, default: true }
   },
-  { timestamps: true },
+  { timestamps: true }
 );
 
-export type DishDoc = InferSchemaType<typeof dishSchema> & { _id: Types.ObjectId };
+
 export const Dish = model('Dish', dishSchema);

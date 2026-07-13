@@ -1,4 +1,4 @@
-import { Schema, model, InferSchemaType } from 'mongoose';
+import { Schema, model } from 'mongoose';
 
 const userSchema = new Schema(
   {
@@ -14,19 +14,19 @@ const userSchema = new Schema(
     role: { type: String, enum: ['customer', 'restaurant', 'admin'], default: 'customer' },
     favorites: [{ type: Schema.Types.ObjectId, ref: 'Restaurant' }],
     addresses: [
-      {
-        title: String,
-        address: String,
-        lat: Number,
-        lng: Number,
-      },
-    ],
-    defaultAddressId: { type: Schema.Types.ObjectId },
+    {
+      title: String,
+      address: String,
+      lat: Number,
+      lng: Number
+    }],
+
+    defaultAddressId: { type: Schema.Types.ObjectId }
   },
-  { timestamps: true }, // createdAt, updatedAt avtomatik
+  { timestamps: true } // createdAt, updatedAt avtomatik
 );
 
-export type UserDoc = InferSchemaType<typeof userSchema>;
+
 export const User = model('User', userSchema);
 
 const bannerSchema = new Schema(
@@ -40,9 +40,9 @@ const bannerSchema = new Schema(
     ctaText: { type: String, default: '#2C1400' },
     icon: { type: String, default: 'ti-gift' },
     order: { type: Number, default: 0 },
-    active: { type: Boolean, default: true },
+    active: { type: Boolean, default: true }
   },
-  { timestamps: true },
+  { timestamps: true }
 );
 
 export const Banner = model('Banner', bannerSchema);

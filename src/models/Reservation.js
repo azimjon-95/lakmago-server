@@ -1,4 +1,4 @@
-import { Schema, model, InferSchemaType } from 'mongoose';
+import { Schema, model } from 'mongoose';
 
 const reservationSchema = new Schema(
   {
@@ -15,11 +15,11 @@ const reservationSchema = new Schema(
       type: String,
       enum: ['pending', 'confirmed', 'rejected', 'cancelled'],
       default: 'pending',
-      index: true,
-    },
+      index: true
+    }
   },
-  { timestamps: true },
+  { timestamps: true }
 );
 
-export type ReservationDoc = InferSchemaType<typeof reservationSchema>;
+
 export const Reservation = model('Reservation', reservationSchema);

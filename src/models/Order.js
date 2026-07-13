@@ -1,4 +1,4 @@
-import { Schema, model, InferSchemaType } from 'mongoose';
+import { Schema, model } from 'mongoose';
 
 const orderItemSchema = new Schema(
   {
@@ -7,9 +7,9 @@ const orderItemSchema = new Schema(
     quantity: { type: Number, required: true },
     unitPrice: { type: Number, required: true },
     selectedOptions: [{ name: String, price: Number }],
-    note: { type: String },
+    note: { type: String }
   },
-  { _id: false },
+  { _id: false }
 );
 
 const orderSchema = new Schema(
@@ -26,14 +26,14 @@ const orderSchema = new Schema(
       type: String,
       enum: ['accepted', 'preparing', 'delivering', 'delivered', 'cancelled'],
       default: 'accepted',
-      index: true,
+      index: true
     },
     address: { type: String, required: true },
     paymentMethod: { type: String, enum: ['payme', 'click', 'uzum', 'cash'], default: 'cash' },
-    courierName: { type: String },
+    courierName: { type: String }
   },
-  { timestamps: true },
+  { timestamps: true }
 );
 
-export type OrderDoc = InferSchemaType<typeof orderSchema>;
+
 export const Order = model('Order', orderSchema);
