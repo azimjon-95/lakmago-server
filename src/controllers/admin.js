@@ -72,8 +72,9 @@ export const adminController = {
     const schema = z.object({
       name: z.string().min(1),
       cuisine: z.string().min(1),
-      category: z.enum(['milliy', 'fastfood', 'sushi', 'kafe', 'shirinlik', 'magazin']),
-      kind: z.enum(['restaurant', 'cafe', 'shop']).default('restaurant'),
+      // Kategoriya va tur — moslashuvchan (yangi turlar qo'shish oson bo'lsin)
+      category: z.string().min(1),
+      kind: z.string().default('restaurant'),
       phone: z.string().optional(),
       address: z.string().optional(),
       icon: z.string().optional(),

@@ -11,12 +11,22 @@ const restaurantSchema = new Schema(
     deliveryFee: { type: Number, default: 0 },
     category: {
       type: String,
-      // magazin qo'shildi
-      enum: ['milliy', 'fastfood', 'sushi', 'kafe', 'shirinlik', 'magazin'],
+      // O'zbekiston sharoiti: choyxona, osh, shashlik, klub, magazin turlari va h.k.
+      enum: [
+        'milliy', 'choyxona', 'osh', 'shashlik', 'fastfood', 'lavash', 'burger',
+        'sushi', 'pitsa', 'kafe', 'shirinlik', 'restoran', 'klub', 'bar',
+        'magazin_oziq', 'magazin_meva', 'salqin',
+        // eski qiymatlar mosligi uchun
+        'magazin',
+      ],
       required: true,
     },
-    // Muassasa turi: restoran / kafe / magazin
-    kind: { type: String, enum: ['restaurant', 'cafe', 'shop'], default: 'restaurant' },
+    // Muassasa turi: restoran / choyxona / kafe / fastfood / tungi klub / magazin
+    kind: {
+      type: String,
+      enum: ['restaurant', 'choyxona', 'cafe', 'fastfood', 'club', 'shop'],
+      default: 'restaurant',
+    },
 
     tint: { type: String, default: '#FAEEDA' },
     icon: { type: String, default: 'ti-tools-kitchen-2' },
