@@ -6,7 +6,8 @@ let io = null;
 
 export function initSocket(httpServer) {
   io = new SocketServer(httpServer, {
-    cors: { origin: config.clientOrigin, methods: ['GET', 'POST'] }
+    // Bir nechta frontend (client/admin) — CORS ochiq (dev uchun)
+    cors: { origin: config.corsOrigins, methods: ['GET', 'POST'] },
   });
 
   io.on('connection', (socket) => {
@@ -20,6 +21,11 @@ export function initSocket(httpServer) {
     // Restoran o'z buyurtmalarini eshitish uchun
     socket.on('join:restaurant', (restaurantId) => {
       socket.join(`restaurant:${restaurantId}`);
+    });
+
+    // Admin barcha buyurtmalarni live eshitadi
+    socket.on('join:admin', () => {
+      socket.join('admin');
     });
 
     // Mijoz o'z bronini kuzatishi

@@ -40,6 +40,12 @@ export const reservationController = {
   }),
 
   // GET /api/restaurants/:id/reservations  (restoran paneli)
+  // GET /api/panel/reservations — restoran o'z bronlarini (token orqali)
+  forRestaurantSelf: asyncHandler(async (req, res) => {
+    const list = await Reservation.find({ restaurantId: req.restaurantId }).sort({ createdAt: -1 });
+    res.json(list);
+  }),
+
   forRestaurant: asyncHandler(async (req, res) => {
     const list = await Reservation.find({ restaurantId: req.params.id }).sort({ createdAt: -1 });
     res.json(list);

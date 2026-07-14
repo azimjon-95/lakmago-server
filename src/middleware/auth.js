@@ -17,6 +17,7 @@ export function auth(req, res, next) {
     const payload = jwt.verify(token, config.jwtSecret);
     req.userId = payload.userId;
     req.role = payload.role;
+    req.restaurantId = payload.restaurantId ?? null;
     next();
   } catch {
     return res.status(401).json({ error: 'Token yaroqsiz' });
@@ -51,6 +52,6 @@ export function verifyTelegramInitData(initData) {
   return Object.fromEntries(params.entries());
 }
 
-export function signToken(userId, role) {
-  return jwt.sign({ userId, role }, config.jwtSecret, { expiresIn: '30d' });
+export function signToken(userId, role, restaurantId = null) {
+  return jwt.sign({ userId, role, restaurantId }, config.jwtSecret, { expiresIn: '30d' });
 }

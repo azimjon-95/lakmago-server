@@ -8,15 +8,19 @@ import { router } from './routes/index.js';
 import { errorHandler, notFound } from './middleware/error.js';
 import { initSocket } from './sockets/io.js';
 import { handleBotUpdate } from './services/telegram.js';
+import { ensureDefaultAdmin } from './services/bootstrap.js';
 
 async function main() {
   await connectDB();
+
+  // Default admin (dastur egasi) akkauntini yaratish/tekshirish
+  await ensureDefaultAdmin();
 
   const app = express();
   const httpServer = createServer(app);
 
   app.use(helmet());
-  app.use(cors({ origin: config.clientOrigin }));
+  app.use(cors({ origin: config.corsOrigins }));
   app.use(express.json());
   app.use(morgan('dev'));
 

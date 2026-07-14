@@ -6,7 +6,8 @@ import { Order } from '../models/Order.js';
 export const restaurantController = {
   // GET /api/restaurants?category=milliy
   list: asyncHandler(async (req, res) => {
-    const filter = { isApproved: true };
+    // Mijozga faqat faol (ochiq) muassasalar ko'rinadi
+    const filter = { isApproved: true, isActive: true };
     if (req.query.category && req.query.category !== 'all') {
       filter.category = req.query.category;
     }

@@ -101,10 +101,11 @@ export const orderController = {
     }
     const order = await Order.create({ ...parsed.data, userId: req.userId, status: 'accepted' });
 
-    // Real-time: restoranga yangi buyurtma xabari
-    getIO()?.
-    to(`restaurant:${parsed.data.restaurantId}`).
-    emit('order:new', { orderId: order._id, total: order.total });
+    const io = getIO();
+    // Real-time: restoran paneliga to'liq buyurtma
+    io?.to(`restaurant:${parsed.data.restaurantId}`).emit('order:new', order);
+    // Real-time: admin paneliga global nazorat uchun
+    io?.to('admin').emit('order:new', order);
 
     res.status(201).json(order);
   }),
