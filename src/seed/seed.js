@@ -52,7 +52,7 @@ async function seed() {
     'milliy', 'milliy123',
   );
   await makeRestaurant(
-    { name: 'Sushi Star', cuisine: 'Yapon oshxonasi', rating: 4.7, reviewCount: 154, deliveryMin: 30, deliveryMax: 45, deliveryFee: 12000, category: 'sushi', kind: 'restaurant', tint: '#E1F5EE', icon: 'ti-fish', isNew: true },
+    { name: 'Sushi Star', cuisine: 'Yapon oshxonasi', rating: 4.7, reviewCount: 154, deliveryMin: 30, deliveryMax: 45, deliveryFee: 12000, category: 'sushi', kind: 'restaurant', tint: '#E1F5EE', icon: 'ti-fish', isFresh: true },
     'sushi', 'sushi123',
   );
   await makeRestaurant(

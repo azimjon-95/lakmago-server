@@ -36,7 +36,7 @@ const restaurantSchema = new Schema(
     phone: { type: String },
     address: { type: String },
 
-    isNew: { type: Boolean, default: false },
+    isFresh: { type: Boolean, default: false }, // "Yangi" belgisi (isNew Mongoose zaxirasi)
     isApproved: { type: Boolean, default: true }, // admin qo'shsa darhol faol
     // Restoran vaqtincha yopilgan/ochilgan (STOP butun muassasa uchun — restoran o'zi)
     isActive: { type: Boolean, default: true },
