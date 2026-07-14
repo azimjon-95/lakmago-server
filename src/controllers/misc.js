@@ -67,52 +67,100 @@ export const authController = {
   })
 };
 
-const createOrderSchema = z.object({
+// Bitta restoran buyurtmasi sxemasi
+const singleOrderSchema = z.object({
   restaurantId: z.string(),
   restaurantName: z.string(),
-  items: z.
-  array(
-    z.object({
-      dishId: z.string(),
-      name: z.string(),
-      quantity: z.number().int().positive(),
-      unitPrice: z.number().nonnegative(),
-      selectedOptions: z.
-      array(z.object({ name: z.string(), price: z.number() })).
-      optional(),
-      note: z.string().optional()
-    })
-  ).
-  min(1),
+  items: z.array(z.object({
+    dishId: z.string().optional(),
+    name: z.string(),
+    quantity: z.number().int().positive(),
+    unitPrice: z.number().nonnegative(),
+    selectedOptions: z.array(z.object({ name: z.string(), price: z.number() })).optional(),
+    note: z.string().optional(),
+  })).min(1),
   subtotal: z.number(),
   deliveryFee: z.number().default(0),
   serviceFee: z.number().default(0),
-  total: z.number(),
-  address: z.string(),
-  paymentMethod: z.enum(['payme', 'click', 'uzum', 'cash']).default('cash')
+  etaMinutes: z.number().optional(),
 });
+
+// Mijoz bir vaqtda bir necha restorandan buyurtma qilishi mumkin.
+// { orders: [...], address, phone, paymentMethod } — har biri alohida Order bo'ladi,
+// bitta groupId bilan bog'lanadi.
+const batchOrderSchema = z.object({
+  orders: z.array(singleOrderSchema).min(1),
+  address: z.string(),
+  phone: z.string().optional(),
+  paymentMethod: z.enum(['payme', 'click', 'uzum', 'cash']).default('cash'),
+  paymentLabel: z.string().optional(),
+});
+
+const COURIERS = ['Aziz', 'Bek', 'Dilshod', 'Jasur', 'Sardor', 'Ulug\'bek'];
 
 export const orderController = {
   // POST /api/orders
+  // Bir yoki bir necha restoran buyurtmasini qabul qiladi (batch).
   create: asyncHandler(async (req, res) => {
-    const parsed = createOrderSchema.safeParse(req.body);
+    const parsed = batchOrderSchema.safeParse(req.body);
     if (!parsed.success) {
-      return res.status(400).json({ error: 'Ma‘lumot noto‘g‘ri', details: parsed.error.issues });
+      return res.status(400).json({ error: 'Ma\u2018lumot noto\u2018g\u2018ri', details: parsed.error.issues });
     }
-    const order = await Order.create({ ...parsed.data, userId: req.userId, status: 'accepted' });
-
+    const { orders, address, phone, paymentMethod, paymentLabel } = parsed.data;
+    const groupId = 'G' + Date.now() + Math.floor(Math.random() * 1000);
     const io = getIO();
-    // Real-time: restoran paneliga to'liq buyurtma
-    io?.to(`restaurant:${parsed.data.restaurantId}`).emit('order:new', order);
-    // Real-time: admin paneliga global nazorat uchun
-    io?.to('admin').emit('order:new', order);
 
-    res.status(201).json(order);
+    const created = [];
+    for (let i = 0; i < orders.length; i++) {
+      const o = orders[i];
+      const total = o.subtotal + (o.deliveryFee || 0) + (o.serviceFee || 0);
+      const doc = await Order.create({
+        userId: req.userId,
+        restaurantId: o.restaurantId,
+        restaurantName: o.restaurantName,
+        groupId,
+        items: o.items,
+        subtotal: o.subtotal,
+        deliveryFee: o.deliveryFee || 0,
+        serviceFee: o.serviceFee || 0,
+        total,
+        status: 'pending',
+        address,
+        phone,
+        paymentMethod,
+        paymentLabel,
+        etaMinutes: o.etaMinutes,
+        courierName: COURIERS[Math.floor(Math.random() * COURIERS.length)],
+      });
+      created.push(doc);
+
+      // Real-time: restoranга yangi buyurtma (signal chalinadi)
+      io?.to(`restaurant:${o.restaurantId}`).emit('order:new', doc);
+      io?.to('admin').emit('order:new', doc);
+    }
+
+    res.status(201).json({ groupId, orders: created });
   }),
 
-  // GET /api/orders  (foydalanuvchi buyurtmalari)
+  // GET /api/orders  (foydalanuvchi buyurtmalari — groupId bo'yicha guruhlangan)
   myOrders: asyncHandler(async (req, res) => {
     const orders = await Order.find({ userId: req.userId }).sort({ createdAt: -1 });
+    res.json(orders);
+  }),
+
+  // GET /api/orders/group/:groupId  (bitta buyurtma = bir necha restoran)
+  getGroup: asyncHandler(async (req, res) => {
+    const orders = await Order.find({ groupId: req.params.groupId, userId: req.userId }).sort({ createdAt: 1 });
+    if (orders.length === 0) return res.status(404).json({ error: 'Buyurtma topilmadi' });
+    res.json(orders);
+  }),
+
+  // GET /api/orders/active  (mijozning faol buyurtmalari)
+  active: asyncHandler(async (req, res) => {
+    const orders = await Order.find({
+      userId: req.userId,
+      status: { $nin: ['delivered', 'cancelled'] },
+    }).sort({ createdAt: -1 });
     res.json(orders);
   }),
 
@@ -123,30 +171,40 @@ export const orderController = {
     res.json(order);
   }),
 
+  // PATCH /api/orders/:id/confirm  — mijoz "Ha, oldim" (delivered) + baho
+  confirmDelivery: asyncHandler(async (req, res) => {
+    const { rating, comment } = req.body;
+    const update = { status: 'delivered', deliveredAt: new Date() };
+    if (rating) { update.rating = rating; update.comment = comment; update.ratedAt = new Date(); }
+    const order = await Order.findOneAndUpdate(
+      { _id: req.params.id, userId: req.userId },
+      update,
+      { new: true },
+    );
+    if (!order) return res.status(404).json({ error: 'Buyurtma topilmadi' });
+
+    getIO()?.to(`restaurant:${order.restaurantId}`).emit('order:update', order);
+    getIO()?.to('admin').emit('order:update', order);
+    res.json(order);
+  }),
+
   // PATCH /api/orders/:id/status  { status }  (restoran/admin)
   updateStatus: asyncHandler(async (req, res) => {
     const { status } = req.body;
-    const order = await Order.findByIdAndUpdate(
-      req.params.id,
-      { status },
-      { new: true }
-    ).populate('userId');
+    const order = await Order.findByIdAndUpdate(req.params.id, { status }, { new: true }).populate('userId');
     if (!order) return res.status(404).json({ error: 'Buyurtma topilmadi' });
 
-    // Real-time: mijozga status yangilanishi
-    getIO()?.to(`order:${order._id}`).emit('order:status', { status: order.status });
+    getIO()?.to(`order:${order._id}`).emit('order:status', { orderId: order._id, status: order.status });
 
-    // Telegram push
     const user = order.userId;
     const statusText = {
-      preparing: '👨‍🍳 Buyurtmangiz tayyorlanmoqda',
-      delivering: '🚴 Buyurtmangiz yo‘lda',
-      delivered: '✅ Buyurtmangiz yetkazildi. Yoqimli ishtaha!'
+      preparing: '\ud83d\udc68\u200d\ud83c\udf73 Buyurtmangiz tayyorlanmoqda',
+      delivering: '\ud83d\udeb4 Buyurtmangiz yo\u2018lda',
+      delivered: '\u2705 Buyurtmangiz yetkazildi. Yoqimli ishtaha!',
     };
     if (user?.telegramId && statusText[status]) {
       notifyUser(user.telegramId, statusText[status]);
     }
-
     res.json(order);
-  })
+  }),
 };

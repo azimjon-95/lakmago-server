@@ -25,7 +25,10 @@ router.get('/dishes/discounted', dishController.discounted);
 // ===== Mijoz buyurtmalari (JWT) =====
 router.post('/orders', auth, orderController.create);
 router.get('/orders', auth, orderController.myOrders);
+router.get('/orders/active', auth, orderController.active);
+router.get('/orders/group/:groupId', auth, orderController.getGroup);
 router.get('/orders/:id', auth, orderController.getOne);
+router.patch('/orders/:id/confirm', auth, orderController.confirmDelivery);
 
 router.post('/payments/create', auth, paymentController.create);
 router.post('/payments/callback', paymentController.callback);

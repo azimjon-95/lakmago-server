@@ -26,6 +26,14 @@ export const adminController = {
     startOfDay.setHours(0, 0, 0, 0);
     const todayOrders = await Order.countDocuments({ createdAt: { $gte: startOfDay } });
 
+    // Eng ko'p buyurtma qilingan taomlar (psixologiya/marketing uchun)
+    const topDishes = await Order.aggregate([
+      { $unwind: '$items' },
+      { $group: { _id: '$items.name', count: { $sum: '$items.quantity' }, revenue: { $sum: { $multiply: ['$items.unitPrice', '$items.quantity'] } } } },
+      { $sort: { count: -1 } },
+      { $limit: 8 },
+    ]);
+
     res.json({
       restaurants,
       activeRestaurants,
@@ -35,6 +43,7 @@ export const adminController = {
       todayOrders,
       totalRevenue,
       commission,
+      topDishes: topDishes.map((d) => ({ name: d._id, count: d.count, revenue: d.revenue })),
     });
   }),
 

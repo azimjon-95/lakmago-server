@@ -102,24 +102,38 @@ export const restaurantPanelController = {
   }),
 
   // PATCH /api/panel/orders/:id/status  { status }
+  // Restoran oqimi: pending → accepted → preparing → ready → delivering
   updateOrderStatus: asyncHandler(async (req, res) => {
     const { status } = req.body;
+    const allowed = ['accepted', 'preparing', 'ready', 'delivering', 'cancelled'];
+    if (!allowed.includes(status)) {
+      return res.status(400).json({ error: 'Noto‘g‘ri status' });
+    }
+
+    const update = { status };
+    if (status === 'accepted') update.acceptedAt = new Date();
+    if (status === 'ready') update.readyAt = new Date();
+
     const order = await Order.findOneAndUpdate(
       { _id: req.params.id, restaurantId: rid(req) },
-      { status },
+      update,
       { new: true },
     ).populate('userId');
     if (!order) return res.status(404).json({ error: 'Buyurtma topilmadi' });
 
-    // Mijozga real-time status
-    getIO()?.to(`order:${order._id}`).emit('order:status', { status: order.status });
+    const io = getIO();
+    // Mijozga real-time status (buyurtma kuzatuvi shu yerdan yangilanadi)
+    io?.to(`order:${order._id}`).emit('order:status', { orderId: String(order._id), status: order.status });
+    // Admin global nazorati
+    io?.to('admin').emit('order:update', order);
 
     // Telegram push
     const user = order.userId;
     const statusText = {
+      accepted: '✅ Buyurtmangiz qabul qilindi',
       preparing: '👨‍🍳 Buyurtmangiz tayyorlanmoqda',
-      delivering: '🚴 Buyurtmangiz yo‘lda',
-      delivered: '✅ Buyurtmangiz yetkazildi. Yoqimli ishtaha!',
+      ready: '🍽 Buyurtmangiz tayyor',
+      delivering: '🚴 Kuryer buyurtmangizni olib ketdi',
       cancelled: '❌ Buyurtmangiz bekor qilindi',
     };
     if (user?.telegramId && statusText[status]) {
