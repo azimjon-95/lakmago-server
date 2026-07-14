@@ -2,17 +2,35 @@ import { z } from 'zod';
 import { asyncHandler } from '../middleware/error.js';
 import { signToken, verifyTelegramInitData } from '../middleware/auth.js';
 import { Banner } from '../models/User.js';
+import { Restaurant } from '../models/Restaurant.js';
 import { User } from '../models/User.js';
 import { Order } from '../models/Order.js';
 import { getIO } from '../sockets/io.js';
 import { notifyUser } from '../services/telegram.js';
 
 export const bannerController = {
-  // GET /api/banners
+  // GET /api/banners — mijozга ko'rinadigan bannerlar
   list: asyncHandler(async (_req, res) => {
-    const banners = await Banner.find({ active: true }).sort({ order: 1 });
-    res.json(banners);
-  })
+    const banners = await Banner.find({ active: true }).sort({ order: 1 }).lean();
+
+    // Restoran bannerlari orasidan bloklangan/nofaol muassasalarникini olib tashlaymiz
+    const restaurantBanners = banners.filter((b) => b.kind === 'restaurant' && b.restaurantId);
+    const validRestIds = new Set();
+    if (restaurantBanners.length) {
+      const rests = await Restaurant.find({
+        _id: { $in: restaurantBanners.map((b) => b.restaurantId) },
+        isBlocked: { $ne: true },
+        isActive: true,
+      }).select('_id').lean();
+      rests.forEach((r) => validRestIds.add(String(r._id)));
+    }
+
+    const visible = banners.filter((b) => {
+      if (b.kind !== 'restaurant') return true; // platforma bannerlari doim ko'rinadi
+      return validRestIds.has(String(b.restaurantId));
+    });
+    res.json(visible);
+  }),
 };
 
 

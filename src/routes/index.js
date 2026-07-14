@@ -48,6 +48,9 @@ router.get('/panel/orders', auth, requireRole('restaurant'), restaurantPanelCont
 router.patch('/panel/orders/:id/status', auth, requireRole('restaurant'), restaurantPanelController.updateOrderStatus);
 router.get('/panel/reservations', auth, requireRole('restaurant'), reservationController.forRestaurantSelf);
 router.patch('/panel/reservations/:id/status', auth, requireRole('restaurant'), reservationController.updateStatus);
+router.get('/panel/banner', auth, requireRole('restaurant'), restaurantPanelController.getBanner);
+router.put('/panel/banner', auth, requireRole('restaurant'), restaurantPanelController.setBanner);
+router.delete('/panel/banner', auth, requireRole('restaurant'), restaurantPanelController.deleteBanner);
 
 // ===== Admin paneli (role: admin) — dastur egasi =====
 router.get('/admin/stats', auth, requireRole('admin'), adminController.stats);
@@ -56,5 +59,13 @@ router.post('/admin/restaurants', auth, requireRole('admin'), adminController.cr
 router.patch('/admin/restaurants/:id', auth, requireRole('admin'), adminController.updateRestaurant);
 router.patch('/admin/restaurants/:id/password', auth, requireRole('admin'), adminController.resetRestaurantPassword);
 router.delete('/admin/restaurants/:id', auth, requireRole('admin'), adminController.deleteRestaurant);
+router.patch('/admin/restaurants/:id/block', auth, requireRole('admin'), adminController.toggleBlock);
+router.get('/admin/settings', auth, requireRole('admin'), adminController.getSettingsData);
+router.patch('/admin/settings', auth, requireRole('admin'), adminController.updateSettings);
+router.get('/admin/revenue', auth, requireRole('admin'), adminController.revenue);
+router.get('/admin/banners', auth, requireRole('admin'), adminController.banners);
+router.post('/admin/banners', auth, requireRole('admin'), adminController.createBanner);
+router.patch('/admin/banners/:id', auth, requireRole('admin'), adminController.updateBanner);
+router.delete('/admin/banners/:id', auth, requireRole('admin'), adminController.deleteBanner);
 router.get('/admin/orders', auth, requireRole('admin'), adminController.allOrders);
 router.get('/admin/users', auth, requireRole('admin'), adminController.users);

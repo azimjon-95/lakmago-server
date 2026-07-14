@@ -3,6 +3,7 @@ import { asyncHandler } from '../middleware/error.js';
 import { Restaurant } from '../models/Restaurant.js';
 import { Dish } from '../models/Dish.js';
 import { Order } from '../models/Order.js';
+import { Banner } from '../models/User.js';
 import { getIO } from '../sockets/io.js';
 import { notifyUser } from '../services/telegram.js';
 
@@ -142,4 +143,40 @@ export const restaurantPanelController = {
 
     res.json(order);
   }),
+
+  // ===== RESTORAN BANNERI =====
+  // GET /api/panel/banner — restoranning o'z banneri
+  getBanner: asyncHandler(async (req, res) => {
+    const banner = await Banner.findOne({ kind: 'restaurant', restaurantId: rid(req) });
+    res.json(banner || null);
+  }),
+
+  // PUT /api/panel/banner — o'z bannerini qo'shish/almashtirish
+  setBanner: asyncHandler(async (req, res) => {
+    const schema = z.object({
+      title: z.string().min(1),
+      eyebrow: z.string().optional().default(''),
+      cta: z.string().optional(),
+      bg: z.string().optional(),
+      imageUrl: z.string().optional(),
+      icon: z.string().optional(),
+    });
+    const parsed = schema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: 'Ma\u2018lumot noto\u2018g\u2018ri' });
+
+    // Restoran uchun bitta banner — bor bo'lsa yangilaymiz, yo'q bo'lsa yaratamiz
+    const banner = await Banner.findOneAndUpdate(
+      { kind: 'restaurant', restaurantId: rid(req) },
+      { ...parsed.data, kind: 'restaurant', restaurantId: rid(req), active: true },
+      { new: true, upsert: true },
+    );
+    res.json(banner);
+  }),
+
+  // DELETE /api/panel/banner — o'z bannerini o'chirish
+  deleteBanner: asyncHandler(async (req, res) => {
+    await Banner.deleteOne({ kind: 'restaurant', restaurantId: rid(req) });
+    res.json({ ok: true });
+  }),
+
 };

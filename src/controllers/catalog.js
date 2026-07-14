@@ -7,7 +7,7 @@ export const restaurantController = {
   // GET /api/restaurants?category=milliy
   list: asyncHandler(async (req, res) => {
     // Mijozga faqat faol (ochiq) muassasalar ko'rinadi
-    const filter = { isApproved: true, isActive: true };
+    const filter = { isApproved: true, isActive: true, isBlocked: { $ne: true } };
     if (req.query.category && req.query.category !== 'all') {
       filter.category = req.query.category;
     }
@@ -19,11 +19,20 @@ export const restaurantController = {
   getOne: asyncHandler(async (req, res) => {
     const restaurant = await Restaurant.findById(req.params.id);
     if (!restaurant) return res.status(404).json({ error: 'Restoran topilmadi' });
+    // Bloklangan yoki nofaol — mijozga ko'rsatmaymiz
+    if (restaurant.isBlocked || !restaurant.isActive) {
+      return res.status(404).json({ error: 'Restoran hozircha mavjud emas' });
+    }
     res.json(restaurant);
   }),
 
   // GET /api/restaurants/:id/dishes
   getDishes: asyncHandler(async (req, res) => {
+    // Bloklangan/nofaol restoran taomlari ko'rinmasligi kerak
+    const restaurant = await Restaurant.findById(req.params.id).select('isBlocked isActive').lean();
+    if (!restaurant || restaurant.isBlocked || !restaurant.isActive) {
+      return res.json([]);
+    }
     const dishes = await Dish.find({
       restaurantId: req.params.id,
       isAvailable: true

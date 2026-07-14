@@ -28,8 +28,10 @@ const restaurantSchema = new Schema(
 
     isNew: { type: Boolean, default: false },
     isApproved: { type: Boolean, default: true }, // admin qo'shsa darhol faol
-    // Restoran vaqtincha yopilgan/ochilgan (STOP butun muassasa uchun)
+    // Restoran vaqtincha yopilgan/ochilgan (STOP butun muassasa uchun — restoran o'zi)
     isActive: { type: Boolean, default: true },
+    // Admin tomonidan BLOKLANGAN — bloklansa mijozга umuman ko'rinmaydi (taomlari bilan)
+    isBlocked: { type: Boolean, default: false },
 
     ownerId: { type: Schema.Types.ObjectId, ref: 'User' },
   },

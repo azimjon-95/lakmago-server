@@ -1,8 +1,11 @@
 import { z } from 'zod';
 import { asyncHandler } from '../middleware/error.js';
 import { Restaurant } from '../models/Restaurant.js';
-import { User } from '../models/User.js';
+import { User, Banner } from '../models/User.js';
 import { Order } from '../models/Order.js';
+import { Dish } from '../models/Dish.js';
+import { Settings, getSettings } from '../models/Settings.js';
+import { getIO } from '../sockets/io.js';
 
 export const adminController = {
   // GET /api/admin/stats — umumiy analitika
@@ -111,7 +114,7 @@ export const adminController = {
 
   // PATCH /api/admin/restaurants/:id — muassasa ma'lumotini yangilash (faol/nofaol ham)
   updateRestaurant: asyncHandler(async (req, res) => {
-    const allowed = ['name', 'cuisine', 'category', 'kind', 'phone', 'address', 'icon', 'tint', 'isActive', 'isApproved', 'deliveryMin', 'deliveryMax', 'deliveryFee', 'discount'];
+    const allowed = ['name', 'cuisine', 'category', 'kind', 'phone', 'address', 'icon', 'tint', 'isActive', 'isBlocked', 'isApproved', 'deliveryMin', 'deliveryMax', 'deliveryFee', 'discount'];
     const update = {};
     for (const k of allowed) if (k in req.body) update[k] = req.body[k];
     const restaurant = await Restaurant.findByIdAndUpdate(req.params.id, update, { new: true });
@@ -153,4 +156,133 @@ export const adminController = {
     const users = await User.find({ role: 'customer' }).sort({ createdAt: -1 }).limit(100);
     res.json(users);
   }),
+
+  // ===== BLOKLASH =====
+  // PATCH /api/admin/restaurants/:id/block  { blocked: true|false }
+  // Bloklansa mijozga umuman ko'rinmaydi (barcha taomlari bilan).
+  toggleBlock: asyncHandler(async (req, res) => {
+    const { blocked } = req.body;
+    const restaurant = await Restaurant.findByIdAndUpdate(
+      req.params.id,
+      { isBlocked: Boolean(blocked) },
+      { new: true },
+    );
+    if (!restaurant) return res.status(404).json({ error: 'Muassasa topilmadi' });
+    getIO()?.to('admin').emit('restaurant:update', restaurant);
+    res.json(restaurant);
+  }),
+
+  // ===== KOMISSIYA SOZLAMASI =====
+  // GET /api/admin/settings
+  getSettingsData: asyncHandler(async (_req, res) => {
+    const s = await getSettings();
+    res.json({ commissionPercent: s.commissionPercent, commissionMode: s.commissionMode });
+  }),
+
+  // PATCH /api/admin/settings  { commissionPercent, commissionMode }
+  updateSettings: asyncHandler(async (req, res) => {
+    const schema = z.object({
+      commissionPercent: z.number().min(0).max(100).optional(),
+      commissionMode: z.enum(['markup', 'deduct', 'none']).optional(),
+    });
+    const parsed = schema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: 'Noto\u2018g\u2018ri qiymat' });
+
+    const s = await getSettings();
+    if ('commissionPercent' in parsed.data) s.commissionPercent = parsed.data.commissionPercent;
+    if ('commissionMode' in parsed.data) s.commissionMode = parsed.data.commissionMode;
+    await s.save();
+    res.json({ commissionPercent: s.commissionPercent, commissionMode: s.commissionMode });
+  }),
+
+  // ===== DAROMAD HISOBI =====
+  // GET /api/admin/revenue — har muassasa bo'yicha daromad + platforma daromadi
+  revenue: asyncHandler(async (_req, res) => {
+    const settings = await getSettings();
+    const pct = settings.commissionMode === 'none' ? 0 : settings.commissionPercent;
+
+    // Yetkazilgan buyurtmalar bo'yicha restoran daromadi
+    const byRestaurant = await Order.aggregate([
+      { $match: { status: 'delivered' } },
+      { $group: { _id: '$restaurantId', name: { $first: '$restaurantName' }, orders: { $sum: 1 }, gross: { $sum: '$subtotal' } } },
+      { $sort: { gross: -1 } },
+    ]);
+
+    // Har muassasa uchun: restoran daromadi va platforma komissiyasini hisoblaymiz
+    const rows = byRestaurant.map((r) => {
+      const gross = r.gross;
+      let platformIncome = 0;
+      let restaurantIncome = gross;
+      if (settings.commissionMode === 'markup') {
+        // Mijoz narx ustiga +pct to'ladi → platforma o'sha ustamani oladi
+        platformIncome = Math.round(gross * (pct / 100));
+        restaurantIncome = gross; // restoran to'liq oladi
+      } else if (settings.commissionMode === 'deduct') {
+        // Restoran narxidan −pct olamiz
+        platformIncome = Math.round(gross * (pct / 100));
+        restaurantIncome = gross - platformIncome;
+      }
+      return { restaurantId: r._id, name: r.name, orders: r.orders, gross, restaurantIncome, platformIncome };
+    });
+
+    const totalGross = rows.reduce((s, r) => s + r.gross, 0);
+    const totalPlatform = rows.reduce((s, r) => s + r.platformIncome, 0);
+    const totalRestaurant = rows.reduce((s, r) => s + r.restaurantIncome, 0);
+
+    res.json({
+      commissionPercent: pct,
+      commissionMode: settings.commissionMode,
+      rows,
+      totals: { gross: totalGross, platform: totalPlatform, restaurant: totalRestaurant },
+    });
+  }),
+
+  // ===== BANNER BOSHQARUVI =====
+  // GET /api/admin/banners — barcha bannerlar (platforma + restoran)
+  banners: asyncHandler(async (_req, res) => {
+    const list = await Banner.find().sort({ kind: 1, order: 1, createdAt: -1 }).lean();
+    const withRest = await Promise.all(list.map(async (b) => {
+      if (b.restaurantId) {
+        const r = await Restaurant.findById(b.restaurantId).select('name').lean();
+        return { ...b, restaurantName: r?.name ?? null };
+      }
+      return b;
+    }));
+    res.json(withRest);
+  }),
+
+  // POST /api/admin/banners — platforma banneri qo'shish
+  createBanner: asyncHandler(async (req, res) => {
+    const schema = z.object({
+      title: z.string().min(1),
+      eyebrow: z.string().optional().default(''),
+      cta: z.string().optional(),
+      bg: z.string().optional(),
+      imageUrl: z.string().optional(),
+      icon: z.string().optional(),
+      order: z.number().optional(),
+    });
+    const parsed = schema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: 'Ma\u2018lumot noto\u2018g\u2018ri' });
+    const banner = await Banner.create({ ...parsed.data, kind: 'platform', active: true });
+    res.status(201).json(banner);
+  }),
+
+  // PATCH /api/admin/banners/:id
+  updateBanner: asyncHandler(async (req, res) => {
+    const allowed = ['title', 'eyebrow', 'cta', 'bg', 'imageUrl', 'icon', 'order', 'active'];
+    const update = {};
+    for (const k of allowed) if (k in req.body) update[k] = req.body[k];
+    const banner = await Banner.findByIdAndUpdate(req.params.id, update, { new: true });
+    if (!banner) return res.status(404).json({ error: 'Banner topilmadi' });
+    res.json(banner);
+  }),
+
+  // DELETE /api/admin/banners/:id — admin istalgan bannerni o'chira oladi (restoran ham)
+  deleteBanner: asyncHandler(async (req, res) => {
+    const banner = await Banner.findByIdAndDelete(req.params.id);
+    if (!banner) return res.status(404).json({ error: 'Banner topilmadi' });
+    res.json({ ok: true });
+  }),
+
 };

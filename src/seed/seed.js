@@ -26,9 +26,9 @@ async function seed() {
 
   // ===== Bannerlar =====
   await Banner.create([
-    { eyebrow: 'TANLANGAN AKSIYA', title: 'Birinchi buyurtmaga −30% chegirma', cta: 'Olish', bg: '#411E00', accentText: '#FAC775', ctaBg: '#EF9F27', ctaText: '#2C1400', icon: 'ti-gift', order: 0 },
-    { eyebrow: 'BEPUL YETKAZISH', title: '100 000 so\u2018mdan ortiq buyurtmaga', cta: 'Buyurtma', bg: '#993C1D', accentText: '#F5C4B3', ctaBg: '#F0997B', ctaText: '#4A1B0C', icon: 'ti-bike', order: 1 },
-    { eyebrow: 'REKLAMA', title: 'Sushi Star \u2014 yangi ochildi', cta: 'Ko\u2018rish', bg: '#0F6E56', accentText: '#9FE1CB', ctaBg: '#5DCAA5', ctaText: '#04342C', icon: 'ti-fish', order: 2 },
+    { kind: 'platform', eyebrow: 'TANLANGAN AKSIYA', title: 'Birinchi buyurtmaga −30% chegirma', cta: 'Olish', bg: '#411E00', accentText: '#FAC775', ctaBg: '#EF9F27', ctaText: '#2C1400', icon: 'ti-gift', order: 0 },
+    { kind: 'platform', eyebrow: 'BEPUL YETKAZISH', title: '100 000 so\u2018mdan ortiq buyurtmaga', cta: 'Buyurtma', bg: '#993C1D', accentText: '#F5C4B3', ctaBg: '#F0997B', ctaText: '#4A1B0C', icon: 'ti-bike', order: 1 },
+    { kind: 'platform', eyebrow: 'REKLAMA', title: 'Sushi Star \u2014 yangi ochildi', cta: 'Ko\u2018rish', bg: '#0F6E56', accentText: '#9FE1CB', ctaBg: '#5DCAA5', ctaText: '#04342C', icon: 'ti-fish', order: 2 },
   ]);
 
   // ===== Restoran + akkaunt yaratuvchi yordamchi =====

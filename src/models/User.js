@@ -60,7 +60,7 @@ export const User = model('User', userSchema);
 
 const bannerSchema = new Schema(
   {
-    eyebrow: { type: String, required: true },
+    eyebrow: { type: String, default: '' },
     title: { type: String, required: true },
     cta: { type: String, default: 'Ko‘rish' },
     bg: { type: String, default: '#411E00' },
@@ -68,6 +68,16 @@ const bannerSchema = new Schema(
     ctaBg: { type: String, default: '#EF9F27' },
     ctaText: { type: String, default: '#2C1400' },
     icon: { type: String, default: 'ti-gift' },
+
+    // Banner rasmi (URL). Bo'lsa rang o'rniga rasm ko'rsatiladi.
+    imageUrl: { type: String, default: '' },
+
+    // Banner egaligi:
+    //   platform  → sayt egasi (admin) qo'shган umumiy reklama
+    //   restaurant→ restoran o'zi qo'shган banner (restaurantId to'ldiriladi)
+    kind: { type: String, enum: ['platform', 'restaurant'], default: 'platform' },
+    restaurantId: { type: Schema.Types.ObjectId, ref: 'Restaurant' },
+
     order: { type: Number, default: 0 },
     active: { type: Boolean, default: true },
   },
