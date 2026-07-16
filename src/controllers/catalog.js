@@ -44,6 +44,18 @@ export const restaurantController = {
     res.json(restaurant);
   }),
 
+  // GET /api/dishes/:id  — bitta taom (ulashilган havola ochilganda kerak)
+  getDishById: asyncHandler(async (req, res) => {
+    const dish = await Dish.findById(req.params.id).lean();
+    if (!dish) return res.status(404).json({ error: 'Taom topilmadi' });
+    // Taom restorani bloklangan/nofaol bo'lsa ko'rsatmaymiz
+    const restaurant = await Restaurant.findById(dish.restaurantId).select('isBlocked isActive name').lean();
+    if (!restaurant || restaurant.isBlocked || !restaurant.isActive) {
+      return res.status(404).json({ error: 'Taom mavjud emas' });
+    }
+    res.json({ ...dish, restaurantName: restaurant.name });
+  }),
+
   // GET /api/restaurants/:id/dishes
   getDishes: asyncHandler(async (req, res) => {
     const restaurant = await Restaurant.findById(req.params.id).select('isBlocked isActive').lean();
