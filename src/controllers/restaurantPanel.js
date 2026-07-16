@@ -50,6 +50,8 @@ export const restaurantPanelController = {
       tint: z.string().optional(),
       calories: z.number().optional(),
       weightGram: z.number().optional(),
+      imageUrl: z.string().optional(),
+      images: z.array(z.string()).optional(),
     });
     const parsed = schema.safeParse(req.body);
     if (!parsed.success) {
@@ -61,7 +63,7 @@ export const restaurantPanelController = {
 
   // PATCH /api/panel/dishes/:id — taomni tahrirlash (narx, nom, STOP)
   updateDish: asyncHandler(async (req, res) => {
-    const allowed = ['name', 'description', 'price', 'oldPrice', 'section', 'icon', 'tint', 'isAvailable', 'isHit', 'isTrending', 'isDiscounted', 'calories', 'weightGram'];
+    const allowed = ['name', 'description', 'price', 'oldPrice', 'section', 'icon', 'tint', 'isAvailable', 'isHit', 'isTrending', 'isDiscounted', 'calories', 'weightGram', 'imageUrl', 'images'];
     const update = {};
     for (const k of allowed) if (k in req.body) update[k] = req.body[k];
     // Faqat o'z taomini o'zgartira olsin

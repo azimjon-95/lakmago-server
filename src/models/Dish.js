@@ -28,6 +28,9 @@ const dishSchema = new Schema(
     oldPrice: { type: Number },
     tint: { type: String, default: '#FAEEDA' },
     icon: { type: String, default: 'ti-bowl' },
+    // Rasm (Cloudinary URL) — bo'lsa ikon o'rniga rasm ko'rsatiladi
+    imageUrl: { type: String, default: '' },
+    images: [{ type: String }],
     calories: { type: Number },
     weightGram: { type: Number },
     ingredients: [{ type: String }],

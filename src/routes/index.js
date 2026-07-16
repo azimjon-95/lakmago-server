@@ -5,6 +5,7 @@ import { reservationController, paymentController } from '../controllers/service
 import { adminController } from '../controllers/admin.js';
 import { panelAuthController } from '../controllers/panelAuth.js';
 import { restaurantPanelController } from '../controllers/restaurantPanel.js';
+import { uploadController } from '../controllers/upload.js';
 import { auth, requireRole } from '../middleware/auth.js';
 
 export const router = Router();
@@ -51,6 +52,10 @@ router.patch('/panel/reservations/:id/status', auth, requireRole('restaurant'), 
 router.get('/panel/banner', auth, requireRole('restaurant'), restaurantPanelController.getBanner);
 router.put('/panel/banner', auth, requireRole('restaurant'), restaurantPanelController.setBanner);
 router.delete('/panel/banner', auth, requireRole('restaurant'), restaurantPanelController.deleteBanner);
+
+// ===== Cloudinary rasm yuklash imzosi =====
+// Faqat kirgan foydalanuvchi (restoran yoki admin) rasm yuklay oladi.
+router.get('/upload/signature', auth, uploadController.signature);
 
 // ===== Admin paneli (role: admin) — dastur egasi =====
 router.get('/admin/stats', auth, requireRole('admin'), adminController.stats);

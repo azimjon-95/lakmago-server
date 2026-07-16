@@ -82,6 +82,8 @@ export const adminController = {
       deliveryMin: z.number().optional(),
       deliveryMax: z.number().optional(),
       deliveryFee: z.number().optional(),
+      imageUrl: z.string().optional(),
+      images: z.array(z.string()).optional(),
       // Restoran akkaunti
       login: z.string().min(3),
       password: z.string().min(4),
@@ -115,7 +117,7 @@ export const adminController = {
 
   // PATCH /api/admin/restaurants/:id — muassasa ma'lumotini yangilash (faol/nofaol ham)
   updateRestaurant: asyncHandler(async (req, res) => {
-    const allowed = ['name', 'cuisine', 'category', 'kind', 'phone', 'address', 'icon', 'tint', 'isActive', 'isBlocked', 'isApproved', 'deliveryMin', 'deliveryMax', 'deliveryFee', 'discount'];
+    const allowed = ['name', 'cuisine', 'category', 'kind', 'phone', 'address', 'icon', 'tint', 'isActive', 'isBlocked', 'isApproved', 'deliveryMin', 'deliveryMax', 'deliveryFee', 'discount', 'imageUrl', 'images'];
     const update = {};
     for (const k of allowed) if (k in req.body) update[k] = req.body[k];
     const restaurant = await Restaurant.findByIdAndUpdate(req.params.id, update, { new: true });

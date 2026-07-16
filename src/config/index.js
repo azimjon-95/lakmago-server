@@ -20,6 +20,14 @@ export const config = {
   // Default admin (dastur egasi) login/parol — .env dan olinadi
   adminLogin: process.env.ADMIN_LOGIN ?? 'admin',
   adminPassword: process.env.ADMIN_PASSWORD ?? 'admin123',
+
+  // Cloudinary — rasm saqlash (API Secret hech qachon frontendга tushmaydi!)
+  cloudinary: {
+    cloudName: process.env.CLOUDINARY_CLOUD_NAME ?? '',
+    apiKey: process.env.CLOUDINARY_API_KEY ?? '',
+    apiSecret: process.env.CLOUDINARY_API_SECRET ?? '',
+    uploadPreset: process.env.CLOUDINARY_UPLOAD_PRESET ?? 'lokmago_unsigned',
+  },
 };
 
 export async function connectDB() {

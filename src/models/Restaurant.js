@@ -30,6 +30,9 @@ const restaurantSchema = new Schema(
 
     tint: { type: String, default: '#FAEEDA' },
     icon: { type: String, default: 'ti-tools-kitchen-2' },
+    // Restoran rasmi (Cloudinary) — karta va sahifa bannerida ko'rinadi
+    imageUrl: { type: String, default: '' },
+    images: [{ type: String }],
     discount: { type: Number },
 
     // Aloqa / manzil
