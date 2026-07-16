@@ -48,12 +48,34 @@ export async function sendWebAppButton(telegramId, webAppUrl) {
 
 
 
+// Bot webhook update'ini qayta ishlash
 export async function handleBotUpdate(update) {
+  // 1) Bot guruhга admin qilinganини aniqlash (my_chat_member event)
+  if (update.my_chat_member) {
+    const { chat, new_chat_member } = update.my_chat_member;
+    const status = new_chat_member?.status;
+
+    // Guruh yoki superguruhда bot admin bo'ldi
+    if ((chat.type === 'group' || chat.type === 'supergroup')) {
+      if (status === 'administrator') {
+        // Bot admin qilindi — reklama yuborib pin qilamiz (bir marta)
+        const { onBotPromotedToAdmin } = await import('./telegramGroup.js');
+        try { await onBotPromotedToAdmin(chat); } catch (e) { console.error('Guruh promo xatosi:', e.message); }
+      } else if (status === 'left' || status === 'kicked') {
+        // Bot guruhdan chiqarildi — nofaol qilamiz
+        const { GroupChat } = await import('../models/GroupChat.js');
+        await GroupChat.findOneAndUpdate({ chatId: String(chat.id) }, { isActive: false, isBotAdmin: false });
+      }
+    }
+    return;
+  }
+
+  // 2) Oddiy xabarlar (/start)
   const message = update.message;
   if (!message?.text) return;
 
   if (message.text === '/start') {
-    const webAppUrl = config.clientOrigin;
+    const webAppUrl = config.webappUrl;
     await sendWebAppButton(String(message.chat.id), webAppUrl);
   }
 }

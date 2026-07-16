@@ -28,6 +28,10 @@ export const config = {
     apiSecret: process.env.CLOUDINARY_API_SECRET ?? '',
     uploadPreset: process.env.CLOUDINARY_UPLOAD_PRESET ?? 'lokmago_unsigned',
   },
+
+  // Telegram webapp public URL (guruhga yuboriladigan tugma shu manzilга o'tkazadi)
+  // Masalan: https://t.me/LokmaGoBot/app  yoki webapp domeni
+  webappUrl: process.env.WEBAPP_URL ?? process.env.CLIENT_ORIGIN ?? corsOrigins[0],
 };
 
 export async function connectDB() {

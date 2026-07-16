@@ -5,6 +5,7 @@ import { User, Banner } from '../models/User.js';
 import { Order } from '../models/Order.js';
 import { Dish } from '../models/Dish.js';
 import { Settings, getSettings } from '../models/Settings.js';
+import { GroupChat } from '../models/GroupChat.js';
 import { getIO } from '../sockets/io.js';
 
 export const adminController = {
@@ -286,6 +287,57 @@ export const adminController = {
     const banner = await Banner.findByIdAndDelete(req.params.id);
     if (!banner) return res.status(404).json({ error: 'Banner topilmadi' });
     res.json({ ok: true });
+  }),
+
+  // ===== TELEGRAM GURUHLAR =====
+  // GET /api/admin/groups — bot admin qilingan guruhlar (holat bilan)
+  groups: asyncHandler(async (_req, res) => {
+    const groups = await GroupChat.find().sort({ createdAt: -1 }).lean();
+    res.json(groups);
+  }),
+
+  // POST /api/admin/groups/:chatId/resend — reklama xabarini qayta yuborish + pin
+  resendPromo: asyncHandler(async (req, res) => {
+    const { sendAndPinPromo } = await import('../services/telegramGroup.js');
+    try {
+      await sendAndPinPromo(req.params.chatId);
+      res.json({ ok: true });
+    } catch (e) {
+      res.status(500).json({ error: e.message });
+    }
+  }),
+
+  // POST /api/admin/groups/check — kunlik tekshiruvni qo'lda ishga tushirish
+  runGroupCheck: asyncHandler(async (_req, res) => {
+    const { dailyGroupCheck } = await import('../services/telegramGroup.js');
+    const result = await dailyGroupCheck();
+    res.json(result);
+  }),
+
+  // ===== BUYURTMALAR NAZORATI (kim → qaysi restoran → nima) =====
+  // GET /api/admin/orders?status=&restaurantId=&groupId=
+  orders: asyncHandler(async (req, res) => {
+    const filter = {};
+    if (req.query.status) filter.status = req.query.status;
+    if (req.query.restaurantId) filter.restaurantId = req.query.restaurantId;
+    if (req.query.groupId) filter.groupId = req.query.groupId;
+
+    const orders = await Order.find(filter)
+      .populate('userId', 'firstName lastName username phone telegramId')
+      .sort({ createdAt: -1 })
+      .limit(Number(req.query.limit) || 100)
+      .lean();
+
+    res.json(orders);
+  }),
+
+  // GET /api/admin/orders/live — faol (yetkazilmagan) buyurtmalar, real-time nazorat
+  liveOrders: asyncHandler(async (_req, res) => {
+    const orders = await Order.find({ status: { $nin: ['delivered', 'cancelled'] } })
+      .populate('userId', 'firstName lastName username phone')
+      .sort({ createdAt: -1 })
+      .lean();
+    res.json(orders);
   }),
 
 };

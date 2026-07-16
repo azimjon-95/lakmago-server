@@ -72,5 +72,12 @@ router.get('/admin/banners', auth, requireRole('admin'), adminController.banners
 router.post('/admin/banners', auth, requireRole('admin'), adminController.createBanner);
 router.patch('/admin/banners/:id', auth, requireRole('admin'), adminController.updateBanner);
 router.delete('/admin/banners/:id', auth, requireRole('admin'), adminController.deleteBanner);
+// Telegram guruhlar
+router.get('/admin/groups', auth, requireRole('admin'), adminController.groups);
+router.post('/admin/groups/:chatId/resend', auth, requireRole('admin'), adminController.resendPromo);
+router.post('/admin/groups/check', auth, requireRole('admin'), adminController.runGroupCheck);
+// Buyurtmalar nazorati
+router.get('/admin/orders', auth, requireRole('admin'), adminController.orders);
+router.get('/admin/orders/live', auth, requireRole('admin'), adminController.liveOrders);
 router.get('/admin/orders', auth, requireRole('admin'), adminController.allOrders);
 router.get('/admin/users', auth, requireRole('admin'), adminController.users);

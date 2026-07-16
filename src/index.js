@@ -44,6 +44,16 @@ async function main() {
   httpServer.listen(config.port, () => {
     console.log(`✓ LokmaGo API http://localhost:${config.port}`);
   });
+
+  // Kunlik guruh tekshiruvi (reklama yuborilganmi + pin qilinganmi)
+  // Server ishga tushganда 1 marta, keyin har 24 soatda.
+  if (config.telegramBotToken) {
+    const { dailyGroupCheck } = await import('./services/telegramGroup.js');
+    // Startda 30 soniyadan keyin (server barqarorlashsin)
+    setTimeout(() => dailyGroupCheck().catch((e) => console.error('Guruh tekshiruv:', e.message)), 30_000);
+    // Keyin har 24 soatda
+    setInterval(() => dailyGroupCheck().catch((e) => console.error('Guruh tekshiruv:', e.message)), 24 * 60 * 60 * 1000);
+  }
 }
 
 main();
