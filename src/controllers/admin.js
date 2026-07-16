@@ -307,6 +307,60 @@ export const adminController = {
     }
   }),
 
+  // POST /api/admin/groups/:chatId/broadcast — MOSLASHUVCHAN reklama
+  // { text?, imageUrl?, buttonText?, buttonUrl?, pin? }
+  broadcast: asyncHandler(async (req, res) => {
+    const schema = z.object({
+      text: z.string().optional().default(''),
+      imageUrl: z.string().optional().default(''),
+      buttonText: z.string().optional().default(''),
+      buttonUrl: z.string().optional().default(''),
+      pin: z.boolean().optional().default(false),
+    });
+    const parsed = schema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: 'Ma\u2018lumot noto\u2018g\u2018ri' });
+    if (!parsed.data.text && !parsed.data.imageUrl) {
+      return res.status(400).json({ error: 'Matn yoki rasm bo\u2018lishi shart' });
+    }
+
+    const { sendCustomBroadcast } = await import('../services/telegramGroup.js');
+    try {
+      const result = await sendCustomBroadcast({ chatId: req.params.chatId, ...parsed.data });
+      res.json(result);
+    } catch (e) {
+      res.status(500).json({ error: e.message });
+    }
+  }),
+
+  // POST /api/admin/groups/broadcast-all — bir vaqtda BARCHA faol guruhlarga
+  broadcastAll: asyncHandler(async (req, res) => {
+    const schema = z.object({
+      text: z.string().optional().default(''),
+      imageUrl: z.string().optional().default(''),
+      buttonText: z.string().optional().default(''),
+      buttonUrl: z.string().optional().default(''),
+      pin: z.boolean().optional().default(false),
+    });
+    const parsed = schema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: 'Ma\u2018lumot noto\u2018g\u2018ri' });
+    if (!parsed.data.text && !parsed.data.imageUrl) {
+      return res.status(400).json({ error: 'Matn yoki rasm bo\u2018lishi shart' });
+    }
+
+    const { sendCustomBroadcast } = await import('../services/telegramGroup.js');
+    const groups = await GroupChat.find({ isActive: true, isBotAdmin: true });
+    let sent = 0, failed = 0;
+    for (const g of groups) {
+      try {
+        await sendCustomBroadcast({ chatId: g.chatId, ...parsed.data });
+        sent++;
+      } catch {
+        failed++;
+      }
+    }
+    res.json({ total: groups.length, sent, failed });
+  }),
+
   // POST /api/admin/groups/check — kunlik tekshiruvni qo'lda ishga tushirish
   runGroupCheck: asyncHandler(async (_req, res) => {
     const { dailyGroupCheck } = await import('../services/telegramGroup.js');

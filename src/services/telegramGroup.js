@@ -175,3 +175,68 @@ export async function dailyGroupCheck() {
   console.log(`✓ Kunlik guruh tekshiruvi: ${groups.length} guruh, ${fixed} tuzatildi`);
   return { checked: groups.length, fixed };
 }
+
+// ===== MOSLASHUVCHAN REKLAMA (admin paneldan) =====
+// Admin istalgan guruhga istalgan reklama yuboradi:
+//   - matn + rasm + tugma
+//   - faqat matn + tugma
+//   - faqat rasm (+ izoh)
+//   - faqat matn
+// Telegram formatiga to'liq mos (sendPhoto yoki sendMessage tanlanadi).
+//
+// opts = {
+//   chatId,               // qaysi guruhga
+//   text,                 // matn (HTML) — ixtiyoriy
+//   imageUrl,             // rasm URL — ixtiyoriy
+//   buttonText, buttonUrl,// tugma — ixtiyoriy (ikkalasi birga)
+//   pin,                  // true bo'lsa yuborilgach pin qiladi
+// }
+export async function sendCustomBroadcast(opts) {
+  const { chatId, text = '', imageUrl = '', buttonText = '', buttonUrl = '', pin = false } = opts;
+
+  if (!config.telegramBotToken) {
+    console.log(`[telegram demo] guruh ${chatId}ga maxsus reklama yuborilardi`);
+    return { ok: true, demo: true };
+  }
+  if (!chatId) throw new Error('chatId kerak');
+  if (!text && !imageUrl) throw new Error('Matn yoki rasm bo\u2018lishi shart');
+
+  // Tugma (agar berilgan bo'lsa)
+  const keyboard = (buttonText && buttonUrl)
+    ? { inline_keyboard: [[{ text: buttonText, url: buttonUrl }]] }
+    : undefined;
+
+  let msg;
+  if (imageUrl) {
+    // Rasm bilan — sendPhoto (matn caption bo'ladi, 1024 belgigacha)
+    msg = await tg('sendPhoto', {
+      chat_id: chatId,
+      photo: imageUrl,
+      caption: text || undefined,
+      parse_mode: text ? 'HTML' : undefined,
+      reply_markup: keyboard,
+    });
+  } else {
+    // Faqat matn — sendMessage
+    msg = await tg('sendMessage', {
+      chat_id: chatId,
+      text,
+      parse_mode: 'HTML',
+      reply_markup: keyboard,
+      disable_web_page_preview: true,
+    });
+  }
+
+  // So'ralса pin qilamiz
+  let pinned = false;
+  if (pin) {
+    try {
+      await tg('pinChatMessage', { chat_id: chatId, message_id: msg.message_id, disable_notification: true });
+      pinned = true;
+    } catch (e) {
+      console.warn(`Pin xatosi (${chatId}):`, e.message);
+    }
+  }
+
+  return { ok: true, messageId: msg.message_id, pinned };
+}
