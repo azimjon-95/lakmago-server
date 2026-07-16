@@ -48,4 +48,10 @@ const restaurantSchema = new Schema(
   { timestamps: true },
 );
 
+// Index'lar — katalog filtri va qidiruv tez ishlashi uchun
+// Mijozga ko'rinadigan ro'yxat: isApproved + isActive + isBlocked + category
+restaurantSchema.index({ isApproved: 1, isActive: 1, isBlocked: 1, category: 1 });
+restaurantSchema.index({ isApproved: 1, isActive: 1, isBlocked: 1, createdAt: -1 }); // cursor pagination
+restaurantSchema.index({ name: 'text', cuisine: 'text' }); // matn qidiruvi
+
 export const Restaurant = model('Restaurant', restaurantSchema);

@@ -40,5 +40,9 @@ const dishSchema = new Schema(
   { timestamps: true }
 );
 
+// Index'lar — menyu va trend/chegirma so'rovlari tez ishlashi uchun
+dishSchema.index({ restaurantId: 1, isAvailable: 1, section: 1 }); // restoran menyusi
+dishSchema.index({ isTrending: 1, isAvailable: 1 });               // trend taomlar
+dishSchema.index({ isDiscounted: 1, isAvailable: 1 });             // chegirmadagilar
 
 export const Dish = model('Dish', dishSchema);
