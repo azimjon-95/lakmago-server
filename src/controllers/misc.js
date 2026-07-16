@@ -125,6 +125,7 @@ const batchOrderSchema = z.object({
   phone: z.string().optional(),
   paymentMethod: z.enum(['payme', 'click', 'uzum', 'cash']).default('cash'),
   paymentLabel: z.string().optional(),
+  useBonus: z.number().nonnegative().default(0), // ishlatmoqchi bo'lган bonus (so'm)
 });
 
 const COURIERS = ['Aziz', 'Bek', 'Dilshod', 'Jasur', 'Sardor', 'Ulug\'bek'];
@@ -137,14 +138,40 @@ export const orderController = {
     if (!parsed.success) {
       return res.status(400).json({ error: 'Ma\u2018lumot noto\u2018g\u2018ri', details: parsed.error.issues });
     }
-    const { orders, address, phone, paymentMethod, paymentLabel } = parsed.data;
+    const { orders, address, phone, paymentMethod, paymentLabel, useBonus } = parsed.data;
     const groupId = 'G' + Date.now() + Math.floor(Math.random() * 1000);
     const io = getIO();
+
+    // ===== BONUS BILAN TO'LASH =====
+    // Butun buyurtма summasi (barcha restoranlar)
+    const grandTotal = orders.reduce(
+      (s, o) => s + o.subtotal + (o.deliveryFee || 0) + (o.serviceFee || 0), 0,
+    );
+    // Ishlatiladigan bonus: so'ralган, lekin balansдан va summадан oshмаsин
+    let bonusToUse = 0;
+    if (useBonus > 0) {
+      const user = await User.findById(req.userId).select('bonusBalance');
+      const available = user?.bonusBalance || 0;
+      bonusToUse = Math.min(useBonus, available, grandTotal);
+      // Atomik ayirish (poyga holatини oldini oladi — faqat yetarli bo'lsa)
+      if (bonusToUse > 0) {
+        const upd = await User.updateOne(
+          { _id: req.userId, bonusBalance: { $gte: bonusToUse } },
+          { $inc: { bonusBalance: -bonusToUse } },
+        );
+        if (upd.modifiedCount === 0) bonusToUse = 0; // balans yetмади
+      }
+    }
+    let bonusLeft = bonusToUse; // buyurtмаларга taqsimlаnadi
 
     const created = [];
     for (let i = 0; i < orders.length; i++) {
       const o = orders[i];
-      const total = o.subtotal + (o.deliveryFee || 0) + (o.serviceFee || 0);
+      const orderTotal = o.subtotal + (o.deliveryFee || 0) + (o.serviceFee || 0);
+      // Bonusни shu buyurtмага qo'llaymiz (ketma-ket, oshиб ketмаsин)
+      const orderBonus = Math.min(bonusLeft, orderTotal);
+      bonusLeft -= orderBonus;
+      const total = orderTotal - orderBonus;
       const doc = await Order.create({
         userId: req.userId,
         restaurantId: o.restaurantId,
@@ -154,6 +181,7 @@ export const orderController = {
         subtotal: o.subtotal,
         deliveryFee: o.deliveryFee || 0,
         serviceFee: o.serviceFee || 0,
+        bonusUsed: orderBonus,
         total,
         status: 'pending',
         address,
@@ -170,7 +198,7 @@ export const orderController = {
       io?.to('admin').emit('order:new', doc);
     }
 
-    res.status(201).json({ groupId, orders: created });
+    res.status(201).json({ groupId, orders: created, bonusUsed: bonusToUse });
   }),
 
   // GET /api/orders  (foydalanuvchi buyurtmalari — groupId bo'yicha guruhlangan)

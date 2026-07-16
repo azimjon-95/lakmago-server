@@ -3,7 +3,7 @@ import { asyncHandler } from '../middleware/error.js';
 import { Restaurant } from '../models/Restaurant.js';
 import { Dish } from '../models/Dish.js';
 import { Order } from '../models/Order.js';
-import { Banner } from '../models/User.js';
+import { Banner, User } from '../models/User.js';
 import { getIO } from '../sockets/io.js';
 import { notifyUser } from '../services/telegram.js';
 
@@ -123,6 +123,11 @@ export const restaurantPanelController = {
       { new: true },
     ).populate('userId');
     if (!order) return res.status(404).json({ error: 'Buyurtma topilmadi' });
+
+    // Bekor qilinса — ishlatilган bonusни mijozга qaytaramiz (adolatli)
+    if (status === 'cancelled' && order.bonusUsed > 0) {
+      await User.updateOne({ _id: order.userId._id || order.userId }, { $inc: { bonusBalance: order.bonusUsed } });
+    }
 
     const io = getIO();
     // Mijozga real-time status (buyurtma kuzatuvi shu yerdan yangilanadi)

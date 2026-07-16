@@ -26,6 +26,7 @@ const orderSchema = new Schema(
     subtotal: { type: Number, required: true },
     deliveryFee: { type: Number, default: 0 },
     serviceFee: { type: Number, default: 0 },
+    bonusUsed: { type: Number, default: 0 }, // shu buyurtмада ishlatilган bonus (so'm)
     total: { type: Number, required: true },
 
     // Status oqimi:
