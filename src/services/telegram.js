@@ -70,12 +70,26 @@ export async function handleBotUpdate(update) {
     return;
   }
 
-  // 2) Oddiy xabarlar (/start)
+  // 2) Callback tugmalar («Tekshirish» — obuna tasdiqlash)
+  if (update.callback_query) {
+    if (update.callback_query.data === 'check_sub') {
+      const { handleCheckSubscription } = await import('./referralStart.js');
+      await handleCheckSubscription(update.callback_query);
+    }
+    return;
+  }
+
+  // 3) Oddiy xabarlar (/start yoki /start ref_<id>)
   const message = update.message;
   if (!message?.text) return;
 
-  if (message.text === '/start') {
-    const webAppUrl = config.webappUrl;
-    await sendWebAppButton(String(message.chat.id), webAppUrl);
+  if (message.text.startsWith('/start')) {
+    const telegramId = String(message.chat.id);
+    // Referal kodni ajratamiz: "/start ref_123"
+    const parts = message.text.split(' ');
+    const startParam = parts[1] || '';
+
+    const { handleStartCommand } = await import('./referralStart.js');
+    await handleStartCommand(telegramId, startParam, message.from);
   }
 }

@@ -6,6 +6,7 @@ import { adminController } from '../controllers/admin.js';
 import { panelAuthController } from '../controllers/panelAuth.js';
 import { restaurantPanelController } from '../controllers/restaurantPanel.js';
 import { uploadController } from '../controllers/upload.js';
+import { referralController } from '../controllers/referralController.js';
 import { auth, requireRole } from '../middleware/auth.js';
 
 export const router = Router();
@@ -57,6 +58,10 @@ router.delete('/panel/banner', auth, requireRole('restaurant'), restaurantPanelC
 // ===== Cloudinary rasm yuklash imzosi =====
 // Faqat kirgan foydalanuvchi (restoran yoki admin) rasm yuklay oladi.
 router.get('/upload/signature', auth, uploadController.signature);
+
+// ===== Referral tizimi =====
+router.get('/referral/me', auth, referralController.me);
+router.get('/referral/subscription', auth, referralController.subscription);
 
 // ===== Admin paneli (role: admin) — dastur egasi =====
 router.get('/admin/stats', auth, requireRole('admin'), adminController.stats);

@@ -32,6 +32,16 @@ export const config = {
   // Telegram webapp public URL (guruhga yuboriladigan tugma shu manzilга o'tkazadi)
   // Masalan: https://t.me/LokmaGoBot/app  yoki webapp domeni
   webappUrl: process.env.WEBAPP_URL ?? process.env.CLIENT_ORIGIN ?? corsOrigins[0],
+
+  // ===== ASOSIY KANAL + REFERRAL =====
+  // Majburiy obuna kanали/guruhи (@username yoki -100... chat id).
+  // Referal orqali kelgan yangi foydalanuvchi shunga obuna bo'lishi shart.
+  mainChannel: process.env.MAIN_CHANNEL ?? '', // masalan: @LokmaGoUz
+  mainChannelUrl: process.env.MAIN_CHANNEL_URL ?? '', // masalan: https://t.me/LokmaGoUz
+  botUsername: process.env.BOT_USERNAME ?? 'LokmaGoBot', // referal havola uchun
+  // Referal bonusи (so'mда): taklif qiluvchiga va yangi kelganga
+  referralReward: Number(process.env.REFERRAL_REWARD ?? 5000),      // taklif qiluvchiga
+  referralWelcomeBonus: Number(process.env.REFERRAL_WELCOME ?? 3000), // yangi kelganga
 };
 
 export async function connectDB() {

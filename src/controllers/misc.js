@@ -7,6 +7,7 @@ import { User } from '../models/User.js';
 import { Order } from '../models/Order.js';
 import { getIO } from '../sockets/io.js';
 import { notifyUser } from '../services/telegram.js';
+import { parseReferralCode, attachReferral, rewardReferralIfSubscribed, checkChannelSubscription, buildReferralLink } from '../services/referral.js';
 
 export const bannerController = {
   // GET /api/banners — mijozга ko'rinadigan bannerlar
@@ -74,12 +75,24 @@ export const authController = {
     if (!user) {
       isNewUser = true;
       user = await User.create({ telegramId, ...profileFields });
+
+      // Yangi foydalanuvchи referal havola bilan kelган bo'lsa — bog'laymiz
+      const startParam = req.body.startParam || req.body.start_param;
+      const refCode = parseReferralCode(startParam);
+      if (refCode) {
+        try { await attachReferral(user, refCode); } catch { /* jim */ }
+      }
     } else {
       Object.assign(user, profileFields);
       await user.save();
     }
 
-    // 3) JWT qaytarish
+    // 3) Referal bonusини tekshirish (obuna bo'lган bo'lsa beramiz)
+    if (user.referredBy && !user.referralRewarded) {
+      try { await rewardReferralIfSubscribed(user); } catch { /* jim */ }
+    }
+
+    // 4) JWT qaytarish
     const token = signToken(String(user._id), user.role ?? 'customer');
     res.json({ token, user, isNewUser });
   })

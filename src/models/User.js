@@ -33,6 +33,19 @@ const userSchema = new Schema(
       { title: String, address: String, lat: Number, lng: Number },
     ],
     defaultAddressId: { type: Schema.Types.ObjectId },
+
+    // ===== REFERRAL TIZIMI =====
+    // Bu foydalanuvchini kim taklif qilgan (referrer userId)
+    referredBy: { type: Schema.Types.ObjectId, ref: 'User', default: null, index: true },
+    // Nechta odam taklif qilgan (muvaffaqiyatli — kanalга obuna bo'lgan)
+    referralCount: { type: Number, default: 0 },
+    // Bonus balans (so'mда) — buyurtmада ishlatiladi
+    bonusBalance: { type: Number, default: 0 },
+    // Referal orqali kelib, hali bonusи berilmagan (obunani kutayapti) — takroriy bonusning oldини oladi
+    referralRewarded: { type: Boolean, default: false },
+    // Asosiy kanал/guruhга obuna bo'lganmi (webapp ochilishi uchun shart)
+    isSubscribed: { type: Boolean, default: false },
+    subscribedAt: { type: Date, default: null },
   },
   { timestamps: true },
 );
