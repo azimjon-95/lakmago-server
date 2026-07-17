@@ -30,8 +30,10 @@ export const shareController = {
     const price = dish.price ? `${dish.price.toLocaleString('ru-RU')} so'm` : '';
     const title = `${dish.name}${price ? ' — ' + price : ''}`;
     const desc = dish.description || `${restaurant.name} — LokmaGo'da buyurtma bering`;
-    const image = dish.imageUrl || (dish.images && dish.images[0]) || '';
-    // Cloudinary rasmни optimallash (Telegram uchun kata, sifatли)
+    let image = dish.imageUrl || (dish.images && dish.images[0]) || '';
+    // Faqat to'liq HTTPS URL rasmни ishlatamiz (Telegram nisbiy yo'lni ololmaydi)
+    if (image && !image.startsWith('http')) image = '';
+    // Cloudinary rasmни Telegram karta o'lchamига optimallash (1200×630)
     const ogImage = image && image.includes('/upload/')
       ? image.replace('/upload/', '/upload/f_jpg,q_auto,w_1200,h_630,c_fill/')
       : image;
