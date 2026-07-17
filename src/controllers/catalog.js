@@ -111,5 +111,36 @@ export const dishController = {
   discounted: asyncHandler(async (_req, res) => {
     const dishes = await Dish.find({ isDiscounted: true, isAvailable: true }).limit(10);
     res.json(dishes);
+  }),
+
+  // GET /api/dishes/all?cursor=&limit=  — BARCHA restoranlarнинг taomlarи aralash
+  // Bosh sahifада ko'rsatiladi (faqat faol, bloklanмаgan restoranlar).
+  all: asyncHandler(async (req, res) => {
+    // Faqat ko'rinadigan (faol, bloklanмаган, tasdiqlangan) restoranlar
+    const visibleRestaurants = await Restaurant.find({
+      isApproved: true, isActive: true, isBlocked: { $ne: true },
+    }).select('_id name tint icon imageUrl').lean();
+
+    const restMap = new Map(visibleRestaurants.map((r) => [String(r._id), r]));
+    const restIds = visibleRestaurants.map((r) => r._id);
+
+    const filter = { restaurantId: { $in: restIds }, isAvailable: true };
+    if (req.query.cursor) filter.createdAt = { $lt: new Date(req.query.cursor) };
+    const limit = Math.min(Number(req.query.limit) || 20, 50);
+
+    const dishes = await Dish.find(filter)
+      .select('name description section price oldPrice imageUrl images tint icon restaurantId isHit isDiscounted createdAt')
+      .sort({ createdAt: -1 })
+      .limit(limit + 1)
+      .lean();
+
+    const hasMore = dishes.length > limit;
+    const items = (hasMore ? dishes.slice(0, limit) : dishes).map((d) => {
+      const r = restMap.get(String(d.restaurantId));
+      return { ...d, restaurantName: r?.name || '', restaurantTint: r?.tint, restaurantIcon: r?.icon };
+    });
+    const nextCursor = hasMore ? items[items.length - 1].createdAt : null;
+
+    res.json({ items, nextCursor, hasMore });
   })
 };
