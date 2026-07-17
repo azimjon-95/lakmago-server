@@ -39,6 +39,7 @@ export const config = {
   mainChannel: process.env.MAIN_CHANNEL ?? '', // masalan: @LokmaGoUz
   mainChannelUrl: process.env.MAIN_CHANNEL_URL ?? '', // masalan: https://t.me/LokmaGoUz
   botUsername: process.env.BOT_USERNAME ?? 'LokmaGoBot', // referal havola uchun
+  webappName: process.env.WEBAPP_NAME ?? 'app', // Mini App qisqa nomi (startapp deep-link uchun)
   // Referal bonusи (so'mда): taklif qiluvchiga va yangi kelganga
   referralReward: Number(process.env.REFERRAL_REWARD ?? 5000),      // taklif qiluvchiga
   referralWelcomeBonus: Number(process.env.REFERRAL_WELCOME ?? 3000), // yangi kelganga

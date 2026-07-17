@@ -9,6 +9,7 @@ import { router } from './routes/index.js';
 import { errorHandler, notFound } from './middleware/error.js';
 import { initSocket } from './sockets/io.js';
 import { handleBotUpdate } from './services/telegram.js';
+import { shareController } from './controllers/share.js';
 import { ensureDefaultAdmin } from './services/bootstrap.js';
 
 async function main() {
@@ -39,6 +40,11 @@ async function main() {
   });
 
   app.use('/api', router);
+
+  // Taom ulashish sahifasi (Open Graph — Telegram/WhatsApp preview)
+  // Ikki manzil ham ishlaydi: /d/:id (qisqa) va /share/dish/:id
+  app.get('/d/:id', shareController.dishPage);
+  app.get('/share/dish/:id', shareController.dishPage);
 
   app.use(notFound);
   app.use(errorHandler);
