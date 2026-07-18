@@ -42,13 +42,15 @@ async function main() {
       status: 'ok',
       origin: req.headers.origin || '(yo\u2018q)',
       originAllowed: isAllowedOrigin(req.headers.origin),
-      protocol: req.protocol,           // https bo'lishi kerak (Vercel uchun)
-      corsOrigins: config.corsOrigins,  // .env dagi ruxsat ro'yxati
-      webappUrl: config.webappUrl,
+      protocol: req.protocol,              // https bo'lishi kerak (Vercel uchun)
+      // Frontend manzillari (aniq ajratilган)
+      webapp: config.webappOrigin || '(sozlanmagan — WEBAPP_URL)',
+      adminPanels: config.adminOrigins.length ? config.adminOrigins : '(sozlanmagan — CORS_ORIGINS)',
+      allAllowed: config.corsOrigins,
+      // Boshqa sozlamаlar
       mainChannel: config.mainChannel || '(sozlanmagan)',
       hasBotToken: Boolean(config.telegramBotToken),
       hasCloudinary: Boolean(config.cloudinary?.apiSecret),
-      mongo: 'ulanган', // shu javob kelса DB ulanган demak (server ishlayapti)
     });
   });
 
