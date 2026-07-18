@@ -36,6 +36,22 @@ async function main() {
 
   app.get('/health', (_req, res) => res.json({ status: 'ok', service: 'lokmago-api' }));
 
+  // Diagnostika — sozlamаlar to'g'rimi tekshirish (maxfiy ma'lumot ko'rsatilmaydi)
+  app.get('/diag', (req, res) => {
+    res.json({
+      status: 'ok',
+      origin: req.headers.origin || '(yo\u2018q)',
+      originAllowed: isAllowedOrigin(req.headers.origin),
+      protocol: req.protocol,           // https bo'lishi kerak (Vercel uchun)
+      corsOrigins: config.corsOrigins,  // .env dagi ruxsat ro'yxati
+      webappUrl: config.webappUrl,
+      mainChannel: config.mainChannel || '(sozlanmagan)',
+      hasBotToken: Boolean(config.telegramBotToken),
+      hasCloudinary: Boolean(config.cloudinary?.apiSecret),
+      mongo: 'ulanган', // shu javob kelса DB ulanган demak (server ishlayapti)
+    });
+  });
+
   // Telegram bot webhook
   app.post('/bot/webhook', (req, res) => {
     handleBotUpdate(req.body);
