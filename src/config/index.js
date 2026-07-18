@@ -3,11 +3,32 @@ import mongoose from 'mongoose';
 
 dotenv.config();
 
-// CORS origin'lar: client (5173) va admin panel (5174) — vergul bilan ajratiladi
+// CORS origin'lar: .env dagi CORS_ORIGINS (vergul bilan) + lokal ishlab chiqish.
+// Vercel/Netlify preview domenlarи avtomatik ruxsat etiladi (pastdagi isAllowedOrigin).
 const originsRaw = process.env.CORS_ORIGINS
   ?? process.env.CLIENT_ORIGIN
-  ?? 'http://localhost:5173,http://localhost:5174,http://127.0.0.1:5173,http://127.0.0.1:5174';
-const corsOrigins = originsRaw.split(',').map((s) => s.trim()).filter(Boolean);
+  ?? '';
+const corsOrigins = [
+  ...originsRaw.split(',').map((s) => s.trim()).filter(Boolean),
+  'http://localhost:5173', 'http://localhost:5174',
+  'http://127.0.0.1:5173', 'http://127.0.0.1:5174',
+];
+
+// Origin ruxsat etilganmi? .env ro'yxati + Vercel/Netlify + Telegram
+export function isAllowedOrigin(origin) {
+  if (!origin) return true; // server-to-server yoki Postman
+  if (corsOrigins.includes(origin)) return true;
+  try {
+    const host = new URL(origin).hostname;
+    // Vercel/Netlify (production va preview deploylar)
+    if (/\.vercel\.app$/i.test(host)) return true;
+    if (/\.netlify\.app$/i.test(host)) return true;
+    // Telegram Mini App ichida ba'zan telegram domeni keladi
+    if (/(^|\.)telegram\.org$/i.test(host)) return true;
+    if (/(^|\.)t\.me$/i.test(host)) return true;
+  } catch { /* noto'g'ri origin */ }
+  return false;
+}
 
 export const config = {
   port: Number(process.env.PORT ?? 4000),

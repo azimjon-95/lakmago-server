@@ -1,13 +1,17 @@
 import { Server as HttpServer } from 'http';
 import { Server as SocketServer } from 'socket.io';
-import { config } from '../config/index.js';
+import { config, isAllowedOrigin } from '../config/index.js';
 
 let io = null;
 
 export function initSocket(httpServer) {
   io = new SocketServer(httpServer, {
-    // Bir nechta frontend (client/admin) — CORS ochiq (dev uchun)
-    cors: { origin: config.corsOrigins, methods: ['GET', 'POST'] },
+    // Bir nechta frontend (client/admin/Vercel) — moslashuvchan CORS
+    cors: {
+      origin: (origin, cb) => cb(null, isAllowedOrigin(origin)),
+      methods: ['GET', 'POST'],
+      credentials: true,
+    },
   });
 
   io.on('connection', (socket) => {
