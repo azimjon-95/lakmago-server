@@ -19,6 +19,9 @@ async function main() {
   await ensureDefaultAdmin();
 
   const app = express();
+  // Nginx orqali ishlaganда (reverse proxy) — haqiqий protokol/IP ni oladi.
+  // Shu tufayli req.protocol 'https' bo'ladi va /diag to'g'ri ko'rsatadi.
+  app.set('trust proxy', 1);
   const httpServer = createServer(app);
 
   app.use(helmet());
@@ -43,6 +46,8 @@ async function main() {
       origin: req.headers.origin || '(yo\u2018q)',
       originAllowed: isAllowedOrigin(req.headers.origin),
       protocol: req.protocol,              // https bo'lishi kerak (Vercel uchun)
+      behindProxy: Boolean(req.headers['x-forwarded-proto']), // Nginx sozlanganmi
+      httpsReady: req.protocol === 'https', // true bo'lsa Vercel bilan ishlaydi
       // Frontend manzillari (aniq ajratilган)
       webapp: config.webappOrigin || '(sozlanmagan — WEBAPP_URL)',
       adminPanels: config.adminOrigins.length ? config.adminOrigins : '(sozlanmagan — CORS_ORIGINS)',
