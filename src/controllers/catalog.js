@@ -3,6 +3,10 @@ import { Restaurant } from '../models/Restaurant.js';
 import { Dish } from '../models/Dish.js';
 import { Order } from '../models/Order.js';
 
+// MongoDB ObjectId formatини tekshirish — noto'g'ri ID kelса server yiqilmasин,
+// aniq 404 qaytarsin (masalan eski mock ID 'r1' kelганда).
+const isValidId = (id) => typeof id === 'string' && /^[a-f\d]{24}$/i.test(id);
+
 export const restaurantController = {
   // GET /api/restaurants?category=milliy&cursor=<createdAt>&limit=20
   // Cursor-based pagination — katta ro'yxatlar tez yuklanadi
@@ -34,6 +38,7 @@ export const restaurantController = {
 
   // GET /api/restaurants/:id
   getOne: asyncHandler(async (req, res) => {
+    if (!isValidId(req.params.id)) return res.status(404).json({ error: 'Restoran topilmadi' });
     const restaurant = await Restaurant.findById(req.params.id)
       .select('-ownerId -__v')
       .lean();
@@ -46,6 +51,7 @@ export const restaurantController = {
 
   // GET /api/dishes/:id  — bitta taom (ulashilган havola ochilganda kerak)
   getDishById: asyncHandler(async (req, res) => {
+    if (!isValidId(req.params.id)) return res.status(404).json({ error: 'Taom topilmadi' });
     const dish = await Dish.findById(req.params.id).lean();
     if (!dish) return res.status(404).json({ error: 'Taom topilmadi' });
     // Taom restorani bloklangan/nofaol bo'lsa ko'rsatmaymiz
@@ -58,6 +64,7 @@ export const restaurantController = {
 
   // GET /api/restaurants/:id/dishes
   getDishes: asyncHandler(async (req, res) => {
+    if (!isValidId(req.params.id)) return res.json([]);
     const restaurant = await Restaurant.findById(req.params.id).select('isBlocked isActive').lean();
     if (!restaurant || restaurant.isBlocked || !restaurant.isActive) {
       return res.json([]);

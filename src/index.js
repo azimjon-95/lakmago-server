@@ -29,10 +29,6 @@ async function main() {
 
   app.get('/health', (_req, res) => res.json({ status: 'ok', service: 'lokmago-api' }));
 
-  // Taom ulashish sahifаsi (Open Graph — Telegram chiroyли karta ko'rsatади)
-  const { shareController } = await import('./controllers/shareController.js');
-  app.get('/share/dish/:id', shareController.dishPage);
-
   // Telegram bot webhook
   app.post('/bot/webhook', (req, res) => {
     handleBotUpdate(req.body);

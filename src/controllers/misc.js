@@ -98,12 +98,15 @@ export const authController = {
   })
 };
 
+// MongoDB ObjectId formatи (24 belgili hex)
+const objectIdSchema = z.string().regex(/^[a-f\d]{24}$/i, 'ID formatи noto\u2018g\u2018ri (ObjectId kutiladi)');
+
 // Bitta restoran buyurtmasi sxemasi
 const singleOrderSchema = z.object({
-  restaurantId: z.string(),
+  restaurantId: objectIdSchema,
   restaurantName: z.string(),
   items: z.array(z.object({
-    dishId: z.string().optional(),
+    dishId: objectIdSchema.optional(),
     name: z.string(),
     quantity: z.number().int().positive(),
     unitPrice: z.number().nonnegative(),
@@ -225,6 +228,7 @@ export const orderController = {
 
   // GET /api/orders/:id
   getOne: asyncHandler(async (req, res) => {
+    if (!/^[a-f\d]{24}$/i.test(req.params.id)) return res.status(404).json({ error: 'Buyurtma topilmadi' });
     const order = await Order.findById(req.params.id);
     if (!order) return res.status(404).json({ error: 'Buyurtma topilmadi' });
     res.json(order);
