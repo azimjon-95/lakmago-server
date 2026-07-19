@@ -40,6 +40,63 @@ async function main() {
   app.get('/health', (_req, res) => res.json({ status: 'ok', service: 'lokmago-api' }));
 
   // Diagnostika — sozlamаlar to'g'rimi tekshirish (maxfiy ma'lumot ko'rsatilmaydi)
+  // Telegram webhook holatini tekshirish — guruh muammosini topish uchun
+  app.get('/diag/telegram', async (_req, res) => {
+    if (!config.telegramBotToken) {
+      return res.json({ error: 'TELEGRAM_BOT_TOKEN sozlanmagan' });
+    }
+    try {
+      const [infoRes, meRes] = await Promise.all([
+        fetch(`https://api.telegram.org/bot${config.telegramBotToken}/getWebhookInfo`),
+        fetch(`https://api.telegram.org/bot${config.telegramBotToken}/getMe`),
+      ]);
+      const info = (await infoRes.json()).result || {};
+      const me = (await meRes.json()).result || {};
+
+      const allowed = info.allowed_updates || [];
+      // Bo'sh massiv = hammasi yoqilgan (Telegram qoidasi)
+      const all = allowed.length === 0;
+      const need = ['message', 'my_chat_member', 'callback_query'];
+      const missing = all ? [] : need.filter((u) => !allowed.includes(u));
+
+      const { GroupChat } = await import('./models/GroupChat.js');
+      const groups = await GroupChat.find().select('title chatId isBotAdmin promoMessageId isPinned').lean();
+
+      res.json({
+        bot: { username: me.username, id: me.id },
+        webhook: {
+          url: info.url || '(o\u2018rnatilmagan)',
+          ok: Boolean(info.url),
+          pendingUpdates: info.pending_update_count,
+          lastError: info.last_error_message || null,
+          lastErrorAt: info.last_error_date
+            ? new Date(info.last_error_date * 1000).toISOString() : null,
+        },
+        updates: {
+          allowed: all ? '(hammasi)' : allowed,
+          missing,
+          ok: missing.length === 0,
+        },
+        groups: groups.map((g) => ({
+          title: g.title,
+          chatId: g.chatId,
+          botAdmin: g.isBotAdmin,
+          promoSent: Boolean(g.promoMessageId),
+          pinned: g.isPinned,
+        })),
+        muammo: !info.url
+          ? 'Webhook o\u2018rnatilmagan — bot hech narsa qabul qilmaydi'
+          : missing.length
+            ? `Webhook'da yetishmayapti: ${missing.join(', ')}`
+            : info.last_error_message
+              ? `Telegram xatosi: ${info.last_error_message}`
+              : null,
+      });
+    } catch (e) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
   app.get('/diag', (req, res) => {
     res.json({
       status: 'ok',

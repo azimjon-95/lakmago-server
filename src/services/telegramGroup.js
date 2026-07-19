@@ -67,8 +67,13 @@ export async function sendAndPinPromo(chatId) {
   try {
     await tg('pinChatMessage', { chat_id: chatId, message_id: msg.message_id, disable_notification: true });
     pinned = true;
+    console.log(`[bot] ${chatId} — xabar pin qilindi`);
   } catch (e) {
-    console.warn(`Pin qilib bo‘lmadi (${chatId}):`, e.message);
+    // Eng ko'p uchraydigan sabab: botda "Pin messages" huquqi yo'q
+    const hint = /not enough rights|CHAT_ADMIN_REQUIRED/i.test(e.message)
+      ? ' → Botga "Xabarlarni mahkamlash" (Pin messages) huquqini bering'
+      : '';
+    console.warn(`[bot] ${chatId} — pin qilib bo'lmadi: ${e.message}${hint}`);
   }
 
   await GroupChat.findOneAndUpdate(
