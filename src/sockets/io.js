@@ -32,6 +32,12 @@ export function initSocket(httpServer) {
       socket.join('admin');
     });
 
+    // Mijoz o'z xonasiga qo'shiladi — qo'llab-quvvatlash javoblari,
+    // bron holati va shaxsiy bildirishnomalar shu orqali keladi.
+    socket.on('join:user', (userId) => {
+      if (userId) socket.join(`user:${userId}`);
+    });
+
     // Mijoz o'z bronini kuzatishi
     socket.on('track:reservation', (reservationId) => {
       socket.join(`reservation:${reservationId}`);

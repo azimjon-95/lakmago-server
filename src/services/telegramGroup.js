@@ -80,32 +80,56 @@ export async function sendAndPinPromo(chatId) {
   return msg.message_id;
 }
 
-// Bot guruhga admin qilinganда chaqiriladi (my_chat_member event).
-// Bir marta reklama yuboradi (agar hali yuborilmagan bo'lsa).
+// Guruhni bazaga yozish/yangilash (admin bo'lsa ham, bo'lmasa ham).
+export async function registerGroup(chat, isBotAdmin) {
+  const chatId = String(chat.id);
+  const group = await GroupChat.findOneAndUpdate(
+    { chatId },
+    {
+      $set: {
+        title: chat.title || '',
+        type: chat.type || 'group',
+        isBotAdmin,
+        isActive: true,
+      },
+    },
+    { upsert: true, new: true, setDefaultsOnInsert: true },
+  );
+  return group;
+}
+
+// Bot guruhga admin qilinganda chaqiriladi (my_chat_member event).
+// Darhol reklama yuboradi va pin qiladi.
 export async function onBotPromotedToAdmin(chat) {
   const chatId = String(chat.id);
-  let group = await GroupChat.findOne({ chatId });
+  const group = await registerGroup(chat, true);
 
-  // Yozuv yaratamiz/yangilaymiz
-  if (!group) {
-    group = await GroupChat.create({
+  console.log(`[bot] "${chat.title}" — admin bo'ldi. Promo: ` +
+    (group.promoMessageId ? 'allaqachon yuborilgan' : 'yuborilmoqda...'));
+
+  // Reklama hali yuborilmagan bo'lsa — darhol yuboramiz va pin qilamiz
+  if (!group.promoMessageId) {
+    try {
+      const msgId = await sendAndPinPromo(chatId);
+      console.log(`[bot] "${chat.title}" — promo yuborildi (msg ${msgId})`);
+    } catch (e) {
+      console.error(`[bot] "${chat.title}" — promo XATOSI:`, e.message);
+      throw e;
+    }
+  }
+
+  // Adminlarga xabar beramiz (yangi guruh qo'shildi)
+  try {
+    const { getIO } = await import('../sockets/io.js');
+    getIO()?.to('admin').emit('group:new', {
       chatId,
       title: chat.title || '',
-      type: chat.type || 'group',
+      type: chat.type,
       isBotAdmin: true,
-      isActive: true,
     });
-  } else {
-    group.isBotAdmin = true;
-    group.isActive = true;
-    group.title = chat.title || group.title;
-    await group.save();
-  }
+  } catch { /* socket ishlamasa ham davom etamiz */ }
 
-  // Reklama hali yuborilmaган bo'lsa — yuboramiz va pin qilamiz (bir marta)
-  if (!group.promoMessageId) {
-    await sendAndPinPromo(chatId);
-  }
+  return group;
 }
 
 // Xabar hali ham pin turibdimi tekshirish

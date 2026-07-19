@@ -52,20 +52,38 @@ export async function sendWebAppButton(telegramId, webAppUrl) {
 export async function handleBotUpdate(update) {
   // 1) Bot guruhга admin qilinganини aniqlash (my_chat_member event)
   if (update.my_chat_member) {
-    const { chat, new_chat_member } = update.my_chat_member;
+    const { chat, new_chat_member, old_chat_member } = update.my_chat_member;
     const status = new_chat_member?.status;
+    const prevStatus = old_chat_member?.status;
 
-    // Guruh yoki superguruhда bot admin bo'ldi
-    if ((chat.type === 'group' || chat.type === 'supergroup')) {
-      if (status === 'administrator') {
-        // Bot admin qilindi — reklama yuborib pin qilamiz (bir marta)
-        const { onBotPromotedToAdmin } = await import('./telegramGroup.js');
-        try { await onBotPromotedToAdmin(chat); } catch (e) { console.error('Guruh promo xatosi:', e.message); }
+    console.log(`[bot] my_chat_member: chat=${chat?.id} (${chat?.type}) ` +
+      `"${chat?.title || ''}" ${prevStatus} → ${status}`);
+
+    // Faqat guruh/superguruh (shaxsiy chat emas)
+    if (chat?.type !== 'group' && chat?.type !== 'supergroup') return;
+
+    try {
+      const { onBotPromotedToAdmin, registerGroup } = await import('./telegramGroup.js');
+      const { GroupChat } = await import('../models/GroupChat.js');
+
+      if (status === 'administrator' || status === 'creator') {
+        // Bot admin qilindi — darhol reklama yuborib pin qilamiz
+        await onBotPromotedToAdmin(chat);
+      } else if (status === 'member') {
+        // Bot qo'shildi, lekin admin emas — yozib qo'yamiz.
+        // Keyin admin qilinsa my_chat_member yana keladi.
+        await registerGroup(chat, false);
+        console.log(`[bot] "${chat.title}" — qo'shildi, lekin ADMIN EMAS. ` +
+          'Pin qilish uchun admin huquqi kerak.');
       } else if (status === 'left' || status === 'kicked') {
-        // Bot guruhdan chiqarildi — nofaol qilamiz
-        const { GroupChat } = await import('../models/GroupChat.js');
-        await GroupChat.findOneAndUpdate({ chatId: String(chat.id) }, { isActive: false, isBotAdmin: false });
+        await GroupChat.findOneAndUpdate(
+          { chatId: String(chat.id) },
+          { isActive: false, isBotAdmin: false },
+        );
+        console.log(`[bot] "${chat.title}" — bot chiqarildi`);
       }
+    } catch (e) {
+      console.error('[bot] guruh xatosi:', e.message, e.stack);
     }
     return;
   }

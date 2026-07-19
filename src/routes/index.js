@@ -8,6 +8,7 @@ import { restaurantPanelController } from '../controllers/restaurantPanel.js';
 import { uploadController } from '../controllers/upload.js';
 import { referralController } from '../controllers/referralController.js';
 import { addressController } from '../controllers/address.js';
+import { supportController } from '../controllers/support.js';
 import { auth, requireRole } from '../middleware/auth.js';
 
 export const router = Router();
@@ -71,6 +72,16 @@ router.post('/addresses', auth, addressController.create);
 router.patch('/addresses/:id', auth, addressController.update);
 router.delete('/addresses/:id', auth, addressController.remove);
 router.patch('/addresses/:id/default', auth, addressController.setDefault);
+
+// ===== Qo'llab-quvvatlash chati =====
+// Mijoz tomoni
+router.get('/support/chat', auth, supportController.myChat);
+router.post('/support/message', auth, supportController.sendMessage);
+// Admin tomoni
+router.get('/admin/support', auth, requireRole('admin'), supportController.list);
+router.get('/admin/support/:id', auth, requireRole('admin'), supportController.getOne);
+router.post('/admin/support/:id/reply', auth, requireRole('admin'), supportController.reply);
+router.patch('/admin/support/:id/resolve', auth, requireRole('admin'), supportController.resolve);
 
 // ===== Admin paneli (role: admin) — dastur egasi =====
 router.get('/admin/stats', auth, requireRole('admin'), adminController.stats);
