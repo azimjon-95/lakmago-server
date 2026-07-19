@@ -23,7 +23,7 @@ export const restaurantController = {
 
     // select: faqat karta uchun kerakli maydonlar (tarmoq trafigini kamaytiradi)
     const restaurants = await Restaurant.find(filter)
-      .select('name cuisine category kind rating reviewCount deliveryMin deliveryMax deliveryFee discount isFresh tint icon images createdAt')
+      .select('name cuisine category kind rating reviewCount deliveryMin deliveryMax deliveryFee discount isFresh tint icon images imageUrl createdAt pickupEnabled prepMinutes shopTypes')
       .sort({ createdAt: -1 })
       .limit(limit + 1)
       .lean();

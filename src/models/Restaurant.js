@@ -57,6 +57,23 @@ const restaurantSchema = new Schema(
     serviceFeeMin: { type: Number, default: 0 },
     serviceFeeMax: { type: Number, default: 0 },
 
+    // ===== OLIB KETISH (pickup) =====
+    // Muassasa o'zi olib ketishni qabul qiladimi
+    pickupEnabled: { type: Boolean, default: true },
+    // Olib ketishda chegirma (foizda) — mijozni rag'batlantirish
+    pickupDiscountPercent: { type: Number, default: 0 },
+    // Tayyorlash vaqti (daqiqa) — olib ketish uchun "nechida tayyor" hisobi
+    prepMinutes: { type: Number, default: 20 },
+
+    // ===== DO'KON YO'NALISHLARI =====
+    // Faqat kind='shop' bo'lganda ishlatiladi.
+    // LokmaGo — ovqat platformasi, shuning uchun faqat oziq-ovqat yo'nalishlari.
+    shopTypes: [{
+      type: String,
+      enum: ['oziq_ovqat', 'meva_sabzavot', 'nonvoyxona', 'shirinlik',
+             'ichimlik', 'gosht', 'sut', 'quruq_meva', 'salqin'],
+    }],
+
     // ===== STOL BRON QILISH (bizning ustunligimiz) =====
     // Restoran stol bron qilishni qabul qiladimi
     reservationEnabled: { type: Boolean, default: false },

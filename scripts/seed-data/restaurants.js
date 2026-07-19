@@ -104,11 +104,13 @@ export const RESTAURANTS = [
   // ===== SHIRINLIK =====
   { name: 'Non va Shirinlik', cuisine: 'Nonvoyxona, tortlar', category: 'shirinlik', kind: 'shop',
     rating: 4.7, reviewCount: 367, deliveryMin: 20, deliveryMax: 35, deliveryFee: 0,
-    openTime: '06:00', closeTime: '21:00', tint: '#2E2A18', icon: 'ti-cake' },
+    openTime: '06:00', closeTime: '21:00', tint: '#2E2A18', icon: 'ti-cake',
+    shopTypes: ['nonvoyxona', 'shirinlik'], pickupEnabled: true, prepMinutes: 10 },
 
   { name: 'Tort Baraka', cuisine: 'Buyurtma tortlar, deserт', category: 'shirinlik', kind: 'shop',
     rating: 4.9, reviewCount: 512, deliveryMin: 30, deliveryMax: 60, deliveryFee: 8000,
-    openTime: '09:00', closeTime: '20:00', minOrderAmount: 50000, tint: '#2E2A18', icon: 'ti-cake' },
+    openTime: '09:00', closeTime: '20:00', minOrderAmount: 50000, tint: '#2E2A18', icon: 'ti-cake',
+    shopTypes: ['shirinlik', 'nonvoyxona'], pickupEnabled: true, prepMinutes: 30 },
 
   // ===== RESTORAN (yevropa) =====
   { name: 'Panorama Restaurant', cuisine: 'Yevropa oshxonasi, steyk', category: 'restoran', kind: 'restaurant',
@@ -130,15 +132,18 @@ export const RESTAURANTS = [
   // ===== MAGAZIN =====
   { name: 'Korzinka Express', cuisine: 'Oziq-ovqat, ichimliklar', category: 'magazin_oziq', kind: 'shop',
     rating: 4.5, reviewCount: 678, deliveryMin: 30, deliveryMax: 50, deliveryFee: 8000,
-    openTime: '08:00', closeTime: '23:00', minOrderAmount: 30000, tint: '#35251C', icon: 'ti-building-store' },
+    openTime: '08:00', closeTime: '23:00', minOrderAmount: 30000, tint: '#35251C', icon: 'ti-building-store',
+    shopTypes: ['oziq_ovqat', 'ichimlik', 'sut'], pickupEnabled: true, prepMinutes: 15 },
 
   { name: 'Meva Bozor', cuisine: 'Meva-sabzavot, ko\'katlar', category: 'magazin_meva', kind: 'shop',
     rating: 4.6, reviewCount: 234, deliveryMin: 25, deliveryMax: 45, deliveryFee: 5000,
-    openTime: '07:00', closeTime: '20:00', tint: '#2E2A18', icon: 'ti-apple' },
+    openTime: '07:00', closeTime: '20:00', tint: '#2E2A18', icon: 'ti-apple',
+    shopTypes: ['meva_sabzavot', 'quruq_meva'], pickupEnabled: true, prepMinutes: 10 },
 
   { name: 'Muzqaymoq Olami', cuisine: 'Muzqaymoq, salqin ichimlik', category: 'salqin', kind: 'shop',
     rating: 4.7, reviewCount: 312, deliveryMin: 20, deliveryMax: 35, deliveryFee: 4000,
-    openTime: '10:00', closeTime: '23:00', discount: 15, tint: '#2E2A18', icon: 'ti-ice-cream' },
+    openTime: '10:00', closeTime: '23:00', discount: 15, tint: '#2E2A18', icon: 'ti-ice-cream',
+    shopTypes: ['salqin', 'shirinlik'], pickupEnabled: true, prepMinutes: 5 },
 
   { name: 'Tovuq House', cuisine: 'Fried chicken, strips, wings', category: 'tovuq', kind: 'fastfood',
     rating: 4.5, reviewCount: 423, deliveryMin: 25, deliveryMax: 40, deliveryFee: 0,

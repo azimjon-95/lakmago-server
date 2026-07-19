@@ -124,7 +124,13 @@ const singleOrderSchema = z.object({
 // bitta groupId bilan bog'lanadi.
 const batchOrderSchema = z.object({
   orders: z.array(singleOrderSchema).min(1),
-  address: z.string(),
+  // Yetkazish turi: kuryer yoki o'zi olib ketish
+  fulfillment: z.enum(['delivery', 'pickup']).default('delivery'),
+  // Manzil — yetkazishda majburiy (pastda tekshiriladi)
+  address: z.string().default(''),
+  // Vaqt: darhol (tayyor bo'lishi bilan) yoki belgilangan vaqtga
+  timingMode: z.enum(['asap', 'scheduled']).default('asap'),
+  scheduledFor: z.string().datetime().optional(),
   phone: z.string().optional(),
   paymentMethod: z.enum(['payme', 'click', 'uzum', 'cash']).default('cash'),
   paymentLabel: z.string().optional(),
@@ -141,14 +147,33 @@ export const orderController = {
     if (!parsed.success) {
       return res.status(400).json({ error: 'Ma\u2018lumot noto\u2018g\u2018ri', details: parsed.error.issues });
     }
-    const { orders, address, phone, paymentMethod, paymentLabel, useBonus } = parsed.data;
+    const { orders, address, phone, paymentMethod, paymentLabel, useBonus,
+            fulfillment, timingMode, scheduledFor } = parsed.data;
+
+    // Yetkazishda manzil majburiy, olib ketishda shart emas
+    if (fulfillment === 'delivery' && !address.trim()) {
+      return res.status(400).json({ error: 'Yetkazish uchun manzil kiriting' });
+    }
+    // Belgilangan vaqt tanlansa — u kelajakda bo'lishi kerak
+    const scheduledDate = scheduledFor ? new Date(scheduledFor) : null;
+    if (timingMode === 'scheduled') {
+      if (!scheduledDate || isNaN(scheduledDate.getTime())) {
+        return res.status(400).json({ error: 'Vaqt noto\u2018g\u2018ri' });
+      }
+      if (scheduledDate.getTime() < Date.now() - 60_000) {
+        return res.status(400).json({ error: 'Tanlangan vaqt o\u2018tib ketgan' });
+      }
+    }
+
+    // Olib ketishda yetkazish haqi olinmaydi
+    const isPickup = fulfillment === 'pickup';
     const groupId = 'G' + Date.now() + Math.floor(Math.random() * 1000);
     const io = getIO();
 
     // ===== BONUS BILAN TO'LASH =====
     // Butun buyurtма summasi (barcha restoranlar)
     const grandTotal = orders.reduce(
-      (s, o) => s + o.subtotal + (o.deliveryFee || 0) + (o.serviceFee || 0), 0,
+      (s, o) => s + o.subtotal + (isPickup ? 0 : (o.deliveryFee || 0)) + (o.serviceFee || 0), 0,
     );
     // Ishlatiladigan bonus: so'ralган, lekin balansдан va summадан oshмаsин
     let bonusToUse = 0;
@@ -170,11 +195,14 @@ export const orderController = {
     const created = [];
     for (let i = 0; i < orders.length; i++) {
       const o = orders[i];
-      const orderTotal = o.subtotal + (o.deliveryFee || 0) + (o.serviceFee || 0);
-      // Bonusни shu buyurtмага qo'llaymiz (ketma-ket, oshиб ketмаsин)
+      // Olib ketishda yetkazish haqi yo'q
+      const fee = isPickup ? 0 : (o.deliveryFee || 0);
+      const orderTotal = o.subtotal + fee + (o.serviceFee || 0);
+      // Bonusni shu buyurtmaga qo'llaymiz (ketma-ket, oshib ketmasin)
       const orderBonus = Math.min(bonusLeft, orderTotal);
       bonusLeft -= orderBonus;
       const total = orderTotal - orderBonus;
+
       const doc = await Order.create({
         userId: req.userId,
         restaurantId: o.restaurantId,
@@ -182,17 +210,21 @@ export const orderController = {
         groupId,
         items: o.items,
         subtotal: o.subtotal,
-        deliveryFee: o.deliveryFee || 0,
+        deliveryFee: fee,
         serviceFee: o.serviceFee || 0,
         bonusUsed: orderBonus,
         total,
         status: 'pending',
-        address,
+        fulfillment,
+        address: isPickup ? '' : address,
+        timingMode,
+        scheduledFor: scheduledDate,
         phone,
         paymentMethod,
         paymentLabel,
         etaMinutes: o.etaMinutes,
-        courierName: COURIERS[Math.floor(Math.random() * COURIERS.length)],
+        // Kuryer faqat yetkazishda tayinlanadi
+        ...(isPickup ? {} : { courierName: COURIERS[Math.floor(Math.random() * COURIERS.length)] }),
       });
       created.push(doc);
 

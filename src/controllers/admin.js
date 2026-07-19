@@ -99,6 +99,12 @@ export const adminController = {
       // Stol bron
       reservationEnabled: z.boolean().optional(),
       reservationNote: z.string().optional(),
+      // Olib ketish
+      pickupEnabled: z.boolean().optional(),
+      pickupDiscountPercent: z.number().optional(),
+      prepMinutes: z.number().optional(),
+      // Do'kon yo'nalishlari
+      shopTypes: z.array(z.string()).optional(),
       // Restoran akkaunti
       login: z.string().min(3),
       password: z.string().min(4),
@@ -142,6 +148,8 @@ export const adminController = {
       'minOrderAmount', 'serviceFeePercent', 'serviceFeeMin', 'serviceFeeMax',
       // Stol bron qilish
       'reservationEnabled', 'reservationNote',
+      // Olib ketish va do'kon yo'nalishlari
+      'pickupEnabled', 'pickupDiscountPercent', 'prepMinutes', 'shopTypes',
     ];
     const update = {};
     for (const k of allowed) if (k in req.body) update[k] = req.body[k];

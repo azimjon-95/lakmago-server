@@ -44,7 +44,18 @@ const orderSchema = new Schema(
       index: true,
     },
 
-    address: { type: String, required: true },
+    // ===== YETKAZISH TURI =====
+    // 'delivery' — kuryer yetkazadi, 'pickup' — mijoz o'zi olib ketadi
+    fulfillment: { type: String, enum: ['delivery', 'pickup'], default: 'delivery', index: true },
+
+    // Manzil — yetkazishda majburiy, olib ketishda bo'sh bo'lishi mumkin
+    address: { type: String, default: '' },
+
+    // ===== VAQT REJALASHTIRISH =====
+    // 'asap' — tayyor bo'lishi bilan (standart), 'scheduled' — belgilangan vaqtga
+    timingMode: { type: String, enum: ['asap', 'scheduled'], default: 'asap' },
+    // Mijoz tanlagan vaqt (scheduled bo'lsa) — yetkazish yoki olib ketish vaqti
+    scheduledFor: { type: Date, default: null, index: true },
     phone: { type: String },
     paymentMethod: { type: String, enum: ['payme', 'click', 'uzum', 'cash'], default: 'cash' },
     paymentLabel: { type: String },
