@@ -81,8 +81,16 @@ async function main() {
     console.log(`✓ LokmaGo API http://localhost:${config.port}`);
   });
 
+  // Bron eslatmalari — har 5 daqiqada tekshiriladi
+  // (1.5 soat / 1 soat / 30 daqiqa / vaqt keldi)
+  if (config.telegramBotToken) {
+    const { checkReservationReminders } = await import('./services/reservationReminder.js');
+    setTimeout(() => checkReservationReminders().catch((e) => console.error('Bron eslatma:', e.message)), 20_000);
+    setInterval(() => checkReservationReminders().catch((e) => console.error('Bron eslatma:', e.message)), 5 * 60_000);
+  }
+
   // Kunlik guruh tekshiruvi (reklama yuborilganmi + pin qilinganmi)
-  // Server ishga tushganда 1 marta, keyin har 24 soatda.
+  // Server ishga tushганда 1 marta, keyin har 24 soatda.
   if (config.telegramBotToken) {
     const { dailyGroupCheck } = await import('./services/telegramGroup.js');
     // Startda 30 soniyadan keyin (server barqarorlashsin)

@@ -23,12 +23,27 @@ export const reservationController = {
     if (!parsed.success) {
       return res.status(400).json({ error: 'Ma‘lumot noto‘g‘ri', details: parsed.error.issues });
     }
-    const reservation = await Reservation.create({ ...parsed.data, userId: req.userId });
+    // Sana va vaqtni bitta Date ga birlashtiramiz (eslatmalar shu bo'yicha ishlaydi)
+    const scheduledAt = new Date(`${parsed.data.date}T${parsed.data.time}:00`);
 
-    // Restoranga real-time xabar
+    const reservation = await Reservation.create({
+      ...parsed.data,
+      userId: req.userId,
+      scheduledAt: isNaN(scheduledAt.getTime()) ? undefined : scheduledAt,
+    });
+
+    // Restoranga real-time xabar (to'liq ma'lumot bilan)
     getIO()?.
     to(`restaurant:${parsed.data.restaurantId}`).
-    emit('reservation:new', { reservationId: reservation._id });
+    emit('reservation:new', {
+      reservationId: String(reservation._id),
+      name: reservation.name,
+      phone: reservation.phone,
+      date: reservation.date,
+      time: reservation.time,
+      guests: reservation.guests,
+    });
+    getIO()?.to('admin').emit('reservation:new', { reservationId: String(reservation._id) });
 
     res.status(201).json(reservation);
   }),
@@ -51,25 +66,42 @@ export const reservationController = {
     res.json(list);
   }),
 
-  // PATCH /api/reservations/:id/status  (restoran tasdiqlaydi)
+  // PATCH /api/reservations/:id/status  (restoran tasdiqlaydi/rad etadi)
   updateStatus: asyncHandler(async (req, res) => {
-    const { status } = req.body;
+    const { status, reason } = req.body;
+    const ALLOWED = ['confirmed', 'rejected', 'cancelled', 'completed'];
+    if (!ALLOWED.includes(status)) {
+      return res.status(400).json({ error: 'Holat noto\u2018g\u2018ri' });
+    }
+
+    const update = { status };
+    if (status === 'rejected' && reason) update.rejectReason = reason;
+
     const reservation = await Reservation.findByIdAndUpdate(
       req.params.id,
-      { status },
-      { new: true }
-    ).populate('userId');
+      update,
+      { new: true },
+    );
     if (!reservation) return res.status(404).json({ error: 'Bron topilmadi' });
 
-    // Mijozga Telegram push
-    const user = reservation.userId;
-    if (user?.telegramId) {
-      const msg =
-      status === 'confirmed' ?
-      `✅ Stolingiz tasdiqlandi!\n${reservation.restaurantName}\n${reservation.date} ${reservation.time}, ${reservation.guests} kishi` :
-      `❌ Kechirasiz, bron tasdiqlanmadi.\n${reservation.restaurantName}`;
-      notifyUser(user.telegramId, msg);
+    // Mijozga bot orqali batafsil xabar (tasdiq yoki rad + sabab)
+    if (status === 'confirmed' || status === 'rejected') {
+      try {
+        const { notifyReservationDecision } = await import('../services/reservationReminder.js');
+        await notifyReservationDecision(reservation, status, reason || '');
+      } catch (e) {
+        console.error('[reservation] xabar xatosi:', e.message);
+      }
     }
+
+    // Real-time: mijoz ilovasi va admin panel
+    const io = getIO();
+    io?.to(`user:${reservation.userId}`).emit('reservation:status', {
+      reservationId: String(reservation._id), status,
+    });
+    io?.to('admin').emit('reservation:update', {
+      reservationId: String(reservation._id), status,
+    });
 
     res.json(reservation);
   })

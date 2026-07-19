@@ -64,19 +64,42 @@ export async function handleStartCommand(telegramId, startParam, from) {
 
 // Webapp'ga kirish tugmasi + xush kelibsiz
 export async function sendWebAppEntry(telegramId, user) {
+  const name = user?.firstName ? `, ${user.firstName}` : '';
   const bonusLine = (user?.bonusBalance > 0)
-    ? `\n💰 Sizda ${user.bonusBalance.toLocaleString('ru-RU')} so\u2018m bonus bor!`
+    ? `\n💰 Bonus hisobingiz: <b>${user.bonusBalance.toLocaleString('ru-RU')} so\u2018m</b>`
     : '';
+
   await tg('sendMessage', {
     chat_id: telegramId,
     text:
-      '🎉 <b>Tayyor!</b> Endi buyurtma berishingiz mumkin.' + bonusLine + '\n\n' +
-      '👇 Ilovani ochish uchun tugmani bosing:',
+      `👋 Xush kelibsiz${name}!\n\n` +
+      '🍽 <b>LokmaGo</b> — shahardagi eng yaxshi restoran va choyxonalardan ' +
+      'taom buyurtma qiling.' + bonusLine + '\n\n' +
+      'Quyidagi tugmalar orqali boshqaring 👇',
     parse_mode: 'HTML',
     reply_markup: {
-      inline_keyboard: [[
-        { text: '🍽 Buyurtma berish', web_app: { url: config.webappUrl } },
-      ]],
+      inline_keyboard: [
+        [{ text: '🍽 Taom buyurtma qilish', web_app: { url: config.webappUrl } }],
+        [
+          { text: '📦 Buyurtmalarim', callback_data: 'menu_orders' },
+          { text: '📅 Bronlarim', callback_data: 'menu_reservations' },
+        ],
+        [
+          { text: '💰 Bonus va do\u2018stlar', callback_data: 'menu_bonus' },
+          { text: '📍 Manzillarim', callback_data: 'menu_addresses' },
+        ],
+        [{ text: '☎️ Yordam', callback_data: 'menu_help' }],
+      ],
+    },
+  });
+
+  // Doimiy pastki menyu (klaviatura) — har doim qo'l ostida
+  await tg('setChatMenuButton', {
+    chat_id: Number(telegramId),
+    menu_button: {
+      type: 'web_app',
+      text: 'Buyurtma',
+      web_app: { url: config.webappUrl },
     },
   });
 }

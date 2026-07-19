@@ -70,11 +70,30 @@ export async function handleBotUpdate(update) {
     return;
   }
 
-  // 2) Callback tugmalar («Tekshirish» — obuna tasdiqlash)
+  // 2) Callback tugmalar
   if (update.callback_query) {
-    if (update.callback_query.data === 'check_sub') {
-      const { handleCheckSubscription } = await import('./referralStart.js');
-      await handleCheckSubscription(update.callback_query);
+    const data = update.callback_query.data || '';
+    try {
+      // Obuna tasdiqlash
+      if (data === 'check_sub') {
+        const { handleCheckSubscription } = await import('./referralStart.js');
+        await handleCheckSubscription(update.callback_query);
+        return;
+      }
+      // Bron javoblari (boramiz / bora olmaymiz / yo'ldamiz / keldik)
+      if (data.startsWith('resv_')) {
+        const { handleReservationResponse } = await import('./reservationReminder.js');
+        await handleReservationResponse(update.callback_query);
+        return;
+      }
+      // Asosiy menyu tugmalari
+      if (data.startsWith('menu_')) {
+        const { handleMenuCallback } = await import('./botMenu.js');
+        await handleMenuCallback(update.callback_query);
+        return;
+      }
+    } catch (e) {
+      console.error('[bot] callback xatosi:', e.message);
     }
     return;
   }
@@ -89,7 +108,26 @@ export async function handleBotUpdate(update) {
     const parts = message.text.split(' ');
     const startParam = parts[1] || '';
 
-    const { handleStartCommand } = await import('./referralStart.js');
-    await handleStartCommand(telegramId, startParam, message.from);
+    try {
+      const { handleStartCommand } = await import('./referralStart.js');
+      await handleStartCommand(telegramId, startParam, message.from);
+    } catch (e) {
+      // Xato jim yutilmasin — logga yozamiz va mijozga xabar beramiz
+      console.error('[bot] /start xatosi:', e.message, e.stack);
+      await sendPlainMessage(telegramId,
+        'Kechirasiz, texnik nosozlik. Bir ozdan keyin /start ni qayta bosing.');
+    }
   }
+}
+
+// Oddiy matnli xabar (xato holatlari uchun)
+async function sendPlainMessage(chatId, text) {
+  if (!config.telegramBotToken) return;
+  try {
+    await fetch(`https://api.telegram.org/bot${config.telegramBotToken}/sendMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chat_id: chatId, text }),
+    });
+  } catch { /* jim */ }
 }

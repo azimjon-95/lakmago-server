@@ -7,6 +7,7 @@ import { panelAuthController } from '../controllers/panelAuth.js';
 import { restaurantPanelController } from '../controllers/restaurantPanel.js';
 import { uploadController } from '../controllers/upload.js';
 import { referralController } from '../controllers/referralController.js';
+import { addressController } from '../controllers/address.js';
 import { auth, requireRole } from '../middleware/auth.js';
 
 export const router = Router();
@@ -63,6 +64,13 @@ router.get('/upload/signature', auth, uploadController.signature);
 // ===== Referral tizimi =====
 router.get('/referral/me', auth, referralController.me);
 router.get('/referral/subscription', auth, referralController.subscription);
+
+// ===== Manzillar (serverda saqlanadi — hamma qurilmada ko'rinadi) =====
+router.get('/addresses', auth, addressController.list);
+router.post('/addresses', auth, addressController.create);
+router.patch('/addresses/:id', auth, addressController.update);
+router.delete('/addresses/:id', auth, addressController.remove);
+router.patch('/addresses/:id/default', auth, addressController.setDefault);
 
 // ===== Admin paneli (role: admin) — dastur egasi =====
 router.get('/admin/stats', auth, requireRole('admin'), adminController.stats);

@@ -29,9 +29,20 @@ const userSchema = new Schema(
     isActive: { type: Boolean, default: true },
 
     favorites: [{ type: Schema.Types.ObjectId, ref: 'Restaurant' }],
-    addresses: [
-      { title: String, address: String, lat: Number, lng: Number },
-    ],
+    // Manzillar — kuryer topishi uchun to'liq ma'lumot
+    addresses: [{
+      title: String,          // "Uy", "Ish", "Boshqa"
+      address: String,        // to'liq matn (ko'cha, uy)
+      street: String,         // ko'cha nomi
+      city: String,           // shahar
+      entrance: String,       // kirish (podyezd)
+      floor: String,          // qavat
+      flat: String,           // xonadon
+      note: String,           // mo'ljal, domofon kodi
+      labelId: String,        // 'home' | 'work' | 'other'
+      lat: Number,
+      lng: Number,
+    }],
     defaultAddressId: { type: Schema.Types.ObjectId },
 
     // ===== REFERRAL TIZIMI =====
