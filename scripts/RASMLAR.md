@@ -55,17 +55,38 @@ biriktiriladi (Cloudinary trafigi tejaladi).
 
 ---
 
-## Yuklash
+## Rasm qo'shishning 2 usuli
+
+### A) Admin panel orqali — bittalab (eng oson)
+
+Rasm keyinroq qo'shmoqchi bo'lsangiz shu qulay:
+
+**Taom rasmi:**
+1. Restoran paneliga kiring (login/parol seed oxirida chiqadi)
+2. **Menyu** bo'limiga o'ting
+3. Taom yonidagi **rasm kvadratini bosing**
+4. Rasm tanlang → Saqlash
+
+**Restoran banneri:**
+1. Admin panel → **Muassasalar**
+2. Restoran yonidagi ⚙️ tugmasi
+3. Yuqorida **"Muassasa rasmi"** → rasm tanlang → Saqlash
+
+Rasmlar Cloudinary'ga avtomatik yuklanadi va optimallashtiriladi.
+
+### B) Skript orqali — ommaviy (ko'p rasm uchun)
 
 ```bash
 cd ~/projects/lakmago-server
 
 # 1. Avval ma'lumotlarni yarating
-node scripts/seed-full.js
+npm run seed
 
 # 2. Keyin rasmlarni yuklang
-node scripts/seed-images.js ./rasmlar
+npm run seed:images ./rasmlar
 ```
+
+Bir rasm nomi mos keladigan barcha taomlarga biriktiriladi.
 
 Skript har rasmni Cloudinary'ga yuklaydi va nomi mos keladigan
 barcha taomlarga biriktiradi. Restoran bannerlari ham avtomatik
