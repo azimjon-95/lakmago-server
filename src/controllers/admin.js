@@ -85,6 +85,20 @@ export const adminController = {
       deliveryFee: z.number().optional(),
       imageUrl: z.string().optional(),
       images: z.array(z.string()).optional(),
+      // Ish tartibi
+      openTime: z.string().optional(),
+      closeTime: z.string().optional(),
+      legalName: z.string().optional(),
+      legalAddress: z.string().optional(),
+      inn: z.string().optional(),
+      // Xizmat haqi
+      minOrderAmount: z.number().optional(),
+      serviceFeePercent: z.number().optional(),
+      serviceFeeMin: z.number().optional(),
+      serviceFeeMax: z.number().optional(),
+      // Stol bron
+      reservationEnabled: z.boolean().optional(),
+      reservationNote: z.string().optional(),
       // Restoran akkaunti
       login: z.string().min(3),
       password: z.string().min(4),
@@ -118,7 +132,17 @@ export const adminController = {
 
   // PATCH /api/admin/restaurants/:id — muassasa ma'lumotini yangilash (faol/nofaol ham)
   updateRestaurant: asyncHandler(async (req, res) => {
-    const allowed = ['name', 'cuisine', 'category', 'kind', 'phone', 'address', 'icon', 'tint', 'isActive', 'isBlocked', 'isApproved', 'deliveryMin', 'deliveryMax', 'deliveryFee', 'discount', 'imageUrl', 'images'];
+    const allowed = [
+      'name', 'cuisine', 'category', 'kind', 'phone', 'address', 'icon', 'tint',
+      'isActive', 'isBlocked', 'isApproved', 'deliveryMin', 'deliveryMax',
+      'deliveryFee', 'discount', 'imageUrl', 'images',
+      // Ish tartibi va yuridik ma'lumot
+      'openTime', 'closeTime', 'legalName', 'legalAddress', 'inn',
+      // Xizmat haqi va buyurtma shartlari
+      'minOrderAmount', 'serviceFeePercent', 'serviceFeeMin', 'serviceFeeMax',
+      // Stol bron qilish
+      'reservationEnabled', 'reservationNote',
+    ];
     const update = {};
     for (const k of allowed) if (k in req.body) update[k] = req.body[k];
     const restaurant = await Restaurant.findByIdAndUpdate(req.params.id, update, { new: true });

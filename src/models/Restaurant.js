@@ -39,6 +39,30 @@ const restaurantSchema = new Schema(
     phone: { type: String },
     address: { type: String },
 
+    // ===== ISH TARTIBI (restoran sahifasida "Xabar" oynasida ko'rinadi) =====
+    // Ochilish/yopilish vaqti — "07:00" formatida
+    openTime: { type: String, default: '09:00' },
+    closeTime: { type: String, default: '23:00' },
+    // Yuridik ma'lumot (Uzum'dagi kabi: MCHJ nomi, manzil, INN)
+    legalName: { type: String, default: '' },
+    legalAddress: { type: String, default: '' },
+    inn: { type: String, default: '' },
+
+    // ===== XIZMAT HAQI VA BUYURTMA SHARTLARI =====
+    // Minimal buyurtma summasi (so'mda)
+    minOrderAmount: { type: Number, default: 0 },
+    // Xizmat haqi: buyurtma summasining foizi
+    serviceFeePercent: { type: Number, default: 0 },
+    // Xizmat haqi chegaralari (foizdan hisoblanganda)
+    serviceFeeMin: { type: Number, default: 0 },
+    serviceFeeMax: { type: Number, default: 0 },
+
+    // ===== STOL BRON QILISH (bizning ustunligimiz) =====
+    // Restoran stol bron qilishni qabul qiladimi
+    reservationEnabled: { type: Boolean, default: false },
+    // Bron uchun qo'shimcha izoh (masalan "Kamida 2 soat oldin")
+    reservationNote: { type: String, default: '' },
+
     isFresh: { type: Boolean, default: false }, // "Yangi" belgisi (isNew Mongoose zaxirasi)
     isApproved: { type: Boolean, default: true }, // admin qo'shsa darhol faol
     // Restoran vaqtincha yopilgan/ochilgan (STOP butun muassasa uchun — restoran o'zi)
