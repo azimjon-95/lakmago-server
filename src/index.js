@@ -26,16 +26,34 @@ async function main() {
 
   app.use(helmet());
   app.use(compression()); // Gzip/Brotli — javoblar siqiladi (tarmoq tez)
+  // CORS — ruxsat etilmagan domen uchun XATO TASHLAMAYMIZ.
+  // Xato tashlansa Express uni ushlamaydi: log to'ladi va 500 qaytadi.
+  // To'g'ri yo'l — cb(null, false): brauzer o'zi bloklaydi, server tinch.
+  const rejectedOrigins = new Set(); // takroriy logni oldini olish
   app.use(cors({
     origin: (origin, cb) => {
       if (isAllowedOrigin(origin)) return cb(null, true);
-      console.warn('[CORS] rad etildi:', origin);
-      return cb(new Error('CORS: ruxsat etilmagan domen'));
+      // Har domen uchun bir marta ogohlantiramiz
+      if (origin && !rejectedOrigins.has(origin)) {
+        rejectedOrigins.add(origin);
+        console.warn(`[CORS] ruxsat etilmagan domen: ${origin}\n` +
+          '        Ruxsat berish uchun .env ga qo\'shing:\n' +
+          `        CORS_ORIGINS=${origin}   (admin panel uchun)\n` +
+          `        WEBAPP_URL=${origin}     (mijoz webapp uchun)`);
+      }
+      return cb(null, false);
     },
     credentials: true,
   }));
   app.use(express.json());
   app.use(morgan('dev'));
+
+  // Ildiz — server ishlayotganini bildiradi (404 log to'ldirmasin)
+  app.get('/', (_req, res) => res.json({
+    service: 'LokmaGo API',
+    status: 'ok',
+    docs: '/health · /diag · /diag/telegram',
+  }));
 
   app.get('/health', (_req, res) => res.json({ status: 'ok', service: 'lokmago-api' }));
 
