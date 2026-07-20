@@ -9,7 +9,8 @@
     "seed": "node scripts/seed-full.js",
     "seed:fresh": "node scripts/seed-full.js --fresh",
     "seed:images": "node scripts/seed-images.js",
-    "webhook": "node scripts/setup-webhook.js"
+    "webhook": "node scripts/setup-webhook.js",
+    "bot": "node scripts/bot-tekshir.js"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",

@@ -5,12 +5,28 @@ import { parseReferralCode, attachReferral, checkChannelSubscription } from './r
 const TG_API = `https://api.telegram.org/bot${config.telegramBotToken}`;
 
 async function tg(method, body) {
+  if (!config.telegramBotToken) {
+    console.warn('[bot] TELEGRAM_BOT_TOKEN sozlanmagan');
+    return null;
+  }
   const res = await fetch(`${TG_API}/${method}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   });
-  return res.json();
+  const data = await res.json();
+
+  // Telegram xatosi jim o'tmasin — sabab aniq ko'rinsin
+  if (!data.ok) {
+    const hint = /web_app|BUTTON_URL_INVALID|url/i.test(data.description || '')
+      ? '  → WEBAPP_URL noto\'g\'ri. HTTPS bo\'lishi va BotFather\'da ' +
+        'Mini App sifatida ro\'yxatdan o\'tgan bo\'lishi kerak.'
+      : /chat not found/i.test(data.description || '')
+        ? '  → Foydalanuvchi botni bloklagan yoki chat topilmadi'
+        : '';
+    console.error(`[bot] ${method} XATO: ${data.description}${hint ? '\n' + hint : ''}`);
+  }
+  return data;
 }
 
 // /start buyrug'i — referal + majburiy obuna + webapp tugmasi.
@@ -69,39 +85,65 @@ export async function sendWebAppEntry(telegramId, user) {
     ? `\n💰 Bonus hisobingiz: <b>${user.bonusBalance.toLocaleString('ru-RU')} so\u2018m</b>`
     : '';
 
-  await tg('sendMessage', {
+  const text =
+    `👋 Xush kelibsiz${name}!\n\n` +
+    '🍽 <b>LokmaGo</b> — shahardagi eng yaxshi restoran va choyxonalardan ' +
+    'taom buyurtma qiling.' + bonusLine + '\n\n' +
+    'Quyidagi tugmalar orqali boshqaring 👇';
+
+  const menuRows = [
+    [
+      { text: '📦 Buyurtmalarim', callback_data: 'menu_orders' },
+      { text: '📅 Bronlarim', callback_data: 'menu_reservations' },
+    ],
+    [
+      { text: '💰 Bonus va do\u2018stlar', callback_data: 'menu_bonus' },
+      { text: '📍 Manzillarim', callback_data: 'menu_addresses' },
+    ],
+    [{ text: '☎️ Yordam', callback_data: 'menu_help' }],
+  ];
+
+  // Mini App tugmasi bilan urinamiz
+  const withWebApp = await tg('sendMessage', {
     chat_id: telegramId,
-    text:
-      `👋 Xush kelibsiz${name}!\n\n` +
-      '🍽 <b>LokmaGo</b> — shahardagi eng yaxshi restoran va choyxonalardan ' +
-      'taom buyurtma qiling.' + bonusLine + '\n\n' +
-      'Quyidagi tugmalar orqali boshqaring 👇',
+    text,
     parse_mode: 'HTML',
     reply_markup: {
       inline_keyboard: [
         [{ text: '🍽 Taom buyurtma qilish', web_app: { url: config.webappUrl } }],
-        [
-          { text: '📦 Buyurtmalarim', callback_data: 'menu_orders' },
-          { text: '📅 Bronlarim', callback_data: 'menu_reservations' },
-        ],
-        [
-          { text: '💰 Bonus va do\u2018stlar', callback_data: 'menu_bonus' },
-          { text: '📍 Manzillarim', callback_data: 'menu_addresses' },
-        ],
-        [{ text: '☎️ Yordam', callback_data: 'menu_help' }],
+        ...menuRows,
       ],
     },
   });
 
-  // Doimiy pastki menyu (klaviatura) — har doim qo'l ostida
-  await tg('setChatMenuButton', {
-    chat_id: Number(telegramId),
-    menu_button: {
-      type: 'web_app',
-      text: 'Buyurtma',
-      web_app: { url: config.webappUrl },
-    },
-  });
+  // web_app tugmasi rad etilsa (URL noto'g'ri) — oddiy havola bilan yuboramiz.
+  // Shunda bot baribir ishlaydi, faqat ilova brauzerda ochiladi.
+  if (withWebApp && !withWebApp.ok) {
+    console.warn('[bot] web_app tugmasi rad etildi, oddiy havola bilan qayta urinilmoqda');
+    await tg('sendMessage', {
+      chat_id: telegramId,
+      text,
+      parse_mode: 'HTML',
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: '🍽 Taom buyurtma qilish', url: config.webappUrl }],
+          ...menuRows,
+        ],
+      },
+    });
+  }
+
+  // Doimiy menyu tugmasi — ishlamasa ham bot to'xtamasin (ixtiyoriy qulaylik)
+  try {
+    await tg('setChatMenuButton', {
+      chat_id: Number(telegramId),
+      menu_button: {
+        type: 'web_app',
+        text: 'Buyurtma',
+        web_app: { url: config.webappUrl },
+      },
+    });
+  } catch { /* muhim emas */ }
 }
 
 // «Tekshirish» tugmasi bosilганда (callback_query)
