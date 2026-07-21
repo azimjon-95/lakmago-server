@@ -139,19 +139,8 @@ async function main() {
     // Telegram'ga darhol javob beramiz (aks holda u qayta yuboraveradi)
     res.sendStatus(200);
 
-    // Update turini logga yozamiz — nima kelayotgani ko'rinsin
-    const u = req.body || {};
-    const kind = u.message ? 'message'
-      : u.callback_query ? 'callback_query'
-      : u.my_chat_member ? 'my_chat_member'
-      : u.chat_member ? 'chat_member'
-      : Object.keys(u).filter((k) => k !== 'update_id')[0] || 'noma\u2018lum';
-    console.log(`[bot] webhook ← ${kind}` +
-      (u.message?.text ? ` "${u.message.text.slice(0, 40)}"` : '') +
-      (u.callback_query?.data ? ` [${u.callback_query.data}]` : ''));
-
-    // Xato jim yo'qolmasin — logga yozamiz
-    handleBotUpdate(u).catch((e) => {
+    // Xato jim yo'qolmasin — faqat xato holatida log
+    handleBotUpdate(req.body || {}).catch((e) => {
       console.error('[bot] webhook XATOSI:', e.message);
       console.error(e.stack);
     });

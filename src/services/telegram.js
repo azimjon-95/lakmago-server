@@ -5,7 +5,6 @@ const TG_API = `https://api.telegram.org/bot${config.telegramBotToken}`;
 // Foydalanuvchiga push xabar yuborish (buyurtma statusi, bron tasdiqi)
 export async function notifyUser(telegramId, text) {
   if (!config.telegramBotToken) {
-    console.log(`[telegram demo] ${telegramId}: ${text}`);
     return;
   }
   try {
@@ -56,9 +55,6 @@ export async function handleBotUpdate(update) {
     const status = new_chat_member?.status;
     const prevStatus = old_chat_member?.status;
 
-    console.log(`[bot] my_chat_member: chat=${chat?.id} (${chat?.type}) ` +
-      `"${chat?.title || ''}" ${prevStatus} → ${status}`);
-
     // Faqat guruh/superguruh (shaxsiy chat emas)
     if (chat?.type !== 'group' && chat?.type !== 'supergroup') return;
 
@@ -73,14 +69,11 @@ export async function handleBotUpdate(update) {
         // Bot qo'shildi, lekin admin emas — yozib qo'yamiz.
         // Keyin admin qilinsa my_chat_member yana keladi.
         await registerGroup(chat, false);
-        console.log(`[bot] "${chat.title}" — qo'shildi, lekin ADMIN EMAS. ` +
-          'Pin qilish uchun admin huquqi kerak.');
       } else if (status === 'left' || status === 'kicked') {
         await GroupChat.findOneAndUpdate(
           { chatId: String(chat.id) },
           { isActive: false, isBotAdmin: false },
         );
-        console.log(`[bot] "${chat.title}" — bot chiqarildi`);
       }
     } catch (e) {
       console.error('[bot] guruh xatosi:', e.message, e.stack);

@@ -15,7 +15,6 @@ export function initSocket(httpServer) {
   });
 
   io.on('connection', (socket) => {
-    console.log('socket ulandi:', socket.id);
 
     // Mijoz o'z buyurtmasini kuzatish uchun xonaga qo'shiladi
     socket.on('track:order', (orderId) => {
@@ -44,7 +43,6 @@ export function initSocket(httpServer) {
     });
 
     socket.on('disconnect', () => {
-      console.log('socket uzildi:', socket.id);
     });
   });
 

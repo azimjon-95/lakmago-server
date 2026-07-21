@@ -121,7 +121,6 @@ export async function checkReservationReminders() {
     }
   }
 
-  if (sent > 0) console.log(`✓ Bron eslatmalari: ${sent} ta yuborildi`);
   return { sent, checked: active.length };
 }
 

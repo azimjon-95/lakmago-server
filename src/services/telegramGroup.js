@@ -49,7 +49,6 @@ export async function checkBotIsAdmin(chatId) {
 // Reklama xabarini yuborish + pin qilish. Guruh yozuvини yangilaydi.
 export async function sendAndPinPromo(chatId) {
   if (!config.telegramBotToken) {
-    console.log(`[telegram demo] guruh ${chatId}ga reklama yuborilardi`);
     return null;
   }
 
@@ -67,7 +66,6 @@ export async function sendAndPinPromo(chatId) {
   try {
     await tg('pinChatMessage', { chat_id: chatId, message_id: msg.message_id, disable_notification: true });
     pinned = true;
-    console.log(`[bot] ${chatId} — xabar pin qilindi`);
   } catch (e) {
     // Eng ko'p uchraydigan sabab: botda "Pin messages" huquqi yo'q
     const hint = /not enough rights|CHAT_ADMIN_REQUIRED/i.test(e.message)
@@ -109,14 +107,10 @@ export async function onBotPromotedToAdmin(chat) {
   const chatId = String(chat.id);
   const group = await registerGroup(chat, true);
 
-  console.log(`[bot] "${chat.title}" — admin bo'ldi. Promo: ` +
-    (group.promoMessageId ? 'allaqachon yuborilgan' : 'yuborilmoqda...'));
-
   // Reklama hali yuborilmagan bo'lsa — darhol yuboramiz va pin qilamiz
   if (!group.promoMessageId) {
     try {
       const msgId = await sendAndPinPromo(chatId);
-      console.log(`[bot] "${chat.title}" — promo yuborildi (msg ${msgId})`);
     } catch (e) {
       console.error(`[bot] "${chat.title}" — promo XATOSI:`, e.message);
       throw e;
@@ -152,7 +146,6 @@ async function isStillPinned(chatId, messageId) {
 //   - yuborilган lekin pin yo'qolган bo'lsa → qayta pin qiladi (yoki qayta yuboradi)
 export async function dailyGroupCheck() {
   if (!config.telegramBotToken) {
-    console.log('[telegram demo] kunlik guruh tekshiruvi (token yo‘q)');
     return { checked: 0, fixed: 0 };
   }
 
@@ -201,7 +194,6 @@ export async function dailyGroupCheck() {
     }
   }
 
-  console.log(`✓ Kunlik guruh tekshiruvi: ${groups.length} guruh, ${fixed} tuzatildi`);
   return { checked: groups.length, fixed };
 }
 
@@ -224,7 +216,6 @@ export async function sendCustomBroadcast(opts) {
   const { chatId, text = '', imageUrl = '', buttonText = '', buttonUrl = '', pin = false } = opts;
 
   if (!config.telegramBotToken) {
-    console.log(`[telegram demo] guruh ${chatId}ga maxsus reklama yuborilardi`);
     return { ok: true, demo: true };
   }
   if (!chatId) throw new Error('chatId kerak');
