@@ -186,6 +186,18 @@ export const restaurantPanelController = {
       { ...parsed.data, kind: 'restaurant', restaurantId: rid(req), active: true },
       { new: true, upsert: true },
     );
+
+    // Muassasa kartasi va sahifasida ham shu rasm ko'rinsin.
+    // Mijoz ilovasi restaurant.imageUrl ni o'qiydi.
+    await Restaurant.findByIdAndUpdate(rid(req), {
+      imageUrl: parsed.data.imageUrl,
+      images: [parsed.data.imageUrl],
+    });
+
+    // Real-time: mijoz ilovasi va admin panel
+    const io = getIO();
+    io?.to('admin').emit('restaurant:update', { _id: String(rid(req)) });
+
     res.json(banner);
   }),
 
