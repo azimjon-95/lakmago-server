@@ -180,6 +180,9 @@ export const adminController = {
     for (const k of allowed) if (k in req.body) update[k] = req.body[k];
     const restaurant = await Restaurant.findByIdAndUpdate(req.params.id, update, { new: true });
     if (!restaurant) return res.status(404).json({ error: 'Muassasa topilmadi' });
+    // Real-time: admin panel va restoran paneli darhol yangilanadi
+    getIO()?.to('admin').emit('restaurant:update', restaurant);
+    getIO()?.to(`restaurant:${restaurant._id}`).emit('restaurant:update', restaurant);
     res.json(restaurant);
   }),
 
@@ -201,6 +204,7 @@ export const adminController = {
     const restaurant = await Restaurant.findByIdAndDelete(req.params.id);
     if (!restaurant) return res.status(404).json({ error: 'Muassasa topilmadi' });
     await User.deleteMany({ restaurantId: req.params.id, role: 'restaurant' });
+    getIO()?.to('admin').emit('restaurant:update', { _id: req.params.id, deleted: true });
     res.json({ ok: true });
   }),
 

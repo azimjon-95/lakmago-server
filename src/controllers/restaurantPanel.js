@@ -61,6 +61,8 @@ export const restaurantPanelController = {
       return res.status(400).json({ error: 'Ma‘lumot noto‘g‘ri', details: parsed.error.issues });
     }
     const dish = await Dish.create({ ...parsed.data, restaurantId: rid(req) });
+    // Real-time: admin nazorat panelida darhol ko'rinadi
+    getIO()?.to('admin').emit('dish:update', { restaurantId: String(rid(req)) });
     res.status(201).json(dish);
   }),
 
