@@ -73,7 +73,7 @@ export const restaurantController = {
       restaurantId: req.params.id,
       isAvailable: true
     })
-      .select('name description section price oldPrice weightGram calories ingredients optionGroups isHit isTrending isDiscounted tint icon images isAvailable')
+      .select('restaurantId name description section price oldPrice weightGram calories ingredients optionGroups isHit isTrending isDiscounted tint icon images imageUrl isAvailable')
       .lean();
     res.json(dishes);
   }),
