@@ -84,9 +84,13 @@ export const User = model('User', userSchema);
 
 const bannerSchema = new Schema(
   {
+    // Matnlar — IXTIYORIY. Faqat tugma yoqilganda ishlatiladi.
     eyebrow: { type: String, default: '' },
-    title: { type: String, required: true },
+    title: { type: String, default: '' },
     cta: { type: String, default: 'Ko‘rish' },
+    // Tugma yoqilganmi va qayerga olib boradi
+    hasButton: { type: Boolean, default: false },
+    linkUrl: { type: String, default: '' },
     bg: { type: String, default: '#411E00' },
     accentText: { type: String, default: '#FAC775' },
     ctaBg: { type: String, default: '#EF9F27' },

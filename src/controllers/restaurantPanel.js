@@ -161,15 +161,19 @@ export const restaurantPanelController = {
   // PUT /api/panel/banner — o'z bannerini qo'shish/almashtirish
   setBanner: asyncHandler(async (req, res) => {
     const schema = z.object({
-      title: z.string().min(1),
+      // Rasm majburiy — banner asosan rasmdan iborat
+      imageUrl: z.string().min(1),
+      // Tugma ixtiyoriy
+      hasButton: z.boolean().optional().default(false),
+      title: z.string().optional().default(''),
       eyebrow: z.string().optional().default(''),
       cta: z.string().optional(),
+      linkUrl: z.string().optional().default(''),
       bg: z.string().optional(),
-      imageUrl: z.string().optional(),
       icon: z.string().optional(),
     });
     const parsed = schema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ error: 'Ma\u2018lumot noto\u2018g\u2018ri' });
+    if (!parsed.success) return res.status(400).json({ error: 'Banner rasmi majburiy' });
 
     // Restoran uchun bitta banner — bor bo'lsa yangilaymiz, yo'q bo'lsa yaratamiz
     const banner = await Banner.findOneAndUpdate(

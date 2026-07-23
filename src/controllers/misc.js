@@ -12,7 +12,8 @@ import { parseReferralCode, attachReferral, rewardReferralIfSubscribed, checkCha
 export const bannerController = {
   // GET /api/banners — mijozга ko'rinadigan bannerlar
   list: asyncHandler(async (_req, res) => {
-    const banners = await Banner.find({ active: true }).sort({ order: 1 }).lean();
+    // Faqat platforma bannerlari — restoran bannerlari o'z sahifasida ko'rinadi
+    const banners = await Banner.find({ active: true, kind: 'platform' }).sort({ order: 1 }).lean();
 
     // Restoran bannerlari orasidan bloklangan/nofaol muassasalarникini olib tashlaymiz
     const restaurantBanners = banners.filter((b) => b.kind === 'restaurant' && b.restaurantId);

@@ -301,7 +301,17 @@ export const adminController = {
   // ===== BANNER BOSHQARUVI =====
   // GET /api/admin/banners — barcha bannerlar (platforma + restoran)
   banners: asyncHandler(async (_req, res) => {
-    const list = await Banner.find().sort({ kind: 1, order: 1, createdAt: -1 }).lean();
+    const list = await Banner.find()
+      .populate('restaurantId', 'name')
+      .sort({ kind: 1, order: 1, createdAt: -1 })
+      .lean();
+    // Restoran nomini qulay maydonga chiqaramiz
+    list.forEach((b) => {
+      if (b.restaurantId?.name) {
+        b.restaurantName = b.restaurantId.name;
+        b.restaurantId = b.restaurantId._id;
+      }
+    });
     const withRest = await Promise.all(list.map(async (b) => {
       if (b.restaurantId) {
         const r = await Restaurant.findById(b.restaurantId).select('name').lean();
@@ -315,23 +325,27 @@ export const adminController = {
   // POST /api/admin/banners — platforma banneri qo'shish
   createBanner: asyncHandler(async (req, res) => {
     const schema = z.object({
-      title: z.string().min(1),
+      // Rasm majburiy — banner asosan rasmdan iborat
+      imageUrl: z.string().min(1),
+      // Tugma ixtiyoriy: yoqilsa matn va havola kerak
+      hasButton: z.boolean().optional().default(false),
+      title: z.string().optional().default(''),
       eyebrow: z.string().optional().default(''),
       cta: z.string().optional(),
+      linkUrl: z.string().optional().default(''),
       bg: z.string().optional(),
-      imageUrl: z.string().optional(),
       icon: z.string().optional(),
       order: z.number().optional(),
     });
     const parsed = schema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ error: 'Ma\u2018lumot noto\u2018g\u2018ri' });
+    if (!parsed.success) return res.status(400).json({ error: 'Banner rasmi majburiy' });
     const banner = await Banner.create({ ...parsed.data, kind: 'platform', active: true });
     res.status(201).json(banner);
   }),
 
   // PATCH /api/admin/banners/:id
   updateBanner: asyncHandler(async (req, res) => {
-    const allowed = ['title', 'eyebrow', 'cta', 'bg', 'imageUrl', 'icon', 'order', 'active'];
+    const allowed = ['title', 'eyebrow', 'cta', 'bg', 'imageUrl', 'icon', 'order', 'active', 'hasButton', 'linkUrl'];
     const update = {};
     for (const k of allowed) if (k in req.body) update[k] = req.body[k];
     const banner = await Banner.findByIdAndUpdate(req.params.id, update, { new: true });
