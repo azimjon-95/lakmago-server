@@ -41,7 +41,12 @@ export const supportController = {
       chat.messages.forEach((m) => { if (m.from === 'admin' && !m.readAt) m.readAt = new Date(); });
       await chat.save();
     }
-    res.json({ messages: chat.messages, isResolved: chat.isResolved });
+    // Suhbat yakunlangan bo'lsa mijozda toza oyna ochiladi.
+    // Xabarlar bazada saqlanadi — admin tarixni ko'ra oladi.
+    res.json({
+      messages: chat.isResolved ? [] : chat.messages,
+      isResolved: chat.isResolved,
+    });
   }),
 
   // POST /api/support/message — mijoz xabar yuboradi
