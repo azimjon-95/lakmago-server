@@ -26,6 +26,34 @@ const dishSchema = new Schema(
     description: { type: String, default: '' },
     price: { type: Number, required: true },
     oldPrice: { type: Number },
+
+    // Tayyorlanish vaqti (daqiqa) — mijozga "nechida tayyor" hisobida ishlatiladi
+    prepMinutes: { type: Number, default: 15, min: 1, max: 240 },
+
+    // Taom kategoriyasi — barcha muassasalarga umumiy (Yandex Eda uslubi).
+    // Mijoz shu bo'yicha qidiradi va filtrlaydi.
+    category: {
+      type: String,
+      enum: [
+        'issiq',        // Garyachiy sex — asosiy issiq taomlar
+        'sovuq',        // Sovuq gazaklar
+        'salat',        // Salatlar
+        'shorva',       // Sho'rvalar
+        'garnir',       // Garnirlar
+        'grill',        // Mangal, shashlik, kabob
+        'fastfood',     // Lavash, burger, hot-dog
+        'pitsa',        // Pitsa
+        'sushi',        // Sushi va rollar
+        'nonushta',     // Nonushta taomlari
+        'shirinlik',    // Desert, tort
+        'nonvoyxona',   // Non, somsa, patir
+        'ichimlik',     // Choy, qahva, sharbat
+        'alkogol',      // Bar — alkogolli ichimliklar
+        'boshqa',
+      ],
+      default: 'issiq',
+      index: true,
+    },
     tint: { type: String, default: '#FAEEDA' },
     icon: { type: String, default: 'ti-bowl' },
     // Rasm (Cloudinary URL) — bo'lsa ikon o'rniga rasm ko'rsatiladi
