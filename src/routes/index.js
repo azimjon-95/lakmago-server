@@ -39,6 +39,8 @@ router.patch('/orders/:id/confirm', auth, orderController.confirmDelivery);
 router.post('/payments/create', auth, paymentController.create);
 router.post('/payments/callback', paymentController.callback);
 
+router.get('/reservations/my', auth, reservationController.myReservations);
+router.patch('/reservations/:id/cancel', auth, reservationController.cancelMine);
 router.post('/reservations', auth, reservationController.create);
 router.get('/reservations', auth, reservationController.myReservations);
 

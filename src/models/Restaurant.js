@@ -38,6 +38,11 @@ const restaurantSchema = new Schema(
     // Aloqa / manzil
     phone: { type: String },
     address: { type: String },
+    // Xaritadagi joylashuv — kuryer va mijoz uchun
+    lat: { type: Number },
+    lng: { type: Number },
+    // Mo'ljal (masalan "Metro yonida, 2-qavat")
+    landmark: { type: String, default: '' },
 
     // ===== ISH TARTIBI (restoran sahifasida "Xabar" oynasida ko'rinadi) =====
     // Ochilish/yopilish vaqti — "07:00" formatida

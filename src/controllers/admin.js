@@ -110,6 +110,9 @@ export const adminController = {
       deliveryFee: z.number().optional(),
       imageUrl: z.string().optional(),
       images: z.array(z.string()).optional(),
+      lat: z.number().optional(),
+      lng: z.number().optional(),
+      landmark: z.string().optional(),
       // Ish tartibi
       openTime: z.string().optional(),
       closeTime: z.string().optional(),
@@ -164,7 +167,7 @@ export const adminController = {
   // PATCH /api/admin/restaurants/:id — muassasa ma'lumotini yangilash (faol/nofaol ham)
   updateRestaurant: asyncHandler(async (req, res) => {
     const allowed = [
-      'name', 'cuisine', 'category', 'kind', 'phone', 'address', 'icon', 'tint',
+      'name', 'cuisine', 'category', 'kind', 'phone', 'address', 'lat', 'lng', 'landmark', 'icon', 'tint',
       'isActive', 'isBlocked', 'isApproved', 'deliveryMin', 'deliveryMax',
       'deliveryFee', 'discount', 'imageUrl', 'images',
       // Ish tartibi va yuridik ma'lumot

@@ -66,6 +66,37 @@ export const reservationController = {
     res.json(list);
   }),
 
+  // GET /api/reservations/my — mijozning bron tarixi
+  myReservations: asyncHandler(async (req, res) => {
+    const list = await Reservation.find({ userId: req.userId })
+      .sort({ scheduledAt: -1 })
+      .limit(50)
+      .lean();
+    res.json(list);
+  }),
+
+  // PATCH /api/reservations/:id/cancel — mijoz o'z bronini bekor qiladi
+  cancelMine: asyncHandler(async (req, res) => {
+    const reservation = await Reservation.findOne({
+      _id: req.params.id,
+      userId: req.userId,
+    });
+    if (!reservation) return res.status(404).json({ error: 'Bron topilmadi' });
+    if (['completed', 'cancelled', 'rejected'].includes(reservation.status)) {
+      return res.status(400).json({ error: 'Bu bronni bekor qilib bo\u2018lmaydi' });
+    }
+    reservation.status = 'cancelled';
+    await reservation.save();
+
+    // Restoranga real-time xabar
+    getIO()?.to(`restaurant:${reservation.restaurantId}`).emit('reservation:update', {
+      reservationId: String(reservation._id), status: 'cancelled',
+    });
+    getIO()?.to('admin').emit('reservation:update', { reservationId: String(reservation._id) });
+
+    res.json(reservation);
+  }),
+
   // PATCH /api/reservations/:id/status  (restoran tasdiqlaydi/rad etadi)
   updateStatus: asyncHandler(async (req, res) => {
     const { status, reason } = req.body;
