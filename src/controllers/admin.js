@@ -6,6 +6,7 @@ import { Order } from '../models/Order.js';
 import { Dish } from '../models/Dish.js';
 import { Settings, getSettings } from '../models/Settings.js';
 import { GroupChat } from '../models/GroupChat.js';
+import { Reservation } from '../models/Reservation.js';
 import { getIO } from '../sockets/io.js';
 
 export const adminController = {
@@ -69,6 +70,30 @@ export const adminController = {
   }),
 
   // POST /api/admin/restaurants — yangi muassasa + restoran akkaunti (login/parol)
+  // GET /api/admin/restaurants/:id/dishes — muassasa menyusi
+  restaurantDishes: asyncHandler(async (req, res) => {
+    const restaurant = await Restaurant.findById(req.params.id)
+      .select('name cuisine kind').lean();
+    if (!restaurant) return res.status(404).json({ error: 'Muassasa topilmadi' });
+
+    const dishes = await Dish.find({ restaurantId: req.params.id })
+      .sort({ section: 1, createdAt: 1 }).lean();
+
+    res.json({ restaurant, dishes });
+  }),
+
+  // GET /api/admin/restaurants/:id/reservations — muassasa bronlari
+  restaurantReservations: asyncHandler(async (req, res) => {
+    const restaurant = await Restaurant.findById(req.params.id)
+      .select('name reservationEnabled').lean();
+    if (!restaurant) return res.status(404).json({ error: 'Muassasa topilmadi' });
+
+    const reservations = await Reservation.find({ restaurantId: req.params.id })
+      .sort({ scheduledAt: -1 }).limit(100).lean();
+
+    res.json({ restaurant, reservations });
+  }),
+
   createRestaurant: asyncHandler(async (req, res) => {
     const schema = z.object({
       name: z.string().min(1),

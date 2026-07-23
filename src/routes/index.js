@@ -86,6 +86,8 @@ router.patch('/admin/support/:id/resolve', auth, requireRole('admin'), supportCo
 // ===== Admin paneli (role: admin) — dastur egasi =====
 router.get('/admin/stats', auth, requireRole('admin'), adminController.stats);
 router.get('/admin/restaurants', auth, requireRole('admin'), adminController.restaurants);
+router.get('/admin/restaurants/:id/dishes', auth, requireRole('admin'), adminController.restaurantDishes);
+router.get('/admin/restaurants/:id/reservations', auth, requireRole('admin'), adminController.restaurantReservations);
 router.post('/admin/restaurants', auth, requireRole('admin'), adminController.createRestaurant);
 router.patch('/admin/restaurants/:id', auth, requireRole('admin'), adminController.updateRestaurant);
 router.patch('/admin/restaurants/:id/password', auth, requireRole('admin'), adminController.resetRestaurantPassword);
