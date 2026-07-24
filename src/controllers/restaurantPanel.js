@@ -157,53 +157,37 @@ export const restaurantPanelController = {
   }),
 
   // ===== RESTORAN BANNERI =====
-  // GET /api/panel/banner — restoranning o'z banneri
+  // GET /api/panel/banner — muassasa rasmi
+  // Banner alohida saqlanmaydi: muassasa yozuvidagi rasm — banner.
   getBanner: asyncHandler(async (req, res) => {
-    const banner = await Banner.findOne({ kind: 'restaurant', restaurantId: rid(req) });
-    res.json(banner || null);
+    const r = await Restaurant.findById(rid(req)).select('imageUrl').lean();
+    res.json(r?.imageUrl ? { imageUrl: r.imageUrl } : null);
   }),
 
-  // PUT /api/panel/banner — o'z bannerini qo'shish/almashtirish
+  // PUT /api/panel/banner — rasmni almashtirish
   setBanner: asyncHandler(async (req, res) => {
-    const schema = z.object({
-      // Rasm majburiy — banner asosan rasmdan iborat
-      imageUrl: z.string().min(1),
-      // Tugma ixtiyoriy
-      hasButton: z.boolean().optional().default(false),
-      title: z.string().optional().default(''),
-      eyebrow: z.string().optional().default(''),
-      cta: z.string().optional(),
-      linkUrl: z.string().optional().default(''),
-      bg: z.string().optional(),
-      icon: z.string().optional(),
-    });
+    const schema = z.object({ imageUrl: z.string().min(1) });
     const parsed = schema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: 'Banner rasmi majburiy' });
 
-    // Restoran uchun bitta banner — bor bo'lsa yangilaymiz, yo'q bo'lsa yaratamiz
-    const banner = await Banner.findOneAndUpdate(
-      { kind: 'restaurant', restaurantId: rid(req) },
-      { ...parsed.data, kind: 'restaurant', restaurantId: rid(req), active: true },
-      { new: true, upsert: true },
-    );
+    const { imageUrl } = parsed.data;
+    const restaurant = await Restaurant.findByIdAndUpdate(
+      rid(req),
+      { imageUrl, images: [imageUrl] },
+      { new: true },
+    ).select('imageUrl').lean();
 
-    // Muassasa kartasi va sahifasida ham shu rasm ko'rinsin.
-    // Mijoz ilovasi restaurant.imageUrl ni o'qiydi.
-    await Restaurant.findByIdAndUpdate(rid(req), {
-      imageUrl: parsed.data.imageUrl,
-      images: [parsed.data.imageUrl],
-    });
-
-    // Real-time: mijoz ilovasi va admin panel
+    // Real-time: mijoz ilovasi va admin panel darhol yangilanadi
     const io = getIO();
     io?.to('admin').emit('restaurant:update', { _id: String(rid(req)) });
 
-    res.json(banner);
+    res.json({ imageUrl: restaurant?.imageUrl || '' });
   }),
 
-  // DELETE /api/panel/banner — o'z bannerini o'chirish
+  // DELETE /api/panel/banner — rasmni olib tashlash
   deleteBanner: asyncHandler(async (req, res) => {
-    await Banner.deleteOne({ kind: 'restaurant', restaurantId: rid(req) });
+    await Restaurant.findByIdAndUpdate(rid(req), { imageUrl: '', images: [] });
+    getIO()?.to('admin').emit('restaurant:update', { _id: String(rid(req)) });
     res.json({ ok: true });
   }),
 

@@ -38,7 +38,11 @@ async function main() {
     }
   }
 
+  // Ko'chirilgandan keyin eski Banner yozuvlarini tozalaymiz —
+  // endi rasm faqat Restaurant.imageUrl da saqlanadi
+  const del = await Banner.deleteMany({ kind: 'restaurant' });
   console.log(`\n${updated} ta muassasa yangilandi`);
+  console.log(`${del.deletedCount} ta eski banner yozuvi tozalandi`);
   await mongoose.disconnect();
   process.exit(0);
 }
