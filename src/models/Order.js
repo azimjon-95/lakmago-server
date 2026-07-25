@@ -63,6 +63,22 @@ const orderSchema = new Schema(
     etaMinutes: { type: Number },
 
     // Mijoz bahosi (yakunlangач)
+    // ===== YETKAZISHNI TASDIQLASH (bot orqali) =====
+    // Kuryer olib ketgach bot so'raydi: 20 daq → 10 daq → 30 daq
+    deliveryCheck: {
+      // Nechta so'rov yuborilgan (0-3)
+      askedCount: { type: Number, default: 0 },
+      // Oxirgi so'rov vaqti — keyingisini shundan hisoblaymiz
+      lastAskedAt: { type: Date, default: null },
+      // Mijoz tasdiqladimi
+      confirmed: { type: Boolean, default: false },
+      confirmedAt: { type: Date, default: null },
+      // Sharh so'ralganmi (takror so'ramaslik uchun)
+      reviewAsked: { type: Boolean, default: false },
+      // Yulduz tanlangan, matn kutilmoqda
+      pendingRating: { type: Number, default: null },
+    },
+
     rating: { type: Number, min: 1, max: 5 },
     comment: { type: String },
     ratedAt: { type: Date },

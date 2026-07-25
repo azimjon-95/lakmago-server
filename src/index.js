@@ -170,6 +170,14 @@ async function main() {
     setInterval(() => checkReservationReminders().catch((e) => console.error('Bron eslatma:', e.message)), 5 * 60_000);
   }
 
+  // Yetkazish tasdiqlash — har 2 daqiqada
+  // (kuryer olib ketgach 20 → 10 → 30 daqiqada so'raydi)
+  if (config.telegramBotToken) {
+    const { checkDeliveries } = await import('./services/deliveryCheck.js');
+    setTimeout(() => checkDeliveries().catch((e) => console.error('Yetkazish tekshiruvi:', e.message)), 30_000);
+    setInterval(() => checkDeliveries().catch((e) => console.error('Yetkazish tekshiruvi:', e.message)), 2 * 60_000);
+  }
+
   // Kunlik guruh tekshiruvi (reklama yuborilganmi + pin qilinganmi)
   // Server ishga tushганда 1 marta, keyin har 24 soatda.
   if (config.telegramBotToken) {

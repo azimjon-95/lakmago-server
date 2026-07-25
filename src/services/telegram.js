@@ -97,6 +97,24 @@ export async function handleBotUpdate(update) {
         await handleReservationResponse(update.callback_query);
         return;
       }
+      // Yetkazish tasdiqlash (oldim / hali olmadim)
+      if (data.startsWith('dlv_')) {
+        const { handleDeliveryResponse } = await import('./deliveryCheck.js');
+        await handleDeliveryResponse(update.callback_query);
+        return;
+      }
+      // Baho (yulduzlar)
+      if (data.startsWith('rate_')) {
+        const { handleRatingResponse } = await import('./deliveryCheck.js');
+        await handleRatingResponse(update.callback_query);
+        return;
+      }
+      // Izohsiz yuborish
+      if (data.startsWith('cmt_')) {
+        const { handleCommentSkip } = await import('./deliveryCheck.js');
+        await handleCommentSkip(update.callback_query);
+        return;
+      }
       // Asosiy menyu tugmalari
       if (data.startsWith('menu_')) {
         const { handleMenuCallback } = await import('./botMenu.js');
@@ -112,6 +130,17 @@ export async function handleBotUpdate(update) {
   // 3) Oddiy xabarlar (/start yoki /start ref_<id>)
   const message = update.message;
   if (!message?.text) return;
+
+  // Oddiy matn — baho izohi bo'lishi mumkin
+  if (!message.text.startsWith('/')) {
+    try {
+      const { handleReviewText } = await import('./deliveryCheck.js');
+      const handled = await handleReviewText(String(message.chat.id), message.text);
+      if (handled) return;
+    } catch (e) {
+      console.error('[bot] izoh xatosi:', e.message);
+    }
+  }
 
   if (message.text.startsWith('/start')) {
     const telegramId = String(message.chat.id);

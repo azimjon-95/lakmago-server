@@ -46,6 +46,31 @@ export const restaurantController = {
     if (restaurant.isBlocked || !restaurant.isActive) {
       return res.status(404).json({ error: 'Restoran hozircha mavjud emas' });
     }
+
+    // Mijozlar sharhlari — baholangan buyurtmalardan yig'iladi
+    const rated = await Order.find({
+      restaurantId: restaurant._id,
+      rating: { $gte: 1 },
+    })
+      .select('rating comment ratedAt userId')
+      .populate('userId', 'firstName photoUrl')
+      .sort({ ratedAt: -1 })
+      .limit(30)
+      .lean();
+
+    const fmtDate = (d) => new Date(d).toLocaleDateString('uz-UZ', {
+      day: 'numeric', month: 'long',
+    });
+
+    restaurant.reviews = rated.map((r) => ({
+      id: String(r._id),
+      rating: r.rating,
+      comment: r.comment || '',
+      name: r.userId?.firstName || 'Mijoz',
+      photoUrl: r.userId?.photoUrl || '',
+      date: fmtDate(r.ratedAt),
+    }));
+
     res.json(restaurant);
   }),
 
