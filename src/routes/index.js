@@ -56,6 +56,7 @@ router.get('/panel/orders', auth, requireRole('restaurant'), restaurantPanelCont
 router.patch('/panel/orders/:id/status', auth, requireRole('restaurant'), restaurantPanelController.updateOrderStatus);
 router.get('/panel/reservations', auth, requireRole('restaurant'), reservationController.forRestaurantSelf);
 router.patch('/panel/reservations/:id/status', auth, requireRole('restaurant'), reservationController.updateStatus);
+router.patch('/panel/orders/:id/paid', auth, requireRole('restaurant'), restaurantPanelController.markPaid);
 router.get('/panel/banner', auth, requireRole('restaurant'), restaurantPanelController.getBanner);
 router.put('/panel/banner', auth, requireRole('restaurant'), restaurantPanelController.setBanner);
 router.delete('/panel/banner', auth, requireRole('restaurant'), restaurantPanelController.deleteBanner);

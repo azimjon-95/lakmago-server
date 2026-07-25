@@ -57,6 +57,10 @@ const orderSchema = new Schema(
     // Mijoz tanlagan vaqt (scheduled bo'lsa) — yetkazish yoki olib ketish vaqti
     scheduledFor: { type: Date, default: null, index: true },
     phone: { type: String },
+    // To'lov holati: naqd — yetkazilganda, karta — oldindan
+    isPaid: { type: Boolean, default: false },
+    paidAt: { type: Date, default: null },
+
     paymentMethod: { type: String, enum: ['payme', 'click', 'uzum', 'cash'], default: 'cash' },
     paymentLabel: { type: String },
     courierName: { type: String },

@@ -157,6 +157,18 @@ export const restaurantPanelController = {
   }),
 
   // ===== RESTORAN BANNERI =====
+  // PATCH /api/panel/orders/:id/paid — naqd to'lov qabul qilindi
+  markPaid: asyncHandler(async (req, res) => {
+    const order = await Order.findOneAndUpdate(
+      { _id: req.params.id, restaurantId: rid(req) },
+      { isPaid: req.body.paid !== false, paidAt: new Date() },
+      { new: true },
+    );
+    if (!order) return res.status(404).json({ error: 'Buyurtma topilmadi' });
+    getIO()?.to('admin').emit('order:update', order);
+    res.json(order);
+  }),
+
   // GET /api/panel/banner — muassasa rasmi
   // Banner alohida saqlanmaydi: muassasa yozuvidagi rasm — banner.
   getBanner: asyncHandler(async (req, res) => {
