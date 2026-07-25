@@ -112,6 +112,13 @@ async function main() {
     warn('Lekin default da my_chat_member YO\'Q! Guruh aniqlash ishlamaydi');
     muammo.push('my_chat_member yoqilmagan (default ro\'yxatda yo\'q).\n' +
       '     npm run webhook https://SIZNING-DOMEN.uz');
+  } else if (!allowed.includes('callback_query')) {
+    bad('callback_query YOQILMAGAN — tugmalar ishlamaydi!');
+    console.log('     Bot xabar yuboradi, tugmalar ko\'rinadi, lekin');
+    console.log('     bosilganda hech narsa bo\'lmaydi (yuklanmoqda holatida qoladi)');
+    muammo.push('callback_query yoqilmagan — BARCHA TUGMALAR ishlamaydi\n' +
+      '     (bron javoblari, yetkazish tasdiqlash, baho, menyu)\n' +
+      '     Yechim: npm run webhook https://SIZNING-DOMEN.uz');
   } else {
     const missing = need.filter((u) => !allowed.includes(u));
     if (missing.length) {

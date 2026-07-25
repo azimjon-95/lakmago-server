@@ -97,12 +97,22 @@ export async function handleDeliveryResponse(cq) {
   if (!m) return false;
 
   const [, action, orderId] = m;
+  console.log(`[delivery] javob: ${action} · buyurtma ${orderId}`);
+
   const order = await Order.findById(orderId);
   if (!order) {
     await tg('answerCallbackQuery', {
       callback_query_id: cq.id, text: 'Buyurtma topilmadi', show_alert: true,
     });
     return true;
+  }
+
+  // Eski buyurtmalarda deliveryCheck bo'lmasligi mumkin
+  if (!order.deliveryCheck) {
+    order.deliveryCheck = {
+      askedCount: 0, lastAskedAt: null, confirmed: false,
+      confirmedAt: null, reviewAsked: false, pendingRating: null,
+    };
   }
 
   // Tugmalarni olib tashlaymiz (takror bosilmasin)
@@ -183,8 +193,16 @@ export async function handleRatingResponse(cq) {
   if (!m) return false;
 
   const [, value, orderId] = m;
+  console.log(`[delivery] baho: ${value} · buyurtma ${orderId}`);
+
   const order = await Order.findById(orderId);
   if (!order) return true;
+  if (!order.deliveryCheck) {
+    order.deliveryCheck = {
+      askedCount: 0, lastAskedAt: null, confirmed: true,
+      confirmedAt: new Date(), reviewAsked: true, pendingRating: null,
+    };
+  }
 
   // Tugmalarni olib tashlaymiz
   if (cq.message) {
