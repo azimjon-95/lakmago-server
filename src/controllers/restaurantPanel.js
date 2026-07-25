@@ -122,6 +122,13 @@ export const restaurantPanelController = {
     if (status === 'accepted') update.acceptedAt = new Date();
     if (status === 'ready') update.readyAt = new Date();
 
+    // Avvalgi holatni olamiz — bir xil bo'lsa xabar takrorlanmasin
+    const before = await Order.findOne({ _id: req.params.id, restaurantId: rid(req) })
+      .select('status').lean();
+    if (!before) return res.status(404).json({ error: 'Buyurtma topilmadi' });
+
+    const statusChanged = before.status !== status;
+
     const order = await Order.findOneAndUpdate(
       { _id: req.params.id, restaurantId: rid(req) },
       update,
@@ -149,7 +156,9 @@ export const restaurantPanelController = {
       delivering: '🚴 Kuryer buyurtmangizni olib ketdi',
       cancelled: '❌ Buyurtmangiz bekor qilindi',
     };
-    if (user?.telegramId && statusText[status]) {
+    // Faqat holat HAQIQATAN o'zgarganda xabar yuboramiz.
+    // Tugma ikki marta bosilsa ham mijozga bitta xabar boradi.
+    if (statusChanged && user?.telegramId && statusText[status]) {
       notifyUser(user.telegramId, statusText[status]);
     }
 

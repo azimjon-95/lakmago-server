@@ -65,12 +65,22 @@ export async function checkDeliveries() {
   const now = Date.now();
   let sent = 0;
 
-  // Kuryer olib ketgan, hali tasdiqlanmagan, 3 martadan kam so'ralgan
+  // Kuryer olib ketgan, hali tasdiqlanmagan, 3 martadan kam so'ralgan.
+  // Faqat oxirgi 12 soat ichidagilar — eski buyurtmalar so'ralmaydi.
+  const since = new Date(now - 12 * 60 * 60_000);
   const orders = await Order.find({
     status: 'delivering',
+    createdAt: { $gte: since },
     'deliveryCheck.confirmed': false,
     'deliveryCheck.askedCount': { $lt: INTERVALS.length },
   }).limit(200);
+
+  // 12 soatdan oshgan va tasdiqlanmagan buyurtmalarni avtomatik
+  // yetkazilgan deb belgilaymiz — cheksiz osilib qolmasin.
+  await Order.updateMany(
+    { status: 'delivering', createdAt: { $lt: since } },
+    { status: 'delivered', deliveredAt: new Date(), 'deliveryCheck.confirmed': true },
+  );
 
   for (const o of orders) {
     const dc = o.deliveryCheck;
@@ -104,6 +114,23 @@ export async function handleDeliveryResponse(cq) {
     await tg('answerCallbackQuery', {
       callback_query_id: cq.id, text: 'Buyurtma topilmadi', show_alert: true,
     });
+    return true;
+  }
+
+  // Allaqachon tasdiqlangan bo'lsa — eski so'rovga qayta javob berilgan
+  if (order.deliveryCheck?.confirmed || order.status === 'delivered') {
+    await tg('answerCallbackQuery', {
+      callback_query_id: cq.id,
+      text: 'Bu buyurtma allaqachon yakunlangan',
+      show_alert: true,
+    });
+    if (cq.message) {
+      await tg('editMessageReplyMarkup', {
+        chat_id: cq.message.chat.id,
+        message_id: cq.message.message_id,
+        reply_markup: { inline_keyboard: [] },
+      });
+    }
     return true;
   }
 
