@@ -35,23 +35,17 @@ const dishSchema = new Schema(
     category: {
       type: String,
       enum: [
-        'issiq',        // Garyachiy sex — asosiy issiq taomlar
-        'sovuq',        // Sovuq gazaklar
-        'salat',        // Salatlar
-        'shorva',       // Sho'rvalar
-        'garnir',       // Garnirlar
-        'grill',        // Mangal, shashlik, kabob
-        'fastfood',     // Lavash, burger, hot-dog
-        'pitsa',        // Pitsa
-        'sushi',        // Sushi va rollar
-        'nonushta',     // Nonushta taomlari
-        'shirinlik',    // Desert, tort
-        'nonvoyxona',   // Non, somsa, patir
-        'ichimlik',     // Choy, qahva, sharbat
-        'alkogol',      // Bar — alkogolli ichimliklar
-        'boshqa',
+        // Mijoz ilovasidagi kategoriyalar bilan bir xil
+        'milliy', 'osh', 'shashlik', 'sup', 'choyxona',
+        'zavtroki', 'obed',
+        'fastfood', 'lavash', 'burger', 'tovuq', 'pitsa',
+        'sushi', 'evropa', 'turetskaya',
+        'koffe', 'shirinlik', 'salqin', 'magazin_oziq',
+        // eski qiymatlar mosligi uchun
+        'issiq', 'shorva', 'salat', 'sovuq', 'grill', 'garnir',
+        'nonushta', 'nonvoyxona', 'ichimlik', 'alkogol', 'boshqa',
       ],
-      default: 'issiq',
+      default: 'milliy',
       index: true,
     },
     tint: { type: String, default: '#FAEEDA' },
