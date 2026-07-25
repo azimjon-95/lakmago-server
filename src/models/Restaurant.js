@@ -13,9 +13,20 @@ const restaurantSchema = new Schema(
       type: String,
       // O'zbekiston sharoiti: choyxona, osh, shashlik, klub, magazin turlari va h.k.
       enum: [
-        'milliy', 'choyxona', 'osh', 'shashlik', 'fastfood', 'lavash', 'burger',
-        'sushi', 'pitsa', 'kafe', 'shirinlik', 'restoran', 'klub', 'bar',
-        'magazin_oziq', 'magazin_meva', 'salqin',
+        // Milliy yo'nalish
+        'milliy', 'osh', 'shashlik', 'sup', 'choyxona',
+        // Vaqt bo'yicha
+        'zavtroki', 'obed',
+        // Tez ovqat
+        'fastfood', 'lavash', 'burger', 'tovuq', 'pitsa',
+        // Xorijiy oshxona
+        'sushi', 'evropa', 'turetskaya',
+        // Ichimlik va shirinlik
+        'koffe', 'shirinlik', 'salqin', 'bar',
+        // Muassasa turlari
+        'kafe', 'restoran', 'klub',
+        // Do'konlar
+        'magazin_oziq', 'magazin_meva',
         // eski qiymatlar mosligi uchun
         'magazin',
       ],
