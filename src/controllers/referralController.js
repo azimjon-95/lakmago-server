@@ -1,5 +1,6 @@
 import { asyncHandler } from '../middleware/error.js';
 import { config } from '../config/index.js';
+import { getSettings } from '../models/Settings.js';
 import { User } from '../models/User.js';
 import { checkChannelSubscription, rewardReferralIfSubscribed, buildReferralLink } from '../services/referral.js';
 
@@ -9,7 +10,11 @@ export const referralController = {
     const user = await User.findById(req.userId).select('referralCount bonusBalance isSubscribed').lean();
     if (!user) return res.status(404).json({ error: 'Foydalanuvchi topilmadi' });
 
+    // Admin panelda o'chirilgan bo'lsa mijozga karta ko'rsatilmaydi
+    const settings = await getSettings();
+
     res.json({
+      enabled: settings.referralEnabled !== false,
       referralLink: buildReferralLink(req.userId),
       referralCount: user.referralCount || 0,
       bonusBalance: user.bonusBalance || 0,

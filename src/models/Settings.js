@@ -8,6 +8,11 @@ const settingsSchema = new Schema(
     // Komissiya foizi (masalan 5 = 5%)
     commissionPercent: { type: Number, default: 0 },
 
+    // ===== REFERRAL TIZIMI =====
+    // O'chirilsa: profilda karta ko'rinmaydi, bot havolasi
+    // ishlamaydi, bonus berilmaydi.
+    referralEnabled: { type: Boolean, default: true },
+
     // Komissiya rejimi:
     //   markup     → mijoz narx ustiga +5% to'laydi (platforma foydasi ustidan)
     //   deduct     → restoran narxidan −5% olamiz (restoran foydasidan)

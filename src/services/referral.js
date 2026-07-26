@@ -51,8 +51,13 @@ export async function attachReferral(newUser, referrerId) {
 // Obuna tasdiqlanганда bonuslarни berish (bir marta).
 // Ham taklif qiluvchи, ham yangi kelgan bonus oladi.
 export async function rewardReferralIfSubscribed(user) {
-  // Allaqачon mukofotlangan yoki referali yo'q — hech nima qilmaymiz
+  // Allaqachon mukofotlangan yoki referali yo'q — hech nima qilmaymiz
   if (user.referralRewarded || !user.referredBy) return;
+
+  // Admin panelda referral tizimi o'chirilgan bo'lsa bonus berilmaydi
+  const { getSettings } = await import('../models/Settings.js');
+  const settings = await getSettings();
+  if (settings.referralEnabled === false) return;
 
   // Obunani tekshiramiz
   const subscribed = await checkChannelSubscription(user.telegramId);

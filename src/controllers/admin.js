@@ -252,6 +252,7 @@ export const adminController = {
     const schema = z.object({
       commissionPercent: z.number().min(0).max(100).optional(),
       commissionMode: z.enum(['markup', 'deduct', 'none']).optional(),
+      referralEnabled: z.boolean().optional(),
     });
     const parsed = schema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: 'Noto\u2018g\u2018ri qiymat' });
@@ -259,6 +260,7 @@ export const adminController = {
     const s = await getSettings();
     if ('commissionPercent' in parsed.data) s.commissionPercent = parsed.data.commissionPercent;
     if ('commissionMode' in parsed.data) s.commissionMode = parsed.data.commissionMode;
+    if ('referralEnabled' in parsed.data) s.referralEnabled = parsed.data.referralEnabled;
     await s.save();
     res.json({ commissionPercent: s.commissionPercent, commissionMode: s.commissionMode });
   }),
