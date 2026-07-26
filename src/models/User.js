@@ -45,6 +45,18 @@ const userSchema = new Schema(
     }],
     defaultAddressId: { type: Schema.Types.ObjectId },
 
+    // ===== TO'LOV KARTALARI =====
+    // Xavfsizlik: to'liq raqam SAQLANMAYDI — faqat oxirgi 4 raqam
+    // va turi. Haqiqiy to'lov Payme/Click orqali amalga oshiriladi.
+    cards: [{
+      last4: { type: String, required: true },      // 1234
+      brand: { type: String, default: 'card' },     // uzcard | humo | visa | mastercard
+      holder: { type: String, default: '' },        // karta egasi (ixtiyoriy)
+      expiry: { type: String, default: '' },        // MM/YY
+      isDefault: { type: Boolean, default: false },
+      addedAt: { type: Date, default: Date.now },
+    }],
+
     // ===== REFERRAL TIZIMI =====
     // Bu foydalanuvchini kim taklif qilgan (referrer userId)
     referredBy: { type: Schema.Types.ObjectId, ref: 'User', default: null, index: true },

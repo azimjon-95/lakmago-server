@@ -57,6 +57,10 @@ const orderSchema = new Schema(
     // Mijoz tanlagan vaqt (scheduled bo'lsa) — yetkazish yoki olib ketish vaqti
     scheduledFor: { type: Date, default: null, index: true },
     phone: { type: String },
+    // Qaysi karta bilan to'landi (oxirgi 4 raqam va turi)
+    cardLast4: { type: String, default: '' },
+    cardBrand: { type: String, default: '' },
+
     // To'lov holati: naqd — yetkazilganda, karta — oldindan
     isPaid: { type: Boolean, default: false },
     paidAt: { type: Date, default: null },

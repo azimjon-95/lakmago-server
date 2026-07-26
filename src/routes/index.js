@@ -9,6 +9,7 @@ import { uploadController } from '../controllers/upload.js';
 import { referralController } from '../controllers/referralController.js';
 import { addressController } from '../controllers/address.js';
 import { supportController } from '../controllers/support.js';
+import { cardController } from '../controllers/cards.js';
 import { auth, requireRole } from '../middleware/auth.js';
 
 export const router = Router();
@@ -75,6 +76,12 @@ router.post('/addresses', auth, addressController.create);
 router.patch('/addresses/:id', auth, addressController.update);
 router.delete('/addresses/:id', auth, addressController.remove);
 router.patch('/addresses/:id/default', auth, addressController.setDefault);
+
+// ===== To'lov kartalari =====
+router.get('/cards', auth, cardController.list);
+router.post('/cards', auth, cardController.create);
+router.delete('/cards/:id', auth, cardController.remove);
+router.patch('/cards/:id/default', auth, cardController.setDefault);
 
 // ===== Qo'llab-quvvatlash chati =====
 // Mijoz tomoni
