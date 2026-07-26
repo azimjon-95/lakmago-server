@@ -170,6 +170,13 @@ async function main() {
     setInterval(() => checkReservationReminders().catch((e) => console.error('Bron eslatma:', e.message)), 5 * 60_000);
   }
 
+  // Webhook'ni tekshirib, kerak bo'lsa avtomatik to'g'rilaymiz.
+  // Bu tugmalar va guruh aniqlash ishlashini kafolatlaydi.
+  if (config.telegramBotToken) {
+    const { ensureWebhook } = await import('./services/webhookSetup.js');
+    ensureWebhook().catch((e) => console.error('Webhook sozlash:', e.message));
+  }
+
   // Yetkazish tasdiqlash — har 2 daqiqada
   // (kuryer olib ketgach 20 → 10 → 30 daqiqada so'raydi)
   if (config.telegramBotToken) {

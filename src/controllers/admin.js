@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { config } from '../config/index.js';
 import { asyncHandler } from '../middleware/error.js';
 import { Restaurant } from '../models/Restaurant.js';
 import { User, Banner } from '../models/User.js';
@@ -377,6 +378,56 @@ export const adminController = {
   }),
 
   // POST /api/admin/groups/:chatId/resend — reklama xabarini qayta yuborish + pin
+  // POST /api/admin/groups/add — guruhni qo'lda qo'shish
+  // Telegram bot qaysi guruhlarda ekanini o'zi aytmaydi (xavfsizlik).
+  // Bot allaqachon qo'shilgan bo'lsa, admin chat ID bilan qo'shadi.
+  addGroup: asyncHandler(async (req, res) => {
+    const chatId = String(req.body.chatId || '').trim();
+    if (!chatId) return res.status(400).json({ error: 'Chat ID kiriting' });
+
+    if (!config.telegramBotToken) {
+      return res.status(400).json({ error: 'Bot tokeni sozlanmagan' });
+    }
+
+    // Telegram'dan guruh ma'lumotini olamiz — bot a'zomi tekshiramiz
+    try {
+      const res1 = await fetch(
+        `https://api.telegram.org/bot${config.telegramBotToken}/getChat?chat_id=${encodeURIComponent(chatId)}`,
+      );
+      const chat = await res1.json();
+      if (!chat.ok) {
+        return res.status(400).json({
+          error: chat.description?.includes('not found')
+            ? 'Guruh topilmadi. Bot guruhga qo\u2018shilganmi?'
+            : chat.description,
+        });
+      }
+
+      // Bot admin ekanini tekshiramiz
+      const meRes = await fetch(
+        `https://api.telegram.org/bot${config.telegramBotToken}/getMe`,
+      );
+      const me = await meRes.json();
+      const memRes = await fetch(
+        `https://api.telegram.org/bot${config.telegramBotToken}/getChatMember` +
+        `?chat_id=${encodeURIComponent(chatId)}&user_id=${me.result.id}`,
+      );
+      const mem = await memRes.json();
+      const isAdmin = ['administrator', 'creator'].includes(mem.result?.status);
+
+      const { registerGroup } = await import('../services/telegramGroup.js');
+      const group = await registerGroup(
+        { id: chat.result.id, title: chat.result.title, type: chat.result.type },
+        isAdmin,
+      );
+
+      getIO()?.to('admin').emit('group:new', { chatId: String(chat.result.id) });
+      res.status(201).json({ ...group.toObject?.() || group, isBotAdmin: isAdmin });
+    } catch (e) {
+      res.status(500).json({ error: e.message });
+    }
+  }),
+
   resendPromo: asyncHandler(async (req, res) => {
     const { sendAndPinPromo } = await import('../services/telegramGroup.js');
     try {
