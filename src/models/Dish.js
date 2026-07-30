@@ -36,7 +36,7 @@ const dishSchema = new Schema(
       type: String,
       enum: [
         // Mijoz ilovasidagi kategoriyalar bilan bir xil
-        'milliy', 'osh', 'shashlik', 'sup', 'choyxona',
+        'milliy', 'osh', 'shashlik', 'sup', 'salat', 'choyxona',
         'zavtroki', 'obed',
         'fastfood', 'lavash', 'burger', 'tovuq', 'pitsa',
         'sushi', 'evropa', 'turetskaya',
@@ -53,8 +53,17 @@ const dishSchema = new Schema(
     // Rasm (Cloudinary URL) — bo'lsa ikon o'rniga rasm ko'rsatiladi
     imageUrl: { type: String, default: '' },
     images: [{ type: String }],
-    calories: { type: Number },
+    // ===== QO'SHIMCHA MA'LUMOT (barchasi ixtiyoriy) =====
+    // Og'irlik matn sifatida — "150 г" yoki "150/30/30/20 г"
+    // (assortida bir necha qism bo'ladi)
+    weight: { type: String, default: '' },
+    // Eski maydon — moslik uchun saqlanadi
     weightGram: { type: Number },
+
+    calories: { type: Number },
+    protein: { type: Number },   // oqsil, g
+    fat: { type: Number },       // yog', g
+    carbs: { type: Number },     // uglevod, g
     ingredients: [{ type: String }],
     optionGroups: [optionGroupSchema],
     isHit: { type: Boolean, default: false },

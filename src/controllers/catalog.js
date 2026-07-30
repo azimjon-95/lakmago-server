@@ -98,7 +98,7 @@ export const restaurantController = {
       restaurantId: req.params.id,
       isAvailable: true
     })
-      .select('restaurantId name description section category prepMinutes price oldPrice weightGram calories ingredients optionGroups isHit isTrending isDiscounted tint icon images imageUrl isAvailable')
+      .select('restaurantId name description section category prepMinutes price oldPrice weight weightGram calories protein fat carbs ingredients optionGroups isHit isTrending isDiscounted tint icon images imageUrl isAvailable')
       .lean();
     res.json(dishes);
   }),
