@@ -93,6 +93,24 @@ export const config = {
   // Referal bonusи (so'mда): taklif qiluvchiga va yangi kelganga
   referralReward: Number(process.env.REFERRAL_REWARD ?? 5000),      // taklif qiluvchiga
   referralWelcomeBonus: Number(process.env.REFERRAL_WELCOME ?? 3000), // yangi kelganga
+
+  // ===== TO'LOV TIZIMLARI =====
+  // Kabinetdan olinadi, .env ga yoziladi
+  payme: {
+    merchantId: process.env.PAYME_MERCHANT_ID || '',
+    login: process.env.PAYME_LOGIN || 'Paycom',
+    key: process.env.PAYME_KEY || '',            // ishlab chiqarish
+    testKey: process.env.PAYME_TEST_KEY || '',   // sinov
+    returnUrl: process.env.PAYME_RETURN_URL || '',
+  },
+
+  click: {
+    serviceId: process.env.CLICK_SERVICE_ID || '',
+    merchantId: process.env.CLICK_MERCHANT_ID || '',
+    merchantUserId: process.env.CLICK_MERCHANT_USER_ID || '',
+    secretKey: process.env.CLICK_SECRET_KEY || '',
+    returnUrl: process.env.CLICK_RETURN_URL || '',
+  },
 };
 
 export async function connectDB() {

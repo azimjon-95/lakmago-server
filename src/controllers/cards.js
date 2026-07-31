@@ -17,6 +17,7 @@ const cardSchema = z.object({
   number: z.string().min(12).max(20),
   expiry: z.string().optional().default(''),
   holder: z.string().optional().default(''),
+  bankName: z.string().max(60).optional().default(''),
 });
 
 export const cardController = {
@@ -52,6 +53,7 @@ export const cardController = {
       last4,
       brand: detectBrand(digits),
       holder: parsed.data.holder.trim(),
+      bankName: parsed.data.bankName.trim(),
       expiry: parsed.data.expiry.trim(),
       isDefault: user.cards.length === 0,
     });

@@ -51,6 +51,8 @@ const userSchema = new Schema(
     cards: [{
       last4: { type: String, required: true },      // 1234
       brand: { type: String, default: 'card' },     // uzcard | humo | visa | mastercard
+      // Bank nomi — mijoz kartalarni adashtirmasligi uchun
+      bankName: { type: String, default: '' },
       holder: { type: String, default: '' },        // karta egasi (ixtiyoriy)
       expiry: { type: String, default: '' },        // MM/YY
       isDefault: { type: Boolean, default: false },

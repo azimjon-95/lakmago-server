@@ -10,6 +10,7 @@ import { referralController } from '../controllers/referralController.js';
 import { addressController } from '../controllers/address.js';
 import { supportController } from '../controllers/support.js';
 import { cardController } from '../controllers/cards.js';
+import { paymentController as gatewayController } from '../controllers/payments.js';
 import { auth, requireRole } from '../middleware/auth.js';
 
 export const router = Router();
@@ -76,6 +77,15 @@ router.post('/addresses', auth, addressController.create);
 router.patch('/addresses/:id', auth, addressController.update);
 router.delete('/addresses/:id', auth, addressController.remove);
 router.patch('/addresses/:id/default', auth, addressController.setDefault);
+
+// ===== To'lov tizimlari =====
+// Webhook'lar — auth YO'Q (tizimlar o'z imzosi bilan tekshiriladi)
+router.post('/payments/payme', gatewayController.paymeWebhook);
+router.post('/payments/click/prepare', gatewayController.clickPrepare);
+router.post('/payments/click/complete', gatewayController.clickComplete);
+// Mijoz uchun
+router.get('/payments/status', gatewayController.status);
+router.get('/payments/link/:orderId', auth, gatewayController.getLink);
 
 // ===== To'lov kartalari =====
 router.get('/cards', auth, cardController.list);
