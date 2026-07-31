@@ -132,6 +132,9 @@ const batchOrderSchema = z.object({
   // Vaqt: darhol (tayyor bo'lishi bilan) yoki belgilangan vaqtga
   timingMode: z.enum(['asap', 'scheduled']).default('asap'),
   scheduledFor: z.string().datetime().optional(),
+  addressLat: z.number().optional(),
+  addressLng: z.number().optional(),
+  addressNote: z.string().max(200).optional(),
   cardLast4: z.string().optional().default(''),
   cardBrand: z.string().optional().default(''),
   phone: z.string().optional(),
@@ -151,7 +154,8 @@ export const orderController = {
       return res.status(400).json({ error: 'Ma\u2018lumot noto\u2018g\u2018ri', details: parsed.error.issues });
     }
     const { orders, address, phone, paymentMethod, paymentLabel, useBonus,
-            fulfillment, timingMode, scheduledFor, cardLast4, cardBrand } = parsed.data;
+            fulfillment, timingMode, scheduledFor, cardLast4, cardBrand,
+            addressLat, addressLng, addressNote } = parsed.data;
 
     // Yetkazishda manzil majburiy, olib ketishda shart emas
     if (fulfillment === 'delivery' && !address.trim()) {
@@ -230,6 +234,9 @@ export const orderController = {
         paymentLabel,
         cardLast4,
         cardBrand,
+        addressLat: addressLat ?? null,
+        addressLng: addressLng ?? null,
+        addressNote: addressNote || '',
         etaMinutes: o.etaMinutes,
         // Kuryer faqat yetkazishda tayinlanadi
         ...(isPickup ? {} : { courierName: COURIERS[Math.floor(Math.random() * COURIERS.length)] }),

@@ -130,8 +130,31 @@ export const restaurantPanelController = {
       status: { $ne: 'awaiting_payment' },
     };
     if (req.query.status && req.query.status !== 'all') filter.status = req.query.status;
-    const orders = await Order.find(filter).sort({ createdAt: -1 }).limit(80);
-    res.json(orders);
+
+    // Mijoz ma'lumotlari bilan — restoran bog'lana olishi uchun
+    const orders = await Order.find(filter)
+      .populate('userId', 'firstName lastName username telegramId phone photoUrl')
+      .sort({ createdAt: -1 })
+      .limit(80)
+      .lean();
+
+    // Mijozni qulay ko'rinishga keltiramiz
+    const items = orders.map((o) => {
+      const u = o.userId || {};
+      return {
+        ...o,
+        userId: u._id ? String(u._id) : null,
+        customer: {
+          name: [u.firstName, u.lastName].filter(Boolean).join(' ') || 'Mijoz',
+          username: u.username || '',
+          telegramId: u.telegramId || '',
+          phone: o.phone || u.phone || '',
+          photoUrl: u.photoUrl || '',
+        },
+      };
+    });
+
+    res.json(items);
   }),
 
   // PATCH /api/panel/orders/:id/status  { status }

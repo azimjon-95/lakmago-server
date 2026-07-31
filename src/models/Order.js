@@ -55,6 +55,11 @@ const orderSchema = new Schema(
 
     // Manzil — yetkazishda majburiy, olib ketishda bo'sh bo'lishi mumkin
     address: { type: String, default: '' },
+    // Yetkazish nuqtasi — kuryer xaritada ko'radi
+    addressLat: { type: Number, default: null },
+    addressLng: { type: Number, default: null },
+    // Manzil tafsiloti (podez, qavat, xonadon)
+    addressNote: { type: String, default: '' },
 
     // ===== VAQT REJALASHTIRISH =====
     // 'asap' — tayyor bo'lishi bilan (standart), 'scheduled' — belgilangan vaqtga
