@@ -39,7 +39,12 @@ const orderSchema = new Schema(
     // cancelled  → bekor qilindi
     status: {
       type: String,
-      enum: ['pending', 'accepted', 'preparing', 'ready', 'delivering', 'delivered', 'cancelled'],
+      enum: [
+        // Karta to'lovi: pul kelgunga qadar restoranga ko'rinmaydi
+        'awaiting_payment',
+        'pending', 'accepted', 'preparing', 'ready',
+        'delivering', 'delivered', 'cancelled',
+      ],
       default: 'pending',
       index: true,
     },

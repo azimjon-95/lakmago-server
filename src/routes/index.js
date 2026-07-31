@@ -11,6 +11,7 @@ import { addressController } from '../controllers/address.js';
 import { supportController } from '../controllers/support.js';
 import { cardController } from '../controllers/cards.js';
 import { paymentController as gatewayController } from '../controllers/payments.js';
+import { billingController } from '../controllers/billing.js';
 import { auth, requireRole } from '../middleware/auth.js';
 
 export const router = Router();
@@ -77,6 +78,14 @@ router.post('/addresses', auth, addressController.create);
 router.patch('/addresses/:id', auth, addressController.update);
 router.delete('/addresses/:id', auth, addressController.remove);
 router.patch('/addresses/:id/default', auth, addressController.setDefault);
+
+// ===== Moliya (admin) =====
+router.get('/admin/billing/overview', auth, requireRole('admin'), billingController.overview);
+router.get('/admin/billing/restaurants', auth, requireRole('admin'), billingController.byRestaurant);
+router.get('/admin/billing/ledger', auth, requireRole('admin'), billingController.ledger);
+router.get('/admin/billing/restaurant/:id', auth, requireRole('admin'), billingController.restaurantSummary);
+router.post('/admin/billing/payout', auth, requireRole('admin'), billingController.payout);
+router.patch('/admin/restaurants/:id/commission', auth, requireRole('admin'), billingController.setCommission);
 
 // ===== To'lov tizimlari =====
 // Webhook'lar — auth YO'Q (tizimlar o'z imzosi bilan tekshiriladi)

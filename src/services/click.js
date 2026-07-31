@@ -145,9 +145,18 @@ export async function clickComplete(body) {
 
   const updated = await Order.findByIdAndUpdate(
     tx.orderId,
-    { isPaid: true, paidAt: new Date(), paymentMethod: 'click' },
+    {
+      isPaid: true,
+      paidAt: new Date(),
+      paymentMethod: 'click',
+      // Endi restoranga ko'rinadi
+      status: 'pending',
+    },
     { new: true },
   );
+
+  const { recordPayment } = await import('./billing.js');
+  await recordPayment(updated, 'click', tx._id);
 
   const io = getIO();
   io?.to(`order:${tx.orderId}`).emit('order:paid', { orderId: String(tx.orderId) });

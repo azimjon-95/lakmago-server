@@ -166,9 +166,19 @@ async function performTransaction(params, id) {
   // Buyurtmani to'langan deb belgilaymiz
   const order = await Order.findByIdAndUpdate(
     tx.orderId,
-    { isPaid: true, paidAt: new Date(), paymentMethod: 'payme' },
+    {
+      isPaid: true,
+      paidAt: new Date(),
+      paymentMethod: 'payme',
+      // Endi restoranga ko'rinadi
+      status: 'pending',
+    },
     { new: true },
   );
+
+  // Moliyaviy jurnalga yozamiz: komissiya va restoran ulushi
+  const { recordPayment } = await import('./billing.js');
+  await recordPayment(order, 'payme', tx._id);
 
   const io = getIO();
   io?.to(`order:${tx.orderId}`).emit('order:paid', { orderId: String(tx.orderId) });
@@ -209,6 +219,9 @@ async function cancelTransaction(params, id) {
       { isPaid: false, paidAt: null },
       { new: true },
     );
+    // Teskari yozuvlar — pul qaytarildi
+    const { recordRefund } = await import('./billing.js');
+    await recordRefund(order, 'payme', tx._id);
     getIO()?.to('admin').emit('order:update', order);
   }
 

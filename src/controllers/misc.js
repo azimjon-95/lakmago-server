@@ -217,7 +217,10 @@ export const orderController = {
         serviceFee: o.serviceFee || 0,
         bonusUsed: orderBonus,
         total,
-        status: 'pending',
+        // Karta to'lovi bo'lsa buyurtma TO'LOV KUTILMOQDA holatida
+        // yaratiladi — restoranga faqat pul kelgach yuboriladi.
+        // Naqd bo'lsa darhol restoranga boradi.
+        status: paymentMethod === 'cash' ? 'pending' : 'awaiting_payment',
         fulfillment,
         address: isPickup ? '' : address,
         timingMode,

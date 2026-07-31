@@ -67,6 +67,30 @@ const restaurantSchema = new Schema(
     // ===== XIZMAT HAQI VA BUYURTMA SHARTLARI =====
     // Minimal buyurtma summasi (so'mda)
     minOrderAmount: { type: Number, default: 0 },
+
+    // ===== SHARTNOMA VA KOMISSIYA =====
+    // Har restoran bilan alohida kelishiladi.
+    // null bo'lsa — Settings dagi umumiy foiz ishlatiladi.
+    commissionPercent: { type: Number, min: 0, max: 100, default: null },
+
+    // Komissiya qanday olinadi:
+    //   deduct — restoran hisobidan yechiladi (mijoz narxni ko'rgan holda to'laydi)
+    //   markup — taom narxiga qo'shiladi (mijoz ko'proq to'laydi)
+    //   null   — Settings dagi umumiy rejim
+    commissionMode: {
+      type: String,
+      enum: ['markup', 'deduct', null],
+      default: null,
+    },
+
+    // Shartnoma ma'lumotlari
+    contractNumber: { type: String, default: '' },
+    contractDate: { type: Date, default: null },
+
+    // Hisob-kitob: restoranga qarzimiz (so'm)
+    balance: { type: Number, default: 0 },
+    // Jami to'langan
+    totalPaidOut: { type: Number, default: 0 },
     // Xizmat haqi: buyurtma summasining foizi
     serviceFeePercent: { type: Number, default: 0 },
     // Xizmat haqi chegaralari (foizdan hisoblanganda)

@@ -123,7 +123,12 @@ export const restaurantPanelController = {
 
   // GET /api/panel/orders?status= — o'z buyurtmalari (live)
   orders: asyncHandler(async (req, res) => {
-    const filter = { restaurantId: rid(req) };
+    const filter = {
+      restaurantId: rid(req),
+      // To'lov kutilayotgan buyurtmalar restoranga KO'RINMAYDI —
+      // pul kelgach avtomatik 'pending' bo'ladi va chiqadi
+      status: { $ne: 'awaiting_payment' },
+    };
     if (req.query.status && req.query.status !== 'all') filter.status = req.query.status;
     const orders = await Order.find(filter).sort({ createdAt: -1 }).limit(80);
     res.json(orders);
@@ -194,6 +199,17 @@ export const restaurantPanelController = {
       { new: true },
     );
     if (!order) return res.status(404).json({ error: 'Buyurtma topilmadi' });
+
+    // Naqd to'lov ham jurnalga tushadi — hisob-kitob to'liq bo'lsin
+    if (order.isPaid) {
+      const { Ledger } = await import('../models/Ledger.js');
+      const already = await Ledger.findOne({ orderId: order._id, type: 'payment_in' });
+      if (!already) {
+        const { recordPayment } = await import('../services/billing.js');
+        await recordPayment(order, 'cash');
+      }
+    }
+
     getIO()?.to('admin').emit('order:update', order);
     res.json(order);
   }),
