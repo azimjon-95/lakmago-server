@@ -181,6 +181,21 @@ export const restaurantPanelController = {
       delivering: '🚴 Kuryer buyurtmangizni olib ketdi',
       cancelled: '❌ Buyurtmangiz bekor qilindi',
     };
+    // ===== HISOB-KITOB =====
+    // Yetkazildi → restoran ulushi balansga qo'shiladi
+    if (statusChanged && status === 'delivered') {
+      const { settleOrder } = await import('../services/billing.js');
+      await settleOrder(order._id).catch((e) =>
+        console.error('[billing] settleOrder:', e.message));
+    }
+
+    // Bekor qilindi → to'langan bo'lsa pul qaytariladi
+    if (statusChanged && status === 'cancelled' && order.isPaid) {
+      const { recordRefund } = await import('../services/billing.js');
+      await recordRefund(order, order.paymentMethod).catch((e) =>
+        console.error('[billing] recordRefund:', e.message));
+    }
+
     // Faqat holat HAQIQATAN o'zgarganda xabar yuboramiz.
     // Tugma ikki marta bosilsa ham mijozga bitta xabar boradi.
     if (statusChanged && user?.telegramId && statusText[status]) {
@@ -200,14 +215,11 @@ export const restaurantPanelController = {
     );
     if (!order) return res.status(404).json({ error: 'Buyurtma topilmadi' });
 
-    // Naqd to'lov ham jurnalga tushadi — hisob-kitob to'liq bo'lsin
+    // Naqd to'lov jurnalga tushadi.
+    // Komissiya esa buyurtma yetkazilganda hisoblanadi (settleOrder).
     if (order.isPaid) {
-      const { Ledger } = await import('../models/Ledger.js');
-      const already = await Ledger.findOne({ orderId: order._id, type: 'payment_in' });
-      if (!already) {
-        const { recordPayment } = await import('../services/billing.js');
-        await recordPayment(order, 'cash');
-      }
+      const { recordPayment } = await import('../services/billing.js');
+      await recordPayment(order, 'cash').catch(() => {});
     }
 
     getIO()?.to('admin').emit('order:update', order);

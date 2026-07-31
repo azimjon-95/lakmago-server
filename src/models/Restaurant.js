@@ -91,6 +91,8 @@ const restaurantSchema = new Schema(
     balance: { type: Number, default: 0 },
     // Jami to'langan
     totalPaidOut: { type: Number, default: 0 },
+    // Yakunlangan buyurtmalar soni
+    totalOrders: { type: Number, default: 0 },
     // Xizmat haqi: buyurtma summasining foizi
     serviceFeePercent: { type: Number, default: 0 },
     // Xizmat haqi chegaralari (foizdan hisoblanganda)

@@ -77,10 +77,21 @@ export async function checkDeliveries() {
 
   // 12 soatdan oshgan va tasdiqlanmagan buyurtmalarni avtomatik
   // yetkazilgan deb belgilaymiz — cheksiz osilib qolmasin.
-  await Order.updateMany(
-    { status: 'delivering', createdAt: { $lt: since } },
-    { status: 'delivered', deliveredAt: new Date(), 'deliveryCheck.confirmed': true },
-  );
+  const stale = await Order.find({
+    status: 'delivering', createdAt: { $lt: since },
+  }).select('_id').lean();
+
+  if (stale.length) {
+    await Order.updateMany(
+      { _id: { $in: stale.map((o) => o._id) } },
+      { status: 'delivered', deliveredAt: new Date(), 'deliveryCheck.confirmed': true },
+    );
+    // Hisob-kitob — har biri uchun
+    const { settleOrder } = await import('./billing.js');
+    for (const o of stale) {
+      await settleOrder(o._id).catch(() => {});
+    }
+  }
 
   for (const o of orders) {
     const dc = o.deliveryCheck;
@@ -169,6 +180,11 @@ export async function handleDeliveryResponse(cq) {
   order.deliveryCheck.confirmed = true;
   order.deliveryCheck.confirmedAt = new Date();
   await order.save();
+
+  // Yetkazildi — restoran ulushi hisoblanadi
+  const { settleOrder } = await import('./billing.js');
+  await settleOrder(order._id).catch((e) =>
+    console.error('[billing] settleOrder:', e.message));
 
   await tg('answerCallbackQuery', { callback_query_id: cq.id, text: 'Rahmat!' });
 

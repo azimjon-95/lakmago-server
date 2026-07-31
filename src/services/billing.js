@@ -1,19 +1,33 @@
 import { Ledger } from '../models/Ledger.js';
+import { Order } from '../models/Order.js';
 import { Restaurant } from '../models/Restaurant.js';
 import { getSettings } from '../models/Settings.js';
 import { getIO } from '../sockets/io.js';
 
 /**
- * Hisob-kitob: komissiya, restoran ulushi, moliyaviy jurnal.
+ * Hisob-kitob tizimi.
+ *
+ * OQIM (Yandex Eda / Wolt / Uzum Tezkor modeli):
+ *
+ *   1. Mijoz to'laydi          → pul platformada, jurnalga yoziladi
+ *   2. Restoran qabul qiladi   → hech nima o'zgarmaydi
+ *   3. Buyurtma YETKAZILADI    → restoran ulushi balansga qo'shiladi
+ *   4. Admin to'laydi          → balansdan yechiladi
+ *
+ *   Restoran rad etsa yoki bekor bo'lsa → pul mijozga qaytariladi,
+ *   restoranga hech nima hisoblanmaydi.
+ *
+ * BALANS mantiqi:
+ *   musbat  → biz restoranga qarzdormiz (karta to'lovlari)
+ *   manfiy  → restoran bizga qarzdor (naqd to'lovlar komissiyasi)
  */
 
-/**
- * Restoran uchun komissiya sozlamalarini aniqlaydi.
- * Restoranda o'z qiymati bo'lsa u ustun, aks holda umumiy.
- */
+/** Restoran uchun komissiya sozlamalari. */
 export async function resolveCommission(restaurant) {
   const settings = await getSettings();
 
+  // Restoranda o'z qiymati bo'lsa u ustun. 0 ham to'g'ri qiymat —
+  // ba'zi restoranlardan komissiya olinmaydi.
   const percent = restaurant.commissionPercent != null
     ? restaurant.commissionPercent
     : (settings.commissionPercent || 0);
@@ -25,18 +39,15 @@ export async function resolveCommission(restaurant) {
 }
 
 /**
- * Buyurtma summasidan komissiyani hisoblaydi.
- *
- * deduct — mijoz ko'rgan narxni to'laydi, komissiya restoran
- *          ulushidan yechiladi
- * markup — komissiya taom narxiga qo'shiladi, mijoz ko'proq to'laydi
- *
- * Komissiya faqat TAOMLAR summasidan olinadi. Yetkazish haqi va
- * xizmat haqi platformaga tegishli, restoranga bormaydi.
+ * Komissiyani hisoblaydi.
+ * Faqat TAOMLAR summasidan olinadi — yetkazish va xizmat haqi
+ * platformaga tegishli.
  */
 export function calcCommission(subtotal, percent, mode) {
   const p = Number(percent) || 0;
-  if (p <= 0) return { commission: 0, restaurantShare: subtotal, customerExtra: 0 };
+  if (p <= 0) {
+    return { commission: 0, restaurantShare: subtotal, customerExtra: 0 };
+  }
 
   if (mode === 'markup') {
     // Mijoz qo'shimcha to'laydi, restoran to'liq oladi
@@ -50,10 +61,47 @@ export function calcCommission(subtotal, percent, mode) {
 }
 
 /**
- * To'lov tasdiqlangandan keyin chaqiriladi.
- * Jurnalga yozadi va restoran balansini oshiradi.
+ * 1-QADAM: mijoz to'ladi.
+ * Faqat jurnalga yoziladi — balans HALI o'zgarmaydi.
+ * Restoran buyurtmani bajarmagunicha pul "yo'lda" hisoblanadi.
  */
 export async function recordPayment(order, provider, transactionId = null) {
+  // Takroriy yozuvdan himoya
+  const exists = await Ledger.findOne({ orderId: order._id, type: 'payment_in' });
+  if (exists) return null;
+
+  await Ledger.create({
+    type: 'payment_in',
+    amount: order.total,
+    orderId: order._id,
+    restaurantId: order.restaurantId,
+    userId: order.userId,
+    provider,
+    transactionId,
+    meta: { orderTotal: order.total, note: 'To\u2018lov qabul qilindi' },
+  });
+
+  getIO()?.to('admin').emit('billing:update', { orderId: String(order._id) });
+  return { recorded: order.total };
+}
+
+/**
+ * 2-QADAM: buyurtma YETKAZILDI — restoran ulushi hisoblanadi.
+ *
+ * Aynan shu paytda pul restoran balansiga qo'shiladi. Avval emas —
+ * chunki buyurtma bekor bo'lishi mumkin.
+ *
+ * Naqd to'lovda: pul restoranda qolgan, shuning uchun komissiya
+ * miqdorida restoran BIZGA qarzdor bo'ladi (balans manfiyga ketadi).
+ */
+export async function settleOrder(orderId) {
+  const order = await Order.findById(orderId);
+  if (!order) return null;
+
+  // Takroriy hisob-kitobdan himoya
+  const already = await Ledger.findOne({ orderId: order._id, type: 'restaurant_due' });
+  if (already) return null;
+
   const restaurant = await Restaurant.findById(order.restaurantId);
   if (!restaurant) {
     console.error(`[billing] Restoran topilmadi: ${order.restaurantId}`);
@@ -69,40 +117,54 @@ export async function recordPayment(order, provider, transactionId = null) {
     commissionMode: mode,
   };
 
-  // 1. Mijoz to'lovi — platforma hisobiga kirdi
-  await Ledger.create({
-    type: 'payment_in',
-    amount: order.total,
-    orderId: order._id,
-    restaurantId: restaurant._id,
-    userId: order.userId,
-    provider,
-    transactionId,
-    meta,
-  });
+  const isCash = order.paymentMethod === 'cash';
 
-  // 2. Platforma komissiyasi
+  // Komissiya yozuvi (bor bo'lsa)
   if (commission > 0) {
     await Ledger.create({
       type: 'commission',
       amount: commission,
       orderId: order._id,
       restaurantId: restaurant._id,
-      meta: { ...meta, note: `${percent}% (${mode})` },
+      meta: { ...meta, note: `${percent}% · ${mode}${isCash ? ' · naqd' : ''}` },
     });
   }
 
-  // 3. Restoranga qarz — buyurtma yetkazilgach to'lanadi
-  await Ledger.create({
-    type: 'restaurant_due',
-    amount: restaurantShare,
-    orderId: order._id,
-    restaurantId: restaurant._id,
-    meta,
-  });
+  if (isCash) {
+    // NAQD: pul restoranda qoldi. Bizga faqat komissiya qarz.
+    // Balans manfiyga ketadi — keyingi karta to'lovlaridan yopiladi.
+    if (commission > 0) {
+      await Ledger.create({
+        type: 'restaurant_due',
+        amount: -commission,
+        orderId: order._id,
+        restaurantId: restaurant._id,
+        meta: { ...meta, note: 'Naqd to\u2018lov — komissiya qarzi' },
+      });
+      restaurant.balance = (restaurant.balance || 0) - commission;
+    } else {
+      // Komissiya yo'q — hech kim hech kimga qarzdor emas
+      await Ledger.create({
+        type: 'restaurant_due',
+        amount: 0,
+        orderId: order._id,
+        restaurantId: restaurant._id,
+        meta: { ...meta, note: 'Naqd to\u2018lov — komissiyasiz' },
+      });
+    }
+  } else {
+    // KARTA: pul bizda. Restoran ulushini balansga qo'shamiz.
+    await Ledger.create({
+      type: 'restaurant_due',
+      amount: restaurantShare,
+      orderId: order._id,
+      restaurantId: restaurant._id,
+      meta,
+    });
+    restaurant.balance = (restaurant.balance || 0) + restaurantShare;
+  }
 
-  // Balansni oshiramiz
-  restaurant.balance = (restaurant.balance || 0) + restaurantShare;
+  restaurant.totalOrders = (restaurant.totalOrders || 0) + 1;
   await restaurant.save();
 
   getIO()?.to('admin').emit('billing:update', {
@@ -110,60 +172,64 @@ export async function recordPayment(order, provider, transactionId = null) {
     balance: restaurant.balance,
   });
 
-  return { commission, restaurantShare, percent, mode };
+  return { commission, restaurantShare, percent, mode, isCash };
 }
 
 /**
- * Pul qaytarilganda — teskari yozuvlar.
- * Asl yozuvlar o'chirilmaydi, ustiga qaytarish yoziladi.
+ * Pul qaytarish — buyurtma bekor qilinganda yoki restoran rad etganda.
+ * Asl yozuvlar o'chirilmaydi, teskari yozuv qo'shiladi.
  */
 export async function recordRefund(order, provider, transactionId = null) {
-  const restaurant = await Restaurant.findById(order.restaurantId);
-  if (!restaurant) return null;
-
-  const { percent, mode } = await resolveCommission(restaurant);
-  const { restaurantShare } = calcCommission(order.subtotal, percent, mode);
+  const exists = await Ledger.findOne({ orderId: order._id, type: 'refund' });
+  if (exists) return null;
 
   await Ledger.create({
     type: 'refund',
     amount: -order.total,
     orderId: order._id,
-    restaurantId: restaurant._id,
+    restaurantId: order.restaurantId,
     userId: order.userId,
     provider,
     transactionId,
     meta: { orderTotal: order.total, note: 'Mijozga qaytarildi' },
   });
 
-  // Restoran qarzini kamaytiramiz
-  await Ledger.create({
-    type: 'restaurant_due',
-    amount: -restaurantShare,
-    orderId: order._id,
-    restaurantId: restaurant._id,
-    meta: { note: 'Qaytarish sababli bekor qilindi' },
+  // Agar hisob-kitob qilingan bo'lsa — teskari yozamiz
+  const settled = await Ledger.findOne({
+    orderId: order._id, type: 'restaurant_due',
   });
 
-  restaurant.balance = (restaurant.balance || 0) - restaurantShare;
-  await restaurant.save();
+  if (settled && settled.amount !== 0) {
+    const restaurant = await Restaurant.findById(order.restaurantId);
+    if (restaurant) {
+      await Ledger.create({
+        type: 'restaurant_due',
+        amount: -settled.amount,
+        orderId: order._id,
+        restaurantId: restaurant._id,
+        meta: { note: 'Qaytarish sababli bekor qilindi' },
+      });
+      restaurant.balance = (restaurant.balance || 0) - settled.amount;
+      await restaurant.save();
+    }
+  }
 
   getIO()?.to('admin').emit('billing:update', {
-    restaurantId: String(restaurant._id),
-    balance: restaurant.balance,
+    restaurantId: String(order.restaurantId),
   });
 
-  return { refunded: order.total, restaurantShare };
+  return { refunded: order.total };
 }
 
-/**
- * Restoranga pul o'tkazildi — admin qo'lda belgilaydi.
- */
+/** Restoranga pul o'tkazildi — admin qo'lda belgilaydi. */
 export async function recordPayout(restaurantId, amount, adminId, note = '') {
   const restaurant = await Restaurant.findById(restaurantId);
   if (!restaurant) throw new Error('Restoran topilmadi');
   if (amount <= 0) throw new Error('Summa musbat bo\u2018lishi kerak');
   if (amount > restaurant.balance) {
-    throw new Error(`Balansda yetarli mablag\u2018 yo\u2018q (${restaurant.balance} so\u2018m)`);
+    throw new Error(
+      `Balansda yetarli emas. Hozir: ${restaurant.balance} so\u2018m`,
+    );
   }
 
   await Ledger.create({
@@ -171,7 +237,7 @@ export async function recordPayout(restaurantId, amount, adminId, note = '') {
     amount: -amount,
     restaurantId,
     createdBy: adminId,
-    meta: { note: note || 'Restoranga o\u2018tkazildi' },
+    meta: { note: note || 'Bank hisobiga o\u2018tkazildi' },
   });
 
   restaurant.balance -= amount;
@@ -186,9 +252,7 @@ export async function recordPayout(restaurantId, amount, adminId, note = '') {
   return { balance: restaurant.balance, paidOut: amount };
 }
 
-/**
- * Restoran bo'yicha moliyaviy xulosa.
- */
+/** Restoran bo'yicha moliyaviy xulosa. */
 export async function getRestaurantSummary(restaurantId, from, to) {
   const match = { restaurantId };
   if (from || to) {
@@ -209,11 +273,11 @@ export async function getRestaurantSummary(restaurantId, from, to) {
 
   return {
     restaurant,
-    tushum: byType.payment_in || 0,        // mijozlar to'lovi
-    komissiya: byType.commission || 0,     // platforma ulushi
+    tushum: byType.payment_in || 0,
+    komissiya: byType.commission || 0,
     restoranUlushi: byType.restaurant_due || 0,
     tolangan: Math.abs(byType.payout || 0),
     qaytarilgan: Math.abs(byType.refund || 0),
-    balans: restaurant?.balance || 0,      // hozir qarzimiz
+    balans: restaurant?.balance || 0,
   };
 }
