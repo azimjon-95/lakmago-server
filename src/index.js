@@ -59,6 +59,22 @@ async function main() {
 
   // Diagnostika — sozlamаlar to'g'rimi tekshirish (maxfiy ma'lumot ko'rsatilmaydi)
   // Telegram webhook holatini tekshirish — guruh muammosini topish uchun
+  // Taom modeli qaysi maydonlarni biladi — server yangilanganini tekshirish
+  app.get('/diag/dish', async (_req, res) => {
+    const { Dish } = await import('./models/Dish.js');
+    const paths = Object.keys(Dish.schema.paths);
+    const need = ['weight', 'protein', 'fat', 'carbs', 'calories', 'prepMinutes'];
+    const missing = need.filter((f) => !paths.includes(f));
+    res.json({
+      ok: missing.length === 0,
+      mavjud: need.filter((f) => paths.includes(f)),
+      yetishmayapti: missing,
+      xulosa: missing.length
+        ? `Server ESKI kod bilan ishlayapti. Yechim: git pull && pm2 restart lakmago-server`
+        : 'Server yangi — barcha maydonlar mavjud',
+    });
+  });
+
   app.get('/diag/telegram', async (_req, res) => {
     if (!config.telegramBotToken) {
       return res.json({ error: 'TELEGRAM_BOT_TOKEN sozlanmagan' });

@@ -67,6 +67,20 @@ export const restaurantPanelController = {
       return res.status(400).json({ error: 'Ma‘lumot noto‘g‘ri', details: parsed.error.issues });
     }
     const dish = await Dish.create({ ...parsed.data, restaurantId: rid(req) });
+
+    // Yuborilgan, lekin saqlanmagan maydonlarni aniqlaymiz.
+    // Mongoose strict rejimda modelda yo'q maydonni jim tashlaydi —
+    // bu jimgina ma'lumot yo'qolishiga olib keladi.
+    const dropped = Object.keys(parsed.data).filter(
+      (k) => parsed.data[k] !== undefined && dish[k] === undefined,
+    );
+    if (dropped.length) {
+      console.warn(
+        `[dish] Saqlanmagan maydonlar: ${dropped.join(', ')}\n` +
+        '  Sabab: server eski kod bilan ishlayapti.\n' +
+        '  Yechim: git pull && pm2 restart lakmago-server',
+      );
+    }
     // Real-time: admin nazorat panelida darhol ko'rinadi
     getIO()?.to('admin').emit('dish:update', { restaurantId: String(rid(req)) });
     res.status(201).json(dish);
