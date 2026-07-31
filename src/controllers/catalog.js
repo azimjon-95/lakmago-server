@@ -161,7 +161,7 @@ export const dishController = {
     const limit = Math.min(Number(req.query.limit) || 20, 50);
 
     const dishes = await Dish.find(filter)
-      .select('name description section price oldPrice imageUrl images tint icon restaurantId isHit isDiscounted createdAt')
+      .select('name description section category price oldPrice imageUrl images tint icon restaurantId isHit isDiscounted createdAt weight weightGram calories protein fat carbs prepMinutes ingredients optionGroups')
       .sort({ createdAt: -1 })
       .limit(limit + 1)
       .lean();
