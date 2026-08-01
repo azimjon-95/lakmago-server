@@ -36,6 +36,7 @@ router.get('/dishes/:id', restaurantController.getDishById);
 // ===== Mijoz buyurtmalari (JWT) =====
 router.post('/orders', auth, orderController.create);
 router.get('/orders', auth, orderController.myOrders);
+router.patch('/orders/:id/cancel', auth, orderController.cancelOrder);
 router.get('/orders/active', auth, orderController.active);
 router.get('/orders/group/:groupId', auth, orderController.getGroup);
 router.get('/orders/:id', auth, orderController.getOne);

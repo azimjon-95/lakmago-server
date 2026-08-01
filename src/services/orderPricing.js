@@ -87,3 +87,36 @@ export function calcOrderTotals(subtotal, restaurant, isPickup, bonusUsed = 0) {
 
   return { subtotal, deliveryFee, serviceFee, bonusUsed, total };
 }
+
+
+/**
+ * Restoran hozir ochiqmi.
+ *
+ * openTime/closeTime "HH:MM" ko'rinishida. Yarim tundan
+ * oshadigan vaqt ham to'g'ri hisoblanadi (10:00–02:00).
+ * Vaqt belgilanmagan bo'lsa — doim ochiq.
+ *
+ * MUHIM: bu mantiq client'da ham bor (lib/workHours.js).
+ */
+function toMinutes(hhmm) {
+  if (typeof hhmm !== 'string') return null;
+  const m = hhmm.trim().match(/^(\d{1,2}):(\d{2})$/);
+  if (!m) return null;
+  const h = Number(m[1]);
+  const min = Number(m[2]);
+  if (h > 23 || min > 59) return null;
+  return h * 60 + min;
+}
+
+export function isRestaurantOpen(restaurant, now = new Date()) {
+  const open = toMinutes(restaurant?.openTime);
+  const close = toMinutes(restaurant?.closeTime);
+
+  if (open === null || close === null) return true;
+  if (open === close) return true;
+
+  const cur = now.getHours() * 60 + now.getMinutes();
+
+  if (open < close) return cur >= open && cur < close;
+  return cur >= open || cur < close;
+}

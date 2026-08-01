@@ -3,7 +3,8 @@ import { asyncHandler } from '../middleware/error.js';
 import { signToken, verifyTelegramInitData } from '../middleware/auth.js';
 import { Banner } from '../models/User.js';
 import { Restaurant } from '../models/Restaurant.js';
-import { calcDeliveryFee, calcServiceFee, checkMinOrder } from '../services/orderPricing.js';
+import { Dish } from '../models/Dish.js';
+import { calcDeliveryFee, calcServiceFee, checkMinOrder, isRestaurantOpen } from '../services/orderPricing.js';
 import { User } from '../models/User.js';
 import { Order } from '../models/Order.js';
 import { getIO } from '../sockets/io.js';
@@ -184,7 +185,7 @@ export const orderController = {
     // bo'lishi mumkin.
     const restIds = orders.map((o) => o.restaurantId);
     const restDocs = await Restaurant.find({ _id: { $in: restIds } })
-      .select('name deliveryFee freeDeliveryThreshold minOrderAmount serviceFeePercent serviceFeeMin serviceFeeMax prepMinutes')
+      .select('name deliveryFee freeDeliveryThreshold minOrderAmount serviceFeePercent serviceFeeMin serviceFeeMax prepMinutes openTime closeTime isActive isBlocked isApproved pickupEnabled')
       .lean();
     const restMap = new Map(restDocs.map((r) => [String(r._id), r]));
 
@@ -192,6 +193,56 @@ export const orderController = {
       const rest = restMap.get(String(o.restaurantId));
       if (!rest) {
         return res.status(400).json({ error: 'Restoran topilmadi' });
+      }
+
+      // Restoran ishlayaptimi
+      if (rest.isBlocked || !rest.isActive || !rest.isApproved) {
+        return res.status(400).json({
+          error: `${rest.name} hozircha buyurtma qabul qilmayapti`,
+          code: 'RESTAURANT_UNAVAILABLE',
+          restaurantId: String(o.restaurantId),
+        });
+      }
+
+      // Ish vaqti — yopiq bo'lsa buyurtma qabul qilinmaydi.
+      // Belgilangan vaqtga buyurtma bundan mustasno: mijoz
+      // ochilish vaqtiga rejalashtirishi mumkin.
+      if (timingMode !== 'scheduled' && !isRestaurantOpen(rest)) {
+        return res.status(400).json({
+          error: `${rest.name} hozir yopiq`
+            + (rest.openTime ? ` · Ish vaqti ${rest.openTime}–${rest.closeTime}` : ''),
+          code: 'RESTAURANT_CLOSED',
+          restaurantId: String(o.restaurantId),
+          openTime: rest.openTime,
+          closeTime: rest.closeTime,
+        });
+      }
+
+      // Olib ketish yoqilganmi
+      if (isPickup && !rest.pickupEnabled) {
+        return res.status(400).json({
+          error: `${rest.name} olib ketishni qo\u2018llab-quvvatlamaydi`,
+          code: 'PICKUP_DISABLED',
+          restaurantId: String(o.restaurantId),
+        });
+      }
+
+      // Taomlar mavjudligini tekshiramiz — STOP qilingan bo'lishi mumkin
+      const dishIds = (o.items || []).map((i) => i.dishId).filter(Boolean);
+      if (dishIds.length) {
+        const unavailable = await Dish.find({
+          _id: { $in: dishIds },
+          $or: [{ isAvailable: false }, { restaurantId: { $ne: o.restaurantId } }],
+        }).select('name isAvailable').lean();
+
+        if (unavailable.length) {
+          return res.status(400).json({
+            error: `Mavjud emas: ${unavailable.map((d) => d.name).join(', ')}`,
+            code: 'DISH_UNAVAILABLE',
+            restaurantId: String(o.restaurantId),
+            dishes: unavailable.map((d) => d.name),
+          });
+        }
       }
 
       // Minimal summa tekshiruvi
@@ -286,6 +337,63 @@ export const orderController = {
   }),
 
   // GET /api/orders  (foydalanuvchi buyurtmalari — groupId bo'yicha guruhlangan)
+  // PATCH /api/orders/:id/cancel — mijoz o'z buyurtmasini bekor qiladi
+  //
+  // Faqat NAQD to'lovda va restoran QABUL QILGUNCHA.
+  // Karta to'lovida mijoz tasdiqlash kodini kiritgan — adashib
+  // bosish ehtimoli yo'q, bekor qilish esa pul qaytarishni
+  // talab qiladi (uni restoran yoki admin boshqaradi).
+  cancelOrder: asyncHandler(async (req, res) => {
+    const order = await Order.findOne({
+      _id: req.params.id,
+      userId: req.userId,
+    });
+
+    if (!order) return res.status(404).json({ error: 'Buyurtma topilmadi' });
+
+    if (order.status === 'cancelled') {
+      return res.status(400).json({ error: 'Allaqachon bekor qilingan' });
+    }
+
+    // Restoran ishni boshlagan bo'lsa bekor qilib bo'lmaydi
+    if (order.status !== 'pending' && order.status !== 'awaiting_payment') {
+      return res.status(400).json({
+        error: 'Restoran buyurtmani qabul qildi — bekor qilib bo\u2018lmaydi. '
+          + 'Restoranga qo\u2018ng\u2018iroq qiling.',
+        code: 'ALREADY_ACCEPTED',
+      });
+    }
+
+    // Karta to'lovi va pul o'tgan bo'lsa — o'zi bekor qilolmaydi
+    if (order.isPaid) {
+      return res.status(400).json({
+        error: 'To\u2018lov amalga oshirilgan. Bekor qilish uchun '
+          + 'qo\u2018llab-quvvatlashga murojaat qiling.',
+        code: 'ALREADY_PAID',
+      });
+    }
+
+    order.status = 'cancelled';
+    order.cancelledAt = new Date();
+    order.cancelReason = 'Mijoz bekor qildi';
+    await order.save();
+
+    // Bonus ishlatilgan bo'lsa qaytaramiz
+    if (order.bonusUsed > 0) {
+      await User.findByIdAndUpdate(order.userId, {
+        $inc: { bonusBalance: order.bonusUsed },
+      });
+    }
+
+    const io = getIO();
+    io?.to(`restaurant:${order.restaurantId}`).emit('order:status', {
+      orderId: String(order._id), status: 'cancelled',
+    });
+    io?.to('admin').emit('order:update', order);
+
+    res.json(order);
+  }),
+
   myOrders: asyncHandler(async (req, res) => {
     const orders = await Order.find({ userId: req.userId }).sort({ createdAt: -1 });
     res.json(orders);
