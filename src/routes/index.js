@@ -12,6 +12,7 @@ import { supportController } from '../controllers/support.js';
 import { cardController } from '../controllers/cards.js';
 import { paymentController as gatewayController } from '../controllers/payments.js';
 import { billingController } from '../controllers/billing.js';
+import { mapsController } from '../controllers/maps.js';
 import { auth, requireRole } from '../middleware/auth.js';
 
 export const router = Router();
@@ -78,6 +79,11 @@ router.post('/addresses', auth, addressController.create);
 router.patch('/addresses/:id', auth, addressController.update);
 router.delete('/addresses/:id', auth, addressController.remove);
 router.patch('/addresses/:id/default', auth, addressController.setDefault);
+
+// ===== Xarita =====
+router.get('/maps/config', mapsController.config);
+router.get('/maps/geocode', mapsController.geocode);
+router.get('/maps/reverse', mapsController.reverse);
 
 // ===== Moliya (admin) =====
 router.get('/admin/billing/overview', auth, requireRole('admin'), billingController.overview);

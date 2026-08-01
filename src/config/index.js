@@ -111,6 +111,15 @@ export const config = {
     secretKey: process.env.CLICK_SECRET_KEY || '',
     returnUrl: process.env.CLICK_RETURN_URL || '',
   },
+
+  // Yandex Maps — xarita va manzil aniqlash.
+  // Kalitlar developer.tech.yandex.ru dan olinadi (bepul tarif bor).
+  yandex: {
+    // JavaScript API — xarita ko'rsatish
+    mapsKey: process.env.YANDEX_MAPS_KEY || '',
+    // Geocoder API — koordinata ↔ manzil
+    geocoderKey: process.env.YANDEX_GEOCODER_KEY || process.env.YANDEX_MAPS_KEY || '',
+  },
 };
 
 export async function connectDB() {
