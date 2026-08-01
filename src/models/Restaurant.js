@@ -66,7 +66,10 @@ const restaurantSchema = new Schema(
 
     // ===== XIZMAT HAQI VA BUYURTMA SHARTLARI =====
     // Minimal buyurtma summasi (so'mda)
+    // Minimal buyurtma summasi (taomlar). 0 = cheklovsiz
     minOrderAmount: { type: Number, default: 0 },
+    // Shu summadan boshlab yetkazish bepul. 0 = doim pullik
+    freeDeliveryThreshold: { type: Number, default: 0 },
 
     // ===== SHARTNOMA VA KOMISSIYA =====
     // Har restoran bilan alohida kelishiladi.

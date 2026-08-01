@@ -174,7 +174,7 @@ export const adminController = {
       // Ish tartibi va yuridik ma'lumot
       'openTime', 'closeTime', 'legalName', 'legalAddress', 'inn',
       // Xizmat haqi va buyurtma shartlari
-      'minOrderAmount', 'serviceFeePercent', 'serviceFeeMin', 'serviceFeeMax',
+      'minOrderAmount', 'freeDeliveryThreshold', 'serviceFeePercent', 'serviceFeeMin', 'serviceFeeMax',
       // Stol bron qilish
       'reservationEnabled', 'reservationNote',
       // Olib ketish va do'kon yo'nalishlari

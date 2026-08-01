@@ -3,6 +3,7 @@ import { asyncHandler } from '../middleware/error.js';
 import { signToken, verifyTelegramInitData } from '../middleware/auth.js';
 import { Banner } from '../models/User.js';
 import { Restaurant } from '../models/Restaurant.js';
+import { calcDeliveryFee, calcServiceFee, checkMinOrder } from '../services/orderPricing.js';
 import { User } from '../models/User.js';
 import { Order } from '../models/Order.js';
 import { getIO } from '../sockets/io.js';
@@ -176,6 +177,39 @@ export const orderController = {
     const isPickup = fulfillment === 'pickup';
     const groupId = 'G' + Date.now() + Math.floor(Math.random() * 1000);
     const io = getIO();
+
+    // ===== SERVER TOMONIDA QAYTA HISOBLASH =====
+    // Client yuborgan summalarga ISHONMAYMIZ — qayta hisoblaymiz.
+    // Restoran sozlamalari o'zgargan yoki so'rov o'zgartirilgan
+    // bo'lishi mumkin.
+    const restIds = orders.map((o) => o.restaurantId);
+    const restDocs = await Restaurant.find({ _id: { $in: restIds } })
+      .select('name deliveryFee freeDeliveryThreshold minOrderAmount serviceFeePercent serviceFeeMin serviceFeeMax prepMinutes')
+      .lean();
+    const restMap = new Map(restDocs.map((r) => [String(r._id), r]));
+
+    for (const o of orders) {
+      const rest = restMap.get(String(o.restaurantId));
+      if (!rest) {
+        return res.status(400).json({ error: 'Restoran topilmadi' });
+      }
+
+      // Minimal summa tekshiruvi
+      const minCheck = checkMinOrder(o.subtotal, rest, isPickup);
+      if (!minCheck.ok) {
+        return res.status(400).json({
+          error: `${rest.name}: minimal buyurtma ${minCheck.min.toLocaleString('ru-RU')} so\u2018m. `
+            + `Yana ${minCheck.missing.toLocaleString('ru-RU')} so\u2018mlik mahsulot qo\u2018shing.`,
+          code: 'MIN_ORDER',
+          restaurantId: String(o.restaurantId),
+          missing: minCheck.missing,
+        });
+      }
+
+      // Yetkazish va xizmat haqini QAYTA hisoblaymiz
+      o.deliveryFee = calcDeliveryFee(o.subtotal, rest, isPickup);
+      o.serviceFee = calcServiceFee(o.subtotal, rest);
+    }
 
     // ===== BONUS BILAN TO'LASH =====
     // Butun buyurtма summasi (barcha restoranlar)
