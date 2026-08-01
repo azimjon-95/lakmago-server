@@ -3,7 +3,7 @@ import { config } from '../config/index.js';
 // Bot to'g'ri ishlashi uchun ZARUR update turlari.
 // callback_query bo'lmasa — barcha tugmalar ishlamaydi.
 // my_chat_member bo'lmasa — guruh aniqlash ishlamaydi.
-const REQUIRED = ['message', 'callback_query', 'my_chat_member', 'chat_member'];
+const REQUIRED = ['message', 'callback_query', 'inline_query', 'my_chat_member', 'chat_member'];
 
 async function tg(method, params) {
   const res = await fetch(`https://api.telegram.org/bot${config.telegramBotToken}/${method}`, {

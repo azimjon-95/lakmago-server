@@ -82,6 +82,14 @@ export async function handleBotUpdate(update) {
   }
 
   // 2) Callback tugmalar
+  // Inline so'rov — taomni rasm bilan ulashish
+  if (update.inline_query) {
+    const { handleInlineQuery } = await import('./inlineShare.js');
+    await handleInlineQuery(update.inline_query).catch((e) =>
+      console.error('[inline]', e.message));
+    return;
+  }
+
   if (update.callback_query) {
     const data = update.callback_query.data || '';
     try {
