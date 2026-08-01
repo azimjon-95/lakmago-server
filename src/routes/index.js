@@ -13,6 +13,7 @@ import { cardController } from '../controllers/cards.js';
 import { paymentController as gatewayController } from '../controllers/payments.js';
 import { billingController } from '../controllers/billing.js';
 import { mapsController } from '../controllers/maps.js';
+import { catalogProductController } from '../controllers/catalogProducts.js';
 import { auth, requireRole } from '../middleware/auth.js';
 
 export const router = Router();
@@ -80,6 +81,16 @@ router.post('/addresses', auth, addressController.create);
 router.patch('/addresses/:id', auth, addressController.update);
 router.delete('/addresses/:id', auth, addressController.remove);
 router.patch('/addresses/:id/default', auth, addressController.setDefault);
+
+// ===== Umumiy mahsulot katalogi =====
+// Admin yaratadi, restoranlar tanlab narxini qo'yadi
+router.get('/admin/catalog', auth, requireRole('admin'), catalogProductController.list);
+router.post('/admin/catalog', auth, requireRole('admin'), catalogProductController.create);
+router.patch('/admin/catalog/:id', auth, requireRole('admin'), catalogProductController.update);
+router.delete('/admin/catalog/:id', auth, requireRole('admin'), catalogProductController.remove);
+
+router.get('/panel/catalog', auth, requireRole('restaurant'), catalogProductController.forRestaurant);
+router.post('/panel/catalog/:id/add', auth, requireRole('restaurant'), catalogProductController.addToMenu);
 
 // ===== Xarita =====
 router.get('/maps/config', mapsController.config);

@@ -54,6 +54,7 @@ export const restaurantPanelController = {
       prepMinutes: z.number().int().min(1).max(240).optional(),
       // Qo'shimcha ma'lumot — barchasi ixtiyoriy
       weight: z.string().optional(),
+      volume: z.string().max(30).optional(),
       calories: z.number().optional(),
       protein: z.number().optional(),
       fat: z.number().optional(),
@@ -92,7 +93,7 @@ export const restaurantPanelController = {
 
   // PATCH /api/panel/dishes/:id — taomni tahrirlash (narx, nom, STOP)
   updateDish: asyncHandler(async (req, res) => {
-    const allowed = ['name', 'description', 'price', 'oldPrice', 'section', 'category', 'prepMinutes', 'icon', 'tint', 'isAvailable', 'isHit', 'isTrending', 'isDiscounted', 'calories', 'weight', 'weightGram', 'protein', 'fat', 'carbs', 'imageUrl', 'images'];
+    const allowed = ['name', 'description', 'price', 'oldPrice', 'section', 'category', 'prepMinutes', 'icon', 'tint', 'isAvailable', 'isHit', 'isTrending', 'isDiscounted', 'calories', 'weight', 'weightGram', 'protein', 'fat', 'carbs', 'volume', 'imageUrl', 'images'];
     const update = {};
     for (const k of allowed) if (k in req.body) update[k] = req.body[k];
     // Faqat o'z taomini o'zgartira olsin

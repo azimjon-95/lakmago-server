@@ -11,7 +11,8 @@
     "seed:images": "node scripts/seed-images.js",
     "webhook": "node scripts/setup-webhook.js",
     "bot": "node scripts/bot-tekshir.js",
-    "sync:banners": "node scripts/sync-banners.js"
+    "sync:banners": "node scripts/sync-banners.js",
+    "seed:catalog": "node scripts/seed-catalog.js"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",

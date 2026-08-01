@@ -53,7 +53,14 @@ const dishSchema = new Schema(
     // Rasm (Cloudinary URL) — bo'lsa ikon o'rniga rasm ko'rsatiladi
     imageUrl: { type: String, default: '' },
     images: [{ type: String }],
+    // Umumiy katalogdan olingan bo'lsa — manba mahsulot.
+    // Restoran o'zi yaratgan bo'lsa null.
+    catalogProductId: { type: Schema.Types.ObjectId, ref: 'CatalogProduct', default: null, index: true },
+
     // ===== QO'SHIMCHA MA'LUMOT (barchasi ixtiyoriy) =====
+    // Hajm: "0.5 l", "1 l", "330 ml"
+    volume: { type: String, default: '' },
+
     // Og'irlik matn sifatida — "150 г" yoki "150/30/30/20 г"
     // (assortida bir necha qism bo'ladi)
     weight: { type: String, default: '' },
