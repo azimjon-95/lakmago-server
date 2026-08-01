@@ -27,7 +27,7 @@ export const shareController = {
     const dish = await Dish.findById(req.params.id).lean().catch(() => null);
 
     // Mini App deep-link (taomга olib boradi)
-    const miniAppLink = `https://t.me/${config.botUsername}/${config.webappName}?startapp=dish_${req.params.id}`;
+    const miniAppLink = `https://t.me/${config.botUsername}/${config.webappName}?startapp=food_${req.params.id}`;
 
     // Taom topilmasa — to'g'ridan Mini App'ga yo'naltiramiz
     if (!dish) {
@@ -37,9 +37,18 @@ export const shareController = {
     // Restoran nomи (ixtiyoriy)
     const restaurant = await Restaurant.findById(dish.restaurantId).select('name').lean().catch(() => null);
 
-    const title = esc(dish.name || 'LokmaGo taomi');
+    // Sarlavha: taom nomi va narxi — Telegram kartasida qalin chiqadi
     const priceText = dish.price ? `${dish.price.toLocaleString('ru-RU')} so'm` : '';
-    const parts = [priceText, restaurant?.name && `${restaurant.name}da`, dish.description].filter(Boolean);
+    const title = esc(
+      priceText ? `${dish.name} — ${priceText}` : (dish.name || 'LokmaGo taomi'),
+    );
+
+    // Tavsif: restoran, taom tavsifi va chaqiruv
+    const parts = [
+      restaurant?.name,
+      dish.description,
+      'Buyurtma berish uchun bosing',
+    ].filter(Boolean);
     const description = esc(parts.join(' · ').slice(0, 200));
     const image = ogImage(dish.imageUrl || (dish.images && dish.images[0]) || '');
 
