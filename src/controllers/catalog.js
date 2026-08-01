@@ -151,7 +151,7 @@ export const dishController = {
     // Faqat ko'rinadigan (faol, bloklanмаган, tasdiqlangan) restoranlar
     const visibleRestaurants = await Restaurant.find({
       isApproved: true, isActive: true, isBlocked: { $ne: true },
-    }).select('_id name tint icon imageUrl').lean();
+    }).select('_id name tint icon imageUrl deliveryMin deliveryMax deliveryFee freeDeliveryThreshold minOrderAmount prepMinutes').lean();
 
     const restMap = new Map(visibleRestaurants.map((r) => [String(r._id), r]));
     const restIds = visibleRestaurants.map((r) => r._id);
@@ -169,7 +169,19 @@ export const dishController = {
     const hasMore = dishes.length > limit;
     const items = (hasMore ? dishes.slice(0, limit) : dishes).map((d) => {
       const r = restMap.get(String(d.restaurantId));
-      return { ...d, restaurantName: r?.name || '', restaurantTint: r?.tint, restaurantIcon: r?.icon };
+      return {
+        ...d,
+        restaurantName: r?.name || '',
+        restaurantTint: r?.tint,
+        restaurantIcon: r?.icon,
+        // Savatda yetkazish hisobi uchun kerak
+        restaurantDeliveryMin: r?.deliveryMin ?? 25,
+        restaurantDeliveryMax: r?.deliveryMax ?? 40,
+        restaurantDeliveryFee: r?.deliveryFee ?? 0,
+        restaurantFreeDeliveryThreshold: r?.freeDeliveryThreshold ?? 0,
+        restaurantMinOrderAmount: r?.minOrderAmount ?? 0,
+        restaurantPrepMinutes: r?.prepMinutes ?? 20,
+      };
     });
     const nextCursor = hasMore ? items[items.length - 1].createdAt : null;
 
