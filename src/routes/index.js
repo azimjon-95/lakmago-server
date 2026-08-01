@@ -50,6 +50,7 @@ router.get('/reservations', auth, reservationController.myReservations);
 
 // ===== Restoran paneli (role: restaurant) =====
 router.get('/panel/me', auth, requireRole('restaurant'), restaurantPanelController.profile);
+router.patch('/panel/me', auth, requireRole('restaurant'), restaurantPanelController.updateProfile);
 router.patch('/panel/me/active', auth, requireRole('restaurant'), restaurantPanelController.toggleActive);
 router.get('/panel/dishes', auth, requireRole('restaurant'), restaurantPanelController.dishes);
 router.post('/panel/dishes', auth, requireRole('restaurant'), restaurantPanelController.createDish);

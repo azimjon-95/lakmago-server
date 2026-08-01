@@ -15,7 +15,11 @@ function rid(req) {
 export const restaurantPanelController = {
   // GET /api/panel/me — restoranning o'z profili
   profile: asyncHandler(async (req, res) => {
-    const restaurant = await Restaurant.findById(rid(req));
+    // Shartnoma va moliya ma'lumotlari restoranga BERILMAYDI —
+    // komissiya foizi, balans, to'langan summa faqat adminda.
+    const restaurant = await Restaurant.findById(rid(req))
+      .select('-ownerId -__v -commissionPercent -commissionMode -balance -totalPaidOut -contractNumber -contractDate');
+
     if (!restaurant) return res.status(404).json({ error: 'Restoran topilmadi' });
     res.json(restaurant);
   }),
@@ -247,6 +251,80 @@ export const restaurantPanelController = {
 
     getIO()?.to('admin').emit('order:update', order);
     res.json(order);
+  }),
+
+  // PATCH /api/panel/me — restoran o'z ma'lumotlarini tahrirlaydi
+  //
+  // XAVFSIZLIK: shartnomaga tegishli maydonlar (komissiya, balans,
+  // to'langan summa) va tizim maydonlari (isApproved, isBlocked,
+  // ownerId) BU YERDA O'ZGARTIRILMAYDI. Ular faqat adminda.
+  updateProfile: asyncHandler(async (req, res) => {
+    const schema = z.object({
+      // Asosiy
+      name: z.string().min(2).max(80).optional(),
+      cuisine: z.string().max(80).optional(),
+      description: z.string().max(500).optional(),
+      phone: z.string().max(30).optional(),
+      imageUrl: z.string().url().or(z.literal('')).optional(),
+
+      // Joylashuv
+      address: z.string().max(200).optional(),
+      landmark: z.string().max(200).optional(),
+      lat: z.number().min(-90).max(90).nullable().optional(),
+      lng: z.number().min(-180).max(180).nullable().optional(),
+
+      // Ish vaqti
+      openTime: z.string().regex(/^\d{2}:\d{2}$/).optional(),
+      closeTime: z.string().regex(/^\d{2}:\d{2}$/).optional(),
+
+      // Yetkazish shartlari
+      deliveryMin: z.number().int().min(0).max(300).optional(),
+      deliveryMax: z.number().int().min(0).max(300).optional(),
+      deliveryFee: z.number().min(0).max(500000).optional(),
+      freeDeliveryThreshold: z.number().min(0).max(10000000).optional(),
+      minOrderAmount: z.number().min(0).max(10000000).optional(),
+
+      // Olib ketish
+      pickupEnabled: z.boolean().optional(),
+      pickupDiscountPercent: z.number().min(0).max(50).optional(),
+      prepMinutes: z.number().int().min(1).max(240).optional(),
+
+      // Stol bron qilish
+      reservationEnabled: z.boolean().optional(),
+      reservationNote: z.string().max(300).optional(),
+    });
+
+    const parsed = schema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({
+        error: 'Ma\u2018lumot noto\u2018g\u2018ri',
+        details: parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`),
+      });
+    }
+
+    const data = { ...parsed.data };
+
+    // Yetkazish vaqti mantiqiy bo'lsin
+    if (data.deliveryMin != null && data.deliveryMax != null
+        && data.deliveryMin > data.deliveryMax) {
+      return res.status(400).json({
+        error: 'Eng kam yetkazish vaqti eng ko\u2018pdan katta bo\u2018lmasligi kerak',
+      });
+    }
+
+    // Rasm o'zgarsa images ham yangilanadi
+    if (data.imageUrl) data.images = [data.imageUrl];
+
+    const restaurant = await Restaurant.findByIdAndUpdate(
+      rid(req), data, { new: true, runValidators: true },
+    ).select('-ownerId -__v -balance -totalPaidOut -commissionPercent -commissionMode');
+
+    if (!restaurant) return res.status(404).json({ error: 'Restoran topilmadi' });
+
+    // Mijozlar ilovasida yangilansin
+    getIO()?.emit('restaurant:update', { _id: String(restaurant._id) });
+
+    res.json(restaurant);
   }),
 
   // GET /api/panel/banner — muassasa rasmi
