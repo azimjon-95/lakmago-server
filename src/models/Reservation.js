@@ -11,6 +11,14 @@ const reservationSchema = new Schema(
     name: { type: String, required: true },
     phone: { type: String, required: true },
     note: { type: String },
+
+    // Oldindan tanlangan taomlar — restoran tayyorlab qo'yadi
+    preOrder: [{
+      dishId: { type: String, default: '' },
+      name: { type: String, required: true },
+      quantity: { type: Number, default: 1 },
+      price: { type: Number, default: 0 },
+    }],
     status: {
       type: String,
       // pending — kutilmoqda, confirmed — restoran tasdiqladi,

@@ -13,7 +13,14 @@ const reservationSchema = z.object({
   guests: z.number().int().positive(),
   name: z.string().min(2),
   phone: z.string().min(7),
-  note: z.string().optional()
+  note: z.string().optional(),
+  // Oldindan tanlangan taomlar
+  preOrder: z.array(z.object({
+    dishId: z.string().optional().default(''),
+    name: z.string().min(1),
+    quantity: z.number().int().min(1).default(1),
+    price: z.number().min(0).default(0),
+  })).optional().default([]),
 });
 
 export const reservationController = {
@@ -57,8 +64,26 @@ export const reservationController = {
   // GET /api/restaurants/:id/reservations  (restoran paneli)
   // GET /api/panel/reservations — restoran o'z bronlarini (token orqali)
   forRestaurantSelf: asyncHandler(async (req, res) => {
-    const list = await Reservation.find({ restaurantId: req.restaurantId }).sort({ createdAt: -1 });
-    res.json(list);
+    // Mijoz ma'lumotlari bilan — restoran bog'lana olishi uchun
+    const list = await Reservation.find({ restaurantId: req.restaurantId })
+      .populate('userId', 'firstName lastName username telegramId photoUrl')
+      .sort({ createdAt: -1 })
+      .lean();
+
+    const items = list.map((r) => {
+      const u = r.userId || {};
+      return {
+        ...r,
+        userId: u._id ? String(u._id) : null,
+        customer: {
+          name: [u.firstName, u.lastName].filter(Boolean).join(' ') || r.name,
+          username: u.username || '',
+          telegramId: u.telegramId || '',
+          photoUrl: u.photoUrl || '',
+        },
+      };
+    });
+    res.json(items);
   }),
 
   forRestaurant: asyncHandler(async (req, res) => {
