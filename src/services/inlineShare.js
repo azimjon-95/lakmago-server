@@ -32,10 +32,28 @@ function photoUrl(url) {
   return url;
 }
 
-function miniAppLink(dishId) {
+// Bot username Telegram'dan bir marta olinadi va keshlanadi.
+// .env dagi qiymat noto'g'ri bo'lsa ham havola to'g'ri bo'ladi.
+let cachedUsername = null;
+
+async function getBotUsername() {
+  if (cachedUsername) return cachedUsername;
+  try {
+    const r = await fetch(`${TG_API}/getMe`);
+    const d = await r.json();
+    if (d.ok && d.result?.username) {
+      cachedUsername = d.result.username;
+      return cachedUsername;
+    }
+  } catch { /* pastdagi zaxiraga o'tamiz */ }
+  return config.botUsername;
+}
+
+async function miniAppLink(dishId) {
+  const username = await getBotUsername();
   const base = config.webappName
-    ? `https://t.me/${config.botUsername}/${config.webappName}`
-    : `https://t.me/${config.botUsername}`;
+    ? `https://t.me/${username}/${config.webappName}`
+    : `https://t.me/${username}`;
   return `${base}?startapp=food_${dishId}`;
 }
 
@@ -57,14 +75,19 @@ export async function handleInlineQuery(inlineQuery) {
     if (dish) {
       const rest = await Restaurant.findById(dish.restaurantId)
         .select('name').lean().catch(() => null);
-      results.push(buildResult(dish, rest));
+      results.push(await buildResult(dish, rest));
     }
-  } else if (q.length >= 2) {
-    // Nom bo'yicha qidirish
-    const dishes = await Dish.find({
-      name: { $regex: q, $options: 'i' },
-      isAvailable: true,
-    }).limit(10).lean().catch(() => []);
+  } else {
+    // Nom bo'yicha qidirish. So'rov bo'sh bo'lsa — mashhur taomlar
+    // (foydalanuvchi hech nima yozmasa ham ro'yxat ko'rinadi).
+    const filter = { isAvailable: true };
+    if (q.length >= 2) filter.name = { $regex: q, $options: 'i' };
+
+    const dishes = await Dish.find(filter)
+      .sort(q.length >= 2 ? { createdAt: -1 } : { isHit: -1, createdAt: -1 })
+      .limit(12)
+      .lean()
+      .catch(() => []);
 
     const restIds = [...new Set(dishes.map((d) => String(d.restaurantId)))];
     const rests = await Restaurant.find({ _id: { $in: restIds } })
@@ -72,25 +95,37 @@ export async function handleInlineQuery(inlineQuery) {
     const restMap = new Map(rests.map((r) => [String(r._id), r]));
 
     for (const d of dishes) {
-      results.push(buildResult(d, restMap.get(String(d.restaurantId))));
+      results.push(await buildResult(d, restMap.get(String(d.restaurantId))));
     }
   }
 
-  await fetch(`${TG_API}/answerInlineQuery`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      inline_query_id: inlineQuery.id,
-      results,
-      cache_time: 60,
-      is_personal: false,
-    }),
-  }).catch((e) => console.error('[inline]', e.message));
+  try {
+    const res = await fetch(`${TG_API}/answerInlineQuery`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        inline_query_id: inlineQuery.id,
+        results,
+        // Kesh 0 — taom narxi o'zgarsa darhol yangilanadi
+        cache_time: 0,
+        is_personal: false,
+      }),
+    });
+    const data = await res.json();
+
+    if (!data.ok) {
+      console.error(`[inline] Telegram rad etdi: ${data.description}`);
+    } else {
+      console.log(`[inline] "${q}" → ${results.length} ta natija`);
+    }
+  } catch (e) {
+    console.error('[inline] xato:', e.message);
+  }
 }
 
 /** Bitta taom uchun inline natija. */
-function buildResult(dish, restaurant) {
-  const link = miniAppLink(dish._id);
+async function buildResult(dish, restaurant) {
+  const link = await miniAppLink(dish._id);
   const price = dish.price
     ? `${dish.price.toLocaleString('ru-RU')} so'm`
     : '';

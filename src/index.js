@@ -59,6 +59,71 @@ async function main() {
   // Diagnostika — sozlamаlar to'g'rimi tekshirish (maxfiy ma'lumot ko'rsatilmaydi)
   // Telegram webhook holatini tekshirish — guruh muammosini topish uchun
   // Taom modeli qaysi maydonlarni biladi — server yangilanganini tekshirish
+  // Inline ulashish tayyormi — barcha shartlarni tekshiradi
+  app.get('/diag/inline', async (_req, res) => {
+    const out = { ok: true, muammolar: [] };
+
+    if (!config.telegramBotToken) {
+      out.ok = false;
+      out.muammolar.push('Bot tokeni sozlanmagan (.env: TELEGRAM_BOT_TOKEN)');
+      return res.json(out);
+    }
+
+    const api = `https://api.telegram.org/bot${config.telegramBotToken}`;
+
+    try {
+      // 1. Bot kim
+      const me = await (await fetch(`${api}/getMe`)).json();
+      out.bot = me.result?.username || '—';
+      out.envBotUsername = config.botUsername;
+
+      if (me.result?.username &&
+          me.result.username.toLowerCase() !== String(config.botUsername).toLowerCase()) {
+        out.muammolar.push(
+          `.env dagi BOT_USERNAME (${config.botUsername}) haqiqiy bot ` +
+          `(${me.result.username}) bilan mos emas. Havolalar noto'g'ri bo'lishi mumkin.`,
+        );
+      }
+
+      // 2. Webhook holati
+      const wh = await (await fetch(`${api}/getWebhookInfo`)).json();
+      const allowed = wh.result?.allowed_updates || [];
+      out.webhookUrl = wh.result?.url || '(o\'rnatilmagan)';
+      out.allowedUpdates = allowed.length ? allowed : '(default)';
+
+      if (!wh.result?.url) {
+        out.ok = false;
+        out.muammolar.push('Webhook o\'rnatilmagan');
+      } else if (allowed.length && !allowed.includes('inline_query')) {
+        out.ok = false;
+        out.muammolar.push(
+          'inline_query webhook\'da YOQILMAGAN — bot inline so\'rovlarni olmaydi. ' +
+          'Serverni qayta ishga tushiring, avtomatik tuzatiladi.',
+        );
+      } else if (!allowed.length) {
+        out.ok = false;
+        out.muammolar.push(
+          'allowed_updates bo\'sh (default) — inline_query default ro\'yxatda YO\'Q. ' +
+          'Serverni qayta ishga tushiring.',
+        );
+      }
+
+      // 3. Mini App nomi
+      out.webappName = config.webappName;
+      out.namunaHavola =
+        `https://t.me/${out.bot}/${config.webappName}?startapp=food_<id>`;
+
+    } catch (e) {
+      out.ok = false;
+      out.muammolar.push(`Telegram bilan aloqa xatosi: ${e.message}`);
+    }
+
+    if (out.ok && !out.muammolar.length) {
+      out.xulosa = 'Hammasi tayyor. BotFather\'da /setinline yoqilganini ham tekshiring.';
+    }
+    res.json(out);
+  });
+
   app.get('/diag/dish', async (_req, res) => {
     const { Dish } = await import('./models/Dish.js');
     const paths = Object.keys(Dish.schema.paths);
