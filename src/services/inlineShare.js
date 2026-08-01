@@ -107,13 +107,6 @@ function buildResult(dish, restaurant) {
 
   const caption = lines.join('\n');
 
-  // Tugma — bosilganda ilova ochiladi
-  const markup = {
-    inline_keyboard: [[
-      { text: '🍽 Buyurtma berish', url: link },
-    ]],
-  };
-
   // Rasm bo'lsa — photo turi (rasm tepada chiqadi)
   if (photo) {
     return {
@@ -125,7 +118,6 @@ function buildResult(dish, restaurant) {
       description: [price, restaurant?.name].filter(Boolean).join(' · '),
       caption,
       parse_mode: 'HTML',
-      reply_markup: markup,
     };
   }
 
@@ -140,6 +132,5 @@ function buildResult(dish, restaurant) {
       parse_mode: 'HTML',
       disable_web_page_preview: false,
     },
-    reply_markup: markup,
   };
 }
