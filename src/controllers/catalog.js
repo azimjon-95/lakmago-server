@@ -150,14 +150,52 @@ export const dishManageController = {
 export const dishController = {
   // GET /api/dishes/trending
   trending: asyncHandler(async (_req, res) => {
-    const dishes = await Dish.find({ isTrending: true, isAvailable: true }).limit(10);
-    res.json(dishes);
+    // Faqat ko'rinadigan restoranlar taomlari
+    const visible = await Restaurant.find({
+      isApproved: true, isActive: true, isBlocked: { $ne: true },
+    }).select('_id name tint icon openTime closeTime').lean();
+    const restMap = new Map(visible.map((r) => [String(r._id), r]));
+
+    const dishes = await Dish.find({
+      isTrending: true,
+      isAvailable: true,
+      restaurantId: { $in: visible.map((r) => r._id) },
+    }).limit(20).lean();
+
+    res.json(dishes.map((d) => {
+      const r = restMap.get(String(d.restaurantId));
+      return {
+        ...d,
+        restaurantName: r?.name || '',
+        restaurantOpenTime: r?.openTime || '',
+        restaurantCloseTime: r?.closeTime || '',
+      };
+    }));
   }),
 
   // GET /api/dishes/discounted
   discounted: asyncHandler(async (_req, res) => {
-    const dishes = await Dish.find({ isDiscounted: true, isAvailable: true }).limit(10);
-    res.json(dishes);
+    // Faqat ko'rinadigan restoranlar taomlari
+    const visible = await Restaurant.find({
+      isApproved: true, isActive: true, isBlocked: { $ne: true },
+    }).select('_id name tint icon openTime closeTime').lean();
+    const restMap = new Map(visible.map((r) => [String(r._id), r]));
+
+    const dishes = await Dish.find({
+      isDiscounted: true,
+      isAvailable: true,
+      restaurantId: { $in: visible.map((r) => r._id) },
+    }).limit(20).lean();
+
+    res.json(dishes.map((d) => {
+      const r = restMap.get(String(d.restaurantId));
+      return {
+        ...d,
+        restaurantName: r?.name || '',
+        restaurantOpenTime: r?.openTime || '',
+        restaurantCloseTime: r?.closeTime || '',
+      };
+    }));
   }),
 
   // GET /api/dishes/all?cursor=&limit=  — BARCHA restoranlarнинг taomlarи aralash
@@ -166,7 +204,7 @@ export const dishController = {
     // Faqat ko'rinadigan (faol, bloklanмаган, tasdiqlangan) restoranlar
     const visibleRestaurants = await Restaurant.find({
       isApproved: true, isActive: true, isBlocked: { $ne: true },
-    }).select('_id name tint icon imageUrl deliveryMin deliveryMax deliveryFee freeDeliveryThreshold minOrderAmount prepMinutes').lean();
+    }).select('_id name tint icon imageUrl deliveryMin deliveryMax deliveryFee freeDeliveryThreshold minOrderAmount prepMinutes openTime closeTime').lean();
 
     const restMap = new Map(visibleRestaurants.map((r) => [String(r._id), r]));
     const restIds = visibleRestaurants.map((r) => r._id);
@@ -196,6 +234,9 @@ export const dishController = {
         restaurantFreeDeliveryThreshold: r?.freeDeliveryThreshold ?? 0,
         restaurantMinOrderAmount: r?.minOrderAmount ?? 0,
         restaurantPrepMinutes: r?.prepMinutes ?? 20,
+        // Ish vaqti — yopiq restoran taomlari ro'yxatdan chiqadi
+        restaurantOpenTime: r?.openTime || '',
+        restaurantCloseTime: r?.closeTime || '',
       };
     });
     const nextCursor = hasMore ? items[items.length - 1].createdAt : null;

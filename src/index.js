@@ -61,6 +61,13 @@ async function main() {
   // Taom modeli qaysi maydonlarni biladi — server yangilanganini tekshirish
   // Inline ulashish tayyormi — barcha shartlarni tekshiradi
   // Restoran sahifasi nima qaytarayotganini tekshirish
+  // Server vaqti — client soati noto'g'ri bo'lsa ham ish vaqti
+  // to'g'ri hisoblanadi. Yengil, keshsiz.
+  app.get('/api/time', (_req, res) => {
+    res.set('Cache-Control', 'no-store');
+    res.json({ now: Date.now() });
+  });
+
   app.get('/diag/restaurant/:id', async (req, res) => {
     const out = { id: req.params.id, bosqichlar: [] };
     try {
