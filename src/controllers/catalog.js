@@ -47,38 +47,44 @@ export const restaurantController = {
       return res.status(404).json({ error: 'Restoran hozircha mavjud emas' });
     }
 
-    // Mijozlar sharhlari — baholangan buyurtmalardan yig'iladi
-    const rated = await Order.find({
-      restaurantId: restaurant._id,
-      rating: { $gte: 1 },
-    })
-      .select('rating comment ratedAt userId')
-      .populate('userId', 'firstName photoUrl')
-      .sort({ ratedAt: -1 })
-      .limit(30)
-      .lean();
+    // Mijozlar sharhlari — baholangan buyurtmalardan yig'iladi.
+    // Xato bo'lsa restoran baribir ochiladi, faqat sharhlar
+    // bo'sh qoladi. Avval bu yerda xato butun so'rovni qulatardi.
+    restaurant.reviews = [];
 
-    // Sana formati. Node'da 'uz-UZ' lokali bo'lmasligi mumkin —
-    // xato bo'lsa oddiy formatga qaytamiz, so'rov qulamaydi.
-    const MONTHS = [
-      'yanvar', 'fevral', 'mart', 'aprel', 'may', 'iyun',
-      'iyul', 'avgust', 'sentabr', 'oktabr', 'noyabr', 'dekabr',
-    ];
-    const fmtDate = (d) => {
-      if (!d) return '';
-      const date = new Date(d);
-      if (Number.isNaN(date.getTime())) return '';
-      return `${date.getDate()}-${MONTHS[date.getMonth()]}`;
-    };
+    try {
+      const rated = await Order.find({
+        restaurantId: restaurant._id,
+        rating: { $gte: 1 },
+      })
+        .select('rating comment ratedAt userId')
+        .populate('userId', 'firstName photoUrl')
+        .sort({ ratedAt: -1 })
+        .limit(30)
+        .lean();
 
-    restaurant.reviews = rated.map((r) => ({
-      id: String(r._id),
-      rating: r.rating,
-      comment: r.comment || '',
-      name: r.userId?.firstName || 'Mijoz',
-      photoUrl: r.userId?.photoUrl || '',
-      date: fmtDate(r.ratedAt),
-    }));
+      const MONTHS = [
+        'yanvar', 'fevral', 'mart', 'aprel', 'may', 'iyun',
+        'iyul', 'avgust', 'sentabr', 'oktabr', 'noyabr', 'dekabr',
+      ];
+      const fmtDate = (d) => {
+        if (!d) return '';
+        const date = new Date(d);
+        if (Number.isNaN(date.getTime())) return '';
+        return `${date.getDate()}-${MONTHS[date.getMonth()]}`;
+      };
+
+      restaurant.reviews = rated.map((r) => ({
+        id: String(r._id),
+        rating: Number(r.rating) || 0,
+        comment: r.comment || '',
+        name: r.userId?.firstName || 'Mijoz',
+        photoUrl: r.userId?.photoUrl || '',
+        date: fmtDate(r.ratedAt),
+      }));
+    } catch (e) {
+      console.error('[catalog] sharhlar yuklanmadi:', e.message);
+    }
 
     res.json(restaurant);
   }),

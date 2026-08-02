@@ -60,6 +60,51 @@ async function main() {
   // Telegram webhook holatini tekshirish — guruh muammosini topish uchun
   // Taom modeli qaysi maydonlarni biladi — server yangilanganini tekshirish
   // Inline ulashish tayyormi — barcha shartlarni tekshiradi
+  // Restoran sahifasi nima qaytarayotganini tekshirish
+  app.get('/diag/restaurant/:id', async (req, res) => {
+    const out = { id: req.params.id, bosqichlar: [] };
+    try {
+      const { Restaurant } = await import('./models/Restaurant.js');
+      const { Dish } = await import('./models/Dish.js');
+      const { Order } = await import('./models/Order.js');
+
+      const r = await Restaurant.findById(req.params.id).lean();
+      out.bosqichlar.push({ restoran: r ? 'topildi' : 'TOPILMADI' });
+      if (!r) return res.json(out);
+
+      out.restoran = {
+        nom: r.name,
+        faol: r.isActive,
+        bloklangan: r.isBlocked,
+        tasdiqlangan: r.isApproved,
+        ishVaqti: `${r.openTime || '—'}–${r.closeTime || '—'}`,
+      };
+
+      const dishes = await Dish.countDocuments({ restaurantId: r._id });
+      out.bosqichlar.push({ taomlar: dishes });
+
+      const rated = await Order.find({ restaurantId: r._id, rating: { $gte: 1 } })
+        .select('rating ratedAt userId')
+        .populate('userId', 'firstName')
+        .limit(5)
+        .lean();
+      out.bosqichlar.push({ sharhlar: rated.length });
+
+      // Sana formatlash sinovi
+      out.sanaSinovi = rated.map((x) => ({
+        xom: x.ratedAt,
+        yaroqli: x.ratedAt ? !Number.isNaN(new Date(x.ratedAt).getTime()) : false,
+      }));
+
+      out.ok = true;
+    } catch (e) {
+      out.ok = false;
+      out.xato = e.message;
+      out.stack = e.stack?.split('\n').slice(0, 3);
+    }
+    res.json(out);
+  });
+
   app.get('/diag/inline', async (_req, res) => {
     const out = { ok: true, muammolar: [] };
 
