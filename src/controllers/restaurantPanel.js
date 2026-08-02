@@ -103,11 +103,49 @@ export const restaurantPanelController = {
       { new: true },
     );
     if (!dish) return res.status(404).json({ error: 'Taom topilmadi' });
-    res.json(dish);
+
+    // Panel va mijozlar ilovasi darhol yangilanadi
+    const count = await Dish.countDocuments({
+      restaurantId: rid(req),
+      isAvailable: false,
+    });
+    const io = getIO();
+    io?.to(`restaurant:${rid(req)}`).emit('dish:stop', {
+      dishId: String(dish._id),
+      isAvailable: dish.isAvailable,
+      stoppedCount: count,
+    });
+    io?.emit('dish:update', { restaurantId: String(rid(req)) });
+
+    res.json({ ...dish.toObject(), stoppedCount: count });
   }),
 
   // PATCH /api/panel/dishes/:id/stop  { stop: true|false }
   // Taomni STOPga tushirish yoki qaytarish (isAvailable teskarisi)
+  // GET /api/panel/dishes/stopped — stop'dagi taomlar
+  // Menyu sahifasidan alohida: faqat kerakli maydonlar,
+  // ortiqcha ma'lumot yuborilmaydi.
+  stoppedDishes: asyncHandler(async (req, res) => {
+    const dishes = await Dish.find({
+      restaurantId: rid(req),
+      isAvailable: false,
+    })
+      .select('name imageUrl images price oldPrice category section volume updatedAt')
+      .sort({ updatedAt: -1 })
+      .lean();
+
+    res.json(dishes);
+  }),
+
+  // GET /api/panel/dishes/stopped/count — faqat son (badge uchun)
+  stoppedCount: asyncHandler(async (req, res) => {
+    const count = await Dish.countDocuments({
+      restaurantId: rid(req),
+      isAvailable: false,
+    });
+    res.json({ count });
+  }),
+
   toggleStop: asyncHandler(async (req, res) => {
     const { stop } = req.body;
     const dish = await Dish.findOneAndUpdate(

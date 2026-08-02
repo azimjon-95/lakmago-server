@@ -55,6 +55,9 @@ router.get('/panel/me', auth, requireRole('restaurant'), restaurantPanelControll
 router.patch('/panel/me', auth, requireRole('restaurant'), restaurantPanelController.updateProfile);
 router.patch('/panel/me/active', auth, requireRole('restaurant'), restaurantPanelController.toggleActive);
 router.get('/panel/dishes', auth, requireRole('restaurant'), restaurantPanelController.dishes);
+// Aniq yo'llar :id dan OLDIN — aks holda 'stopped' id deb qabul qilinadi
+router.get('/panel/dishes/stopped', auth, requireRole('restaurant'), restaurantPanelController.stoppedDishes);
+router.get('/panel/dishes/stopped/count', auth, requireRole('restaurant'), restaurantPanelController.stoppedCount);
 router.post('/panel/dishes', auth, requireRole('restaurant'), restaurantPanelController.createDish);
 router.patch('/panel/dishes/:id', auth, requireRole('restaurant'), restaurantPanelController.updateDish);
 router.patch('/panel/dishes/:id/stop', auth, requireRole('restaurant'), restaurantPanelController.toggleStop);
