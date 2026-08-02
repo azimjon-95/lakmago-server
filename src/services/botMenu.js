@@ -69,7 +69,10 @@ async function showOrders(chatId, user) {
   }
 
   const lines = orders.map((o) => {
-    const d = new Date(o.createdAt).toLocaleDateString('uz-UZ', { day: '2-digit', month: '2-digit' });
+    const dt = new Date(o.createdAt);
+    const d = Number.isNaN(dt.getTime())
+      ? ''
+      : `${String(dt.getDate()).padStart(2, '0')}.${String(dt.getMonth() + 1).padStart(2, '0')}`;
     const items = (o.items || []).map((i) => `${i.name}×${i.quantity}`).join(', ');
     return `${ORDER_STATUS[o.status] || o.status}\n🏪 ${o.restaurantName}\n🍽 ${items}\n💰 ${som(o.total)} so'm · ${d}`;
   });

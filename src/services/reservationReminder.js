@@ -21,9 +21,17 @@ async function tg(method, body) {
 }
 
 // Vaqt formatlash: 19:00
-const fmtTime = (d) => new Date(d).toLocaleTimeString('uz-UZ', {
-  hour: '2-digit', minute: '2-digit', hour12: false,
-});
+// 'uz-UZ' lokali Node'da bo'lmasligi mumkin — xato bo'lsa
+// oddiy formatga qaytamiz
+const fmtTime = (d) => {
+  const date = new Date(d);
+  if (Number.isNaN(date.getTime())) return '';
+  try {
+    return date.toLocaleTimeString('uz-UZ', { hour: '2-digit', minute: '2-digit', hour12: false });
+  } catch {
+    return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+  }
+};
 
 // ===== ESLATMA TURLARI =====
 // Har biri o'z matni va tugmalari bilan

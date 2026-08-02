@@ -58,9 +58,18 @@ export const restaurantController = {
       .limit(30)
       .lean();
 
-    const fmtDate = (d) => new Date(d).toLocaleDateString('uz-UZ', {
-      day: 'numeric', month: 'long',
-    });
+    // Sana formati. Node'da 'uz-UZ' lokali bo'lmasligi mumkin —
+    // xato bo'lsa oddiy formatga qaytamiz, so'rov qulamaydi.
+    const MONTHS = [
+      'yanvar', 'fevral', 'mart', 'aprel', 'may', 'iyun',
+      'iyul', 'avgust', 'sentabr', 'oktabr', 'noyabr', 'dekabr',
+    ];
+    const fmtDate = (d) => {
+      if (!d) return '';
+      const date = new Date(d);
+      if (Number.isNaN(date.getTime())) return '';
+      return `${date.getDate()}-${MONTHS[date.getMonth()]}`;
+    };
 
     restaurant.reviews = rated.map((r) => ({
       id: String(r._id),
