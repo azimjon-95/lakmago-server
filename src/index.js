@@ -314,6 +314,13 @@ async function main() {
     setInterval(() => checkDeliveries().catch((e) => console.error('Yetkazish tekshiruvi:', e.message)), 2 * 60_000);
   }
 
+  // Muddati tugagan aksiya va reklamalarni o'chirish — soatiga bir marta
+  {
+    const { deactivateExpired } = await import('./services/promotions.js');
+    setTimeout(() => deactivateExpired().catch(() => {}), 60_000);
+    setInterval(() => deactivateExpired().catch(() => {}), 60 * 60_000);
+  }
+
   // Kunlik guruh tekshiruvi (reklama yuborilganmi + pin qilinganmi)
   // Server ishga tushганда 1 marta, keyin har 24 soatda.
   if (config.telegramBotToken) {

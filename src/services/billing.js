@@ -167,6 +167,13 @@ export async function settleOrder(orderId) {
   restaurant.totalOrders = (restaurant.totalOrders || 0) + 1;
   await restaurant.save();
 
+  // Mijozga bonus — buyurtma yetkazilgandan keyin
+  if (order.userId) {
+    const { grantBonus } = await import('./promotions.js');
+    grantBonus(order.userId, restaurant._id, order.total)
+      .catch((e) => console.error('[bonus]', e.message));
+  }
+
   getIO()?.to('admin').emit('billing:update', {
     restaurantId: String(restaurant._id),
     balance: restaurant.balance,

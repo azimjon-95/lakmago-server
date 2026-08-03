@@ -15,6 +15,7 @@ import { billingController } from '../controllers/billing.js';
 import { mapsController } from '../controllers/maps.js';
 import { catalogProductController } from '../controllers/catalogProducts.js';
 import { menuTransferController } from '../controllers/menuTransfer.js';
+import { promotionController } from '../controllers/promotions.js';
 import { auth, requireRole } from '../middleware/auth.js';
 
 export const router = Router();
@@ -86,6 +87,25 @@ router.post('/addresses', auth, addressController.create);
 router.patch('/addresses/:id', auth, addressController.update);
 router.delete('/addresses/:id', auth, addressController.remove);
 router.patch('/addresses/:id/default', auth, addressController.setDefault);
+
+// ===== Продвижение: aksiya, reklama, bonus =====
+const R = [auth, requireRole('restaurant')];
+router.get('/panel/promo/overview', ...R, promotionController.overview);
+
+router.get('/panel/promotions', ...R, promotionController.listPromotions);
+router.post('/panel/promotions', ...R, promotionController.createPromotion);
+router.patch('/panel/promotions/:id', ...R, promotionController.updatePromotion);
+router.delete('/panel/promotions/:id', ...R, promotionController.deletePromotion);
+
+router.get('/panel/bonuses', ...R, promotionController.listBonuses);
+router.post('/panel/bonuses', ...R, promotionController.createBonus);
+router.patch('/panel/bonuses/:id', ...R, promotionController.updateBonus);
+router.delete('/panel/bonuses/:id', ...R, promotionController.deleteBonus);
+
+router.get('/panel/ads', ...R, promotionController.listAds);
+router.post('/panel/ads', ...R, promotionController.createAd);
+router.patch('/panel/ads/:id', ...R, promotionController.updateAd);
+router.delete('/panel/ads/:id', ...R, promotionController.deleteAd);
 
 // ===== Menyu ko'chirish =====
 router.get('/panel/restaurants/search', auth, requireRole('restaurant'), menuTransferController.searchRestaurants);

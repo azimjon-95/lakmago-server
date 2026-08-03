@@ -5,6 +5,7 @@ import { Banner } from '../models/User.js';
 import { Restaurant } from '../models/Restaurant.js';
 import { Dish } from '../models/Dish.js';
 import { calcDeliveryFee, calcServiceFee, checkMinOrder, isRestaurantOpen } from '../services/orderPricing.js';
+import { applyPromotion, markPromotionUsed } from '../services/promotions.js';
 import { User } from '../models/User.js';
 import { Order } from '../models/Order.js';
 import { getIO } from '../sockets/io.js';
@@ -260,6 +261,10 @@ export const orderController = {
       // Yetkazish va xizmat haqini QAYTA hisoblaymiz
       o.deliveryFee = calcDeliveryFee(o.subtotal, rest, isPickup);
       o.serviceFee = calcServiceFee(o.subtotal, rest);
+
+      // Aksiya — SERVERDA hisoblanadi, client qiymatiga ishonilmaydi
+      const promo = await applyPromotion(o.restaurantId, o.items || [], o.subtotal);
+      o._promo = promo;
     }
 
     // ===== BONUS BILAN TO'LASH =====
@@ -289,7 +294,12 @@ export const orderController = {
       const o = orders[i];
       // Olib ketishda yetkazish haqi yo'q
       const fee = isPickup ? 0 : (o.deliveryFee || 0);
-      const orderTotal = o.subtotal + fee + (o.serviceFee || 0);
+      // Aksiya chegirmasi taomlar summasidan ayriladi
+      const promoDiscount = o._promo?.discount || 0;
+      const orderTotal = Math.max(
+        0,
+        o.subtotal - promoDiscount + fee + (o.serviceFee || 0),
+      );
       // Bonusni shu buyurtmaga qo'llaymiz (ketma-ket, oshib ketmasin)
       const orderBonus = Math.min(bonusLeft, orderTotal);
       bonusLeft -= orderBonus;
@@ -305,6 +315,9 @@ export const orderController = {
         deliveryFee: fee,
         serviceFee: o.serviceFee || 0,
         bonusUsed: orderBonus,
+        promotionId: o._promo?.promotionId || null,
+        promotionName: o._promo?.promotionName || '',
+        promotionDiscount: o._promo?.discount || 0,
         total,
         // Karta to'lovi bo'lsa buyurtma TO'LOV KUTILMOQDA holatida
         // yaratiladi — restoranga faqat pul kelgach yuboriladi.
@@ -327,6 +340,12 @@ export const orderController = {
         ...(isPickup ? {} : { courierName: COURIERS[Math.floor(Math.random() * COURIERS.length)] }),
       });
       created.push(doc);
+
+      // Aksiya ishlatildi — hisob va limit yangilanadi
+      if (o._promo) {
+        markPromotionUsed(o._promo.promotionId, o._promo.discount, total)
+          .catch((e) => console.error('[promo]', e.message));
+      }
 
       // Real-time: restoranга yangi buyurtma (signal chalinadi)
       io?.to(`restaurant:${o.restaurantId}`).emit('order:new', doc);

@@ -27,6 +27,14 @@ const orderSchema = new Schema(
     deliveryFee: { type: Number, default: 0 },
     serviceFee: { type: Number, default: 0 },
     bonusUsed: { type: Number, default: 0 }, // shu buyurtмада ishlatilган bonus (so'm)
+
+    // Qo'llanilgan aksiya
+    promotionId: { type: Schema.Types.ObjectId, ref: 'Promotion', default: null },
+    promotionName: { type: String, default: '' },
+    promotionDiscount: { type: Number, default: 0 },
+
+    // Reklama orqali kelganmi
+    adCampaignId: { type: Schema.Types.ObjectId, ref: 'AdCampaign', default: null },
     total: { type: Number, required: true },
 
     // Status oqimi:
