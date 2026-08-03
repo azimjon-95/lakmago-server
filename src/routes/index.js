@@ -14,6 +14,7 @@ import { paymentController as gatewayController } from '../controllers/payments.
 import { billingController } from '../controllers/billing.js';
 import { mapsController } from '../controllers/maps.js';
 import { catalogProductController } from '../controllers/catalogProducts.js';
+import { menuTransferController } from '../controllers/menuTransfer.js';
 import { auth, requireRole } from '../middleware/auth.js';
 
 export const router = Router();
@@ -85,6 +86,14 @@ router.post('/addresses', auth, addressController.create);
 router.patch('/addresses/:id', auth, addressController.update);
 router.delete('/addresses/:id', auth, addressController.remove);
 router.patch('/addresses/:id/default', auth, addressController.setDefault);
+
+// ===== Menyu ko'chirish =====
+router.get('/panel/restaurants/search', auth, requireRole('restaurant'), menuTransferController.searchRestaurants);
+router.get('/panel/menu-transfers/pending/count', auth, requireRole('restaurant'), menuTransferController.pendingCount);
+router.get('/panel/menu-transfers', auth, requireRole('restaurant'), menuTransferController.list);
+router.post('/panel/menu-transfers', auth, requireRole('restaurant'), menuTransferController.create);
+router.get('/panel/menu-transfers/:id', auth, requireRole('restaurant'), menuTransferController.detail);
+router.patch('/panel/menu-transfers/:id/respond', auth, requireRole('restaurant'), menuTransferController.respond);
 
 // ===== Umumiy mahsulot katalogi =====
 // Admin yaratadi, restoranlar tanlab narxini qo'yadi
