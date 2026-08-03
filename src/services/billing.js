@@ -239,16 +239,29 @@ export async function recordPayout(restaurantId, amount, adminId, note = '') {
     );
   }
 
-  await Ledger.create({
-    type: 'payout',
-    amount: -amount,
-    restaurantId,
-    createdBy: adminId,
-    meta: { note: note || 'Bank hisobiga o\u2018tkazildi' },
-  });
+  // Mijozlarni jalb qilish qarzini ushlab qolamiz (sozlama yoqilgan bo'lsa).
+  // Ikki marta yechilmasligi uchun PromoBilling yozuvlari 'paid'
+  // bo'lib belgilanadi va Ledger bilan bog'lanadi.
+  const { deductFromSettlement } = await import('./promoBilling.js');
+  const deducted = await deductFromSettlement(restaurantId, amount);
+  const payoutAmount = amount - deducted;
 
+  if (payoutAmount > 0) {
+    await Ledger.create({
+      type: 'payout',
+      amount: -payoutAmount,
+      restaurantId,
+      createdBy: adminId,
+      meta: {
+        note: note || 'Bank hisobiga o\u2018tkazildi',
+        ...(deducted > 0 ? { promoDebtDeducted: deducted } : {}),
+      },
+    });
+  }
+
+  // Balansdan to'liq summa yechiladi (qarz + o'tkazma)
   restaurant.balance -= amount;
-  restaurant.totalPaidOut = (restaurant.totalPaidOut || 0) + amount;
+  restaurant.totalPaidOut = (restaurant.totalPaidOut || 0) + payoutAmount;
   await restaurant.save();
 
   getIO()?.to('admin').emit('billing:update', {
@@ -256,7 +269,11 @@ export async function recordPayout(restaurantId, amount, adminId, note = '') {
     balance: restaurant.balance,
   });
 
-  return { balance: restaurant.balance, paidOut: amount };
+  return {
+    balance: restaurant.balance,
+    paidOut: payoutAmount,
+    promoDebtDeducted: deducted,
+  };
 }
 
 /** Restoran bo'yicha moliyaviy xulosa. */

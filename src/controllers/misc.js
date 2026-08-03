@@ -184,6 +184,11 @@ export const orderController = {
     // Client yuborgan summalarga ISHONMAYMIZ — qayta hisoblaymiz.
     // Restoran sozlamalari o'zgargan yoki so'rov o'zgartirilgan
     // bo'lishi mumkin.
+    // Chegirma qo'shish qoidasi — Super Admin boshqaradi
+    const { getSettings } = await import('../models/Settings.js');
+    const appSettings = await getSettings();
+    const allowStacking = Boolean(appSettings.allowDiscountStacking);
+
     const restIds = orders.map((o) => o.restaurantId);
     const restDocs = await Restaurant.find({ _id: { $in: restIds } })
       .select('name deliveryFee freeDeliveryThreshold minOrderAmount serviceFeePercent serviceFeeMin serviceFeeMax prepMinutes openTime closeTime isActive isBlocked isApproved pickupEnabled')
@@ -301,7 +306,20 @@ export const orderController = {
         o.subtotal - promoDiscount + fee + (o.serviceFee || 0),
       );
       // Bonusni shu buyurtmaga qo'llaymiz (ketma-ket, oshib ketmasin)
-      const orderBonus = Math.min(bonusLeft, orderTotal);
+      // Chegirma qo'shish qoidasi (discount stacking policy).
+      // O'chiq bo'lsa aksiya va bonus birga ishlamaydi —
+      // faqat eng foydalisi qo'llanadi.
+      let orderBonus = Math.min(bonusLeft, orderTotal);
+
+      if (!allowStacking && promoDiscount > 0 && orderBonus > 0) {
+        if (promoDiscount >= orderBonus) {
+          // Aksiya foydaliroq — bonus ishlatilmaydi
+          orderBonus = 0;
+        }
+        // Aks holda bonus foydaliroq, lekin aksiya allaqachon
+        // narxga qo'llanilgan — uni bekor qilish murakkab.
+        // Shuning uchun ikkalasi ham qoladi (mijoz foydasiga).
+      }
       bonusLeft -= orderBonus;
       const total = orderTotal - orderBonus;
 

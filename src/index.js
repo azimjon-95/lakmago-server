@@ -314,6 +314,14 @@ async function main() {
     setInterval(() => checkDeliveries().catch((e) => console.error('Yetkazish tekshiruvi:', e.message)), 2 * 60_000);
   }
 
+  // Mijozlarni jalb qilish billingi — soatiga bir marta.
+  // 24 soatlik davrni o'tkazib yubormaslik uchun yetarli.
+  {
+    const { runBillingCycle } = await import('./services/promoBilling.js');
+    setTimeout(() => runBillingCycle().catch((e) => console.error('Promo billing:', e.message)), 90_000);
+    setInterval(() => runBillingCycle().catch((e) => console.error('Promo billing:', e.message)), 60 * 60_000);
+  }
+
   // Muddati tugagan aksiya va reklamalarni o'chirish — soatiga bir marta
   {
     const { deactivateExpired } = await import('./services/promotions.js');

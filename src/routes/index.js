@@ -16,6 +16,8 @@ import { mapsController } from '../controllers/maps.js';
 import { catalogProductController } from '../controllers/catalogProducts.js';
 import { menuTransferController } from '../controllers/menuTransfer.js';
 import { promotionController } from '../controllers/promotions.js';
+import { promoAdminController } from '../controllers/promoAdmin.js';
+import { publicPromoController } from '../controllers/publicPromo.js';
 import { auth, requireRole } from '../middleware/auth.js';
 
 export const router = Router();
@@ -88,7 +90,23 @@ router.patch('/addresses/:id', auth, addressController.update);
 router.delete('/addresses/:id', auth, addressController.remove);
 router.patch('/addresses/:id/default', auth, addressController.setDefault);
 
-// ===== Продвижение: aksiya, reklama, bonus =====
+// ===== Aksiya va reklama — Client va Dine-in uchun =====
+router.get('/promotions', publicPromoController.list);
+router.get('/ads', publicPromoController.ads);
+router.post('/ads/:id/event', publicPromoController.trackEvent);
+
+// ===== Mijozlarni jalb qilish — Super Admin =====
+const A = [auth, requireRole('admin')];
+router.get('/admin/promo/overview', ...A, promoAdminController.overview);
+router.get('/admin/promo/restaurants', ...A, promoAdminController.restaurants);
+router.get('/admin/promo/billing/:restaurantId', ...A, promoAdminController.billingHistory);
+router.post('/admin/promo/billing/:restaurantId/pay', ...A, promoAdminController.markPaid);
+router.patch('/admin/promo/subscription/:restaurantId', ...A, promoAdminController.setStatus);
+router.get('/admin/promo/tariff', ...A, promoAdminController.getTariff);
+router.patch('/admin/promo/tariff', ...A, promoAdminController.updateTariff);
+router.post('/admin/promo/billing/run', ...A, promoAdminController.runBilling);
+
+// ===== Mijozlarni jalb qilish — restoran =====
 const R = [auth, requireRole('restaurant')];
 router.get('/panel/promo/overview', ...R, promotionController.overview);
 

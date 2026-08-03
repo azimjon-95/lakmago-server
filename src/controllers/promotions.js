@@ -4,6 +4,7 @@ import { Promotion } from '../models/Promotion.js';
 import { BonusRule } from '../models/BonusRule.js';
 import { AdCampaign } from '../models/AdCampaign.js';
 import { Order } from '../models/Order.js';
+import { ensureSubscription, getDebt } from '../services/promoBilling.js';
 
 const rid = (req) => req.restaurantId;
 
@@ -78,6 +79,13 @@ export const promotionController = {
       ...parsed.data,
       restaurantId: rid(req),
     });
+
+    // Xizmat obunasi — aksiya yoqilgan bo'lsa billing boshlanadi
+    if (promo.isActive) {
+      ensureSubscription(rid(req)).catch((e) =>
+        console.error('[promo-sub]', e.message));
+    }
+
     res.status(201).json(promo);
   }),
 
@@ -99,6 +107,11 @@ export const promotionController = {
       { new: true, runValidators: true },
     );
     if (!promo) return res.status(404).json({ error: 'Aksiya topilmadi' });
+
+    if (promo.isActive) {
+      ensureSubscription(rid(req)).catch(() => {});
+    }
+
     res.json(promo);
   }),
 
@@ -210,6 +223,12 @@ export const promotionController = {
     }
 
     const ad = await AdCampaign.create({ ...parsed.data, restaurantId: rid(req) });
+
+    if (ad.isActive) {
+      ensureSubscription(rid(req)).catch((e) =>
+        console.error('[promo-sub]', e.message));
+    }
+
     res.status(201).json(ad);
   }),
 
@@ -220,6 +239,11 @@ export const promotionController = {
       { new: true, runValidators: true },
     );
     if (!ad) return res.status(404).json({ error: 'Reklama topilmadi' });
+
+    if (ad.isActive) {
+      ensureSubscription(rid(req)).catch(() => {});
+    }
+
     res.json(ad);
   }),
 
@@ -261,7 +285,16 @@ export const promotionController = {
     const newCustomers = [...userCounts.values()].filter((c) => c === 1).length;
     const repeatCustomers = [...userCounts.values()].filter((c) => c > 1).length;
 
+    const debtInfo = await getDebt(restaurantId);
+    const { getSettings } = await import('../models/Settings.js');
+    const settings = await getSettings();
+
     res.json({
+      xizmat: {
+        kunlikNarx: settings.promoDailyPrice || 15000,
+        qarz: debtInfo.debt,
+        kunlar: debtInfo.periods,
+      },
       aksiyalar: {
         soni: promos.length,
         foydalanish: sum(promos, 'usedCount'),
