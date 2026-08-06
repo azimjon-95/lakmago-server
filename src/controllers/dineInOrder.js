@@ -55,12 +55,48 @@ export const dineInOrderController = {
       return res.status(400).json({ error: calc.error, code: calc.code });
     }
 
+    // ===== BONUS =====
+    // Mijoz Telegram akkaunti bilan bog'langan bo'lsa
+    // bonusini ishlatishi mumkin. Balans SERVERDA tekshiriladi.
+    let bonusUsed = 0;
+    const userId = req.userId || null;
+
+    if (userId && req.body.useBonus) {
+      const { User } = await import('../models/User.js');
+      const { getSettings } = await import('../models/Settings.js');
+
+      const [user, settings] = await Promise.all([
+        User.findById(userId).select('bonusBalance').lean(),
+        getSettings(),
+      ]);
+
+      const balance = user?.bonusBalance || 0;
+      if (balance > 0) {
+        // Chegirma qo'shish qoidasi
+        const allowStacking = Boolean(settings.allowDiscountStacking);
+        const canUseBonus = allowStacking || !calc.promoDiscount
+          || calc.promoDiscount < balance;
+
+        if (canUseBonus) {
+          bonusUsed = Math.min(balance, calc.total);
+        }
+      }
+    }
+
     const order = await createOrder({
       session,
       calc,
       orderSource: 'qr',
       note: req.body.note,
+      userId,
+      bonusUsed,
     });
+
+    // Bonus balansidan yechamiz
+    if (bonusUsed > 0) {
+      const { User } = await import('../models/User.js');
+      await User.findByIdAndUpdate(userId, { $inc: { bonusBalance: -bonusUsed } });
+    }
 
     notifyNewOrder(order, session);
     res.status(201).json(order);
@@ -162,17 +198,38 @@ export const dineInOrderController = {
       return res.status(400).json({ error: 'Noto\u2018g\u2018ri holat' });
     }
 
+    // Buyurtma O'CHIRILMAYDI — faqat holat o'zgaradi.
+    // Bekor qilish ham holat, yozuv saqlanadi.
     const order = await Order.findOneAndUpdate(
       {
         _id: req.params.id,
         restaurantId: req.restaurantId,
         fulfillment: 'dinein',
       },
-      { status },
+      {
+        status,
+        updatedBy: req.userId || req.waiterId || null,
+        updatedByRole: req.waiterId ? 'waiter' : 'restaurant',
+        ...(status === 'cancelled' ? { cancelledAt: new Date() } : {}),
+      },
       { new: true },
     );
 
     if (!order) return res.status(404).json({ error: 'Buyurtma topilmadi' });
+
+    // Bekor qilinganda bonus qaytariladi
+    if (status === 'cancelled' && order.bonusUsed > 0 && order.userId) {
+      const { User } = await import('../models/User.js');
+      await User.findByIdAndUpdate(order.userId, {
+        $inc: { bonusBalance: order.bonusUsed },
+      });
+    }
+
+    // Yakunlanganda komissiya yoziladi
+    if (status === 'completed') {
+      const { recordDineInCommission } = await import('../services/dineInBilling.js');
+      recordDineInCommission(order).catch((e) => console.error('[dinein-comm]', e.message));
+    }
 
     const io = getIO();
     // Mijozga — sessiya xonasi orqali
@@ -208,7 +265,7 @@ export const dineInOrderController = {
 };
 
 /** Buyurtma yaratish — ikkala manba uchun umumiy. */
-async function createOrder({ session, calc, orderSource, waiter, note }) {
+async function createOrder({ session, calc, orderSource, waiter, note, userId, bonusUsed }) {
   const dineInNumber = await nextDineInNumber(session.restaurantId);
 
   const order = await Order.create({
@@ -230,12 +287,32 @@ async function createOrder({ session, calc, orderSource, waiter, note }) {
     subtotal: calc.subtotal,
     serviceFee: calc.serviceFee,
     deliveryFee: 0,
-    total: calc.total,
+
+    // Aksiya — serverda hisoblangan
+    promotionId: calc.promotion?.promotionId || null,
+    promotionName: calc.promotion?.promotionName || '',
+    promotionDiscount: calc.promoDiscount || 0,
+
+    bonusUsed: bonusUsed || 0,
+    total: Math.max(0, calc.total - (bonusUsed || 0)),
+
+    ...(userId ? { userId } : {}),
 
     status: 'pending',
     note: String(note || '').slice(0, 300),
     paymentMethod: 'cash',
+
+    // Audit
+    createdBy: waiter?._id || userId || null,
+    createdByRole: orderSource === 'waiter' ? 'waiter' : 'user',
   });
+
+  // Aksiya hisobini yangilaymiz
+  if (calc.promotion) {
+    const { markPromotionUsed } = await import('../services/promotions.js');
+    markPromotionUsed(calc.promotion.promotionId, calc.promoDiscount, order.total)
+      .catch((e) => console.error('[promo]', e.message));
+  }
 
   // Sessiyaga bog'laymiz
   await DineInSession.findByIdAndUpdate(session._id, {

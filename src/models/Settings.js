@@ -21,6 +21,26 @@ const settingsSchema = new Schema(
     // Qarzni delivery tushumidan avtomatik ushlab qolish
     promoDeductFromSettlement: { type: Boolean, default: false },
 
+    // ===== DINE-IN TARIFI =====
+    // Frontendga hardcode qilinmaydi — hammasi shu yerdan
+    dineIn: {
+      // Obuna narxi va davri
+      price: { type: Number, default: 99000 },
+      billingPeriod: { type: String, enum: ['daily', 'monthly'], default: 'monthly' },
+
+      // Sinov muddati (kun). 0 = sinovsiz
+      trialDays: { type: Number, default: 14 },
+
+      // Ulanish to'lovi — bir marta
+      activationFee: { type: Number, default: 0 },
+
+      // Buyurtmadan komissiya (%). 0 = yo'q
+      commissionPercent: { type: Number, default: 0 },
+
+      // Qarzni delivery tushumidan ushlab qolish
+      deductFromSettlement: { type: Boolean, default: false },
+    },
+
     // Bir buyurtmada aksiya va bonus birga ishlatilsinmi.
     // false — faqat eng foydalisi qo'llanadi.
     allowDiscountStacking: { type: Boolean, default: false },

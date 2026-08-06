@@ -31,6 +31,13 @@ const dineInConfigSchema = new Schema(
     suspendedAt: { type: Date, default: null },
     suspendReason: { type: String, default: '' },
 
+    // ===== OBUNA =====
+    subscriptionStartedAt: { type: Date, default: null },
+    lastBilledAt: { type: Date, default: null },
+    trialEndsAt: { type: Date, default: null },
+    dailyPrice: { type: Number, default: 0 },
+    billingPeriod: { type: String, enum: ['daily', 'monthly'], default: 'monthly' },
+
     // ===== XIZMAT HAQI =====
     // Faqat ofitsiant orqali berilgan buyurtmalarga qo'llanadi.
     // QR buyurtmasiga qo'llanmaydi — mijoz o'zi buyurtma bergan.

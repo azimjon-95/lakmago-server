@@ -95,10 +95,20 @@ export const dineInLiveController = {
 
   // GET /api/panel/dine-in/requests
   listRequests: asyncHandler(async (req, res) => {
-    const requests = await TableRequest.find({
+    const filter = {
       restaurantId: req.restaurantId,
       status: { $ne: 'done' },
-    })
+    };
+
+    // Ofitsiant faqat O'Z stollari so'rovlarini ko'radi
+    if (req.waiterId) {
+      const w = await Waiter.findById(req.waiterId).select('tableIds').lean();
+      if (w?.tableIds?.length) {
+        filter.tableId = { $in: w.tableIds };
+      }
+    }
+
+    const requests = await TableRequest.find(filter)
       .populate('tableId', 'tableNumber tableName')
       .sort({ createdAt: -1 })
       .limit(50)
@@ -126,13 +136,21 @@ export const dineInLiveController = {
       update.doneAt = new Date();
     }
 
-    const request = await TableRequest.findOneAndUpdate(
-      { _id: req.params.id, restaurantId: req.restaurantId },
-      update,
-      { new: true },
-    );
+    const query = { _id: req.params.id, restaurantId: req.restaurantId };
 
-    if (!request) return res.status(404).json({ error: 'So\u2018rov topilmadi' });
+    // Ofitsiant boshqa stolga tegmasin
+    if (req.waiterId) {
+      const w = await Waiter.findById(req.waiterId).select('tableIds').lean();
+      if (w?.tableIds?.length) {
+        query.tableId = { $in: w.tableIds };
+      }
+    }
+
+    const request = await TableRequest.findOneAndUpdate(query, update, { new: true });
+
+    if (!request) {
+      return res.status(404).json({ error: 'So\u2018rov topilmadi yoki sizga tegishli emas' });
+    }
 
     const io = getIO();
     // Mijozga javob

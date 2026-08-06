@@ -51,6 +51,10 @@ const promoBillingSchema = new Schema(
       required: true, index: true,
     },
 
+    // Qaysi xizmat uchun: promo (mijoz jalb qilish) yoki dinein
+    service: { type: String, enum: ['promo', 'dinein'], default: 'promo', index: true },
+    note: { type: String, default: '' },
+
     periodStart: { type: Date, required: true },
     periodEnd: { type: Date, required: true },
 
@@ -81,7 +85,7 @@ const promoBillingSchema = new Schema(
 );
 
 // Bir davr ikki marta yaratilmasin
-promoBillingSchema.index({ restaurantId: 1, periodStart: 1 }, { unique: true });
+promoBillingSchema.index({ restaurantId: 1, service: 1, periodStart: 1 }, { unique: true });
 promoBillingSchema.index({ restaurantId: 1, status: 1 });
 
 export const PromoBilling = model('PromoBilling', promoBillingSchema);

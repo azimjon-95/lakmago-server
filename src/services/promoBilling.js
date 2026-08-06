@@ -153,7 +153,7 @@ export async function runBillingCycle() {
  */
 export async function getDebt(restaurantId) {
   const rows = await PromoBilling.aggregate([
-    { $match: { restaurantId, status: 'unpaid' } },
+    { $match: { restaurantId, service: 'promo', status: 'unpaid' } },
     { $group: { _id: null, total: { $sum: '$amount' }, count: { $sum: 1 } } },
   ]);
 
@@ -171,9 +171,9 @@ export async function getDebt(restaurantId) {
  *
  * @param {string} via - 'manual' yoki 'settlement'
  */
-export async function markDebtPaid(restaurantId, adminId, via = 'manual', maxAmount = null) {
+export async function markDebtPaid(restaurantId, adminId, via = 'manual', maxAmount = null, service = 'promo') {
   const unpaid = await PromoBilling.find({
-    restaurantId, status: 'unpaid',
+    restaurantId, service, status: 'unpaid',
   }).sort({ periodStart: 1 });
 
   if (unpaid.length === 0) return { paid: 0, periods: 0 };

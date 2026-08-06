@@ -89,6 +89,14 @@ const orderSchema = new Schema(
     // Mijoz tanlagan vaqt (scheduled bo'lsa) — yetkazish yoki olib ketish vaqti
     scheduledFor: { type: Date, default: null, index: true },
     phone: { type: String },
+    // ===== AUDIT =====
+    // Kim yaratdi va kim oxirgi o'zgartirdi.
+    // Buyurtma O'CHIRILMAYDI — faqat bekor qilinadi.
+    createdBy: { type: Schema.Types.ObjectId, default: null },
+    createdByRole: { type: String, enum: ['user', 'waiter', 'restaurant', 'admin', 'system', null], default: null },
+    updatedBy: { type: Schema.Types.ObjectId, default: null },
+    updatedByRole: { type: String, default: '' },
+
     // Bekor qilish
     cancelledAt: { type: Date, default: null },
     cancelReason: { type: String, default: '' },

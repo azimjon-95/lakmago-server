@@ -40,7 +40,26 @@ export const dineInController = {
       restaurantId: rid(req), status: 'active',
     });
 
-    res.json({ ...cfg, tables, activeSessions });
+    // Qarz va tarif ma'lumoti — frontendga hardcode qilinmaydi
+    const { getDineInDebt } = await import('../services/dineInBilling.js');
+    const { getSettings } = await import('../models/Settings.js');
+    const [debtInfo, settings] = await Promise.all([
+      getDineInDebt(rid(req)),
+      getSettings(),
+    ]);
+
+    res.json({
+      ...cfg,
+      tables,
+      activeSessions,
+      billing: {
+        ...debtInfo,
+        price: cfg.dailyPrice || settings.dineIn?.price || 0,
+        period: cfg.billingPeriod || 'monthly',
+        trialEndsAt: cfg.trialEndsAt,
+        inTrial: cfg.trialEndsAt ? new Date() < new Date(cfg.trialEndsAt) : false,
+      },
+    });
   }),
 
   // POST /api/panel/dine-in/request — aktivatsiya so'rovi
@@ -467,6 +486,69 @@ export const dineInController = {
     })));
   }),
 
+  // GET /api/admin/dine-in/tariff
+  getTariff: asyncHandler(async (_req, res) => {
+    const { getSettings } = await import('../models/Settings.js');
+    const settings = await getSettings();
+    res.json(settings.dineIn || {});
+  }),
+
+  // PATCH /api/admin/dine-in/tariff
+  updateTariff: asyncHandler(async (req, res) => {
+    const schema = z.object({
+      price: z.number().min(0).max(100000000).optional(),
+      billingPeriod: z.enum(['daily', 'monthly']).optional(),
+      trialDays: z.number().int().min(0).max(365).optional(),
+      activationFee: z.number().min(0).max(100000000).optional(),
+      commissionPercent: z.number().min(0).max(50).optional(),
+      deductFromSettlement: z.boolean().optional(),
+    });
+
+    const parsed = schema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ error: 'Noto\u2018g\u2018ri qiymat' });
+    }
+
+    const { getSettings } = await import('../models/Settings.js');
+    const settings = await getSettings();
+
+    settings.dineIn = { ...(settings.dineIn || {}), ...parsed.data };
+    await settings.save();
+
+    res.json(settings.dineIn);
+  }),
+
+  // GET /api/admin/dine-in/billing/:restaurantId
+  billingHistory: asyncHandler(async (req, res) => {
+    const { PromoBilling } = await import('../models/PromoBilling.js');
+    const { getDineInDebt } = await import('../services/dineInBilling.js');
+
+    const items = await PromoBilling.find({
+      restaurantId: req.params.restaurantId,
+      service: 'dinein',
+    }).sort({ periodStart: -1 }).limit(100).lean();
+
+    const debt = await getDineInDebt(req.params.restaurantId);
+    res.json({ items, ...debt });
+  }),
+
+  // POST /api/admin/dine-in/billing/:restaurantId/pay
+  markPaid: asyncHandler(async (req, res) => {
+    const { markDebtPaid } = await import('../services/promoBilling.js');
+    const { getDineInDebt } = await import('../services/dineInBilling.js');
+
+    const { debt } = await getDineInDebt(req.params.restaurantId);
+    if (debt <= 0) return res.status(400).json({ error: 'Qarz yo\u2018q' });
+
+    const result = await markDebtPaid(
+      req.params.restaurantId, req.userId, 'manual', null, 'dinein',
+    );
+    res.json({
+      ...result,
+      message: `${result.paid.toLocaleString('ru-RU')} so\u2018m to\u2018landi deb belgilandi`,
+    });
+  }),
+
   // PATCH /api/admin/dine-in/:restaurantId  { status }
   adminSetStatus: asyncHandler(async (req, res) => {
     const status = req.body.status;
@@ -480,7 +562,16 @@ export const dineInController = {
 
     cfg.status = status;
     if (status === 'approved') cfg.approvedAt = new Date();
-    if (status === 'active') cfg.activatedAt = new Date();
+    if (status === 'active') {
+      cfg.activatedAt = new Date();
+      // Obuna boshlanadi — sinov muddati va tarif sozlamadan
+      const { startDineInSubscription } = await import('../services/dineInBilling.js');
+      await cfg.save();
+      await startDineInSubscription(cfg.restaurantId);
+      const fresh = await DineInConfig.findById(cfg._id);
+      getIO()?.to(`restaurant:${cfg.restaurantId}`).emit('dinein:status', { status });
+      return res.json(fresh);
+    }
     if (status === 'suspended') {
       cfg.suspendedAt = new Date();
       cfg.suspendReason = String(req.body.reason || '').slice(0, 200);

@@ -151,6 +151,10 @@ router.delete('/panel/tables/:id', ...R, dineInController.deleteTable);
 
 // Super Admin
 router.get('/admin/dine-in', ...A, dineInController.adminList);
+router.get('/admin/dine-in/tariff', ...A, dineInController.getTariff);
+router.patch('/admin/dine-in/tariff', ...A, dineInController.updateTariff);
+router.get('/admin/dine-in/billing/:restaurantId', ...A, dineInController.billingHistory);
+router.post('/admin/dine-in/billing/:restaurantId/pay', ...A, dineInController.markPaid);
 router.patch('/admin/dine-in/:restaurantId', ...A, dineInController.adminSetStatus);
 
 // ===== Aksiya va reklama — Client va Dine-in uchun =====

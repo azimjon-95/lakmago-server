@@ -117,12 +117,26 @@ export async function calcDineInOrder(items, restaurantId, orderSource) {
 
   const serviceFee = calcServiceFee(subtotal, config, orderSource);
 
+  // ===== AKSIYA =====
+  // Delivery bilan bir xil mantiq — alohida tizim emas
+  const { applyPromotion } = await import('./promotions.js');
+  const promo = await applyPromotion(restaurantId, resolved.map((r) => ({
+    dishId: r.dishId,
+    category: dishMap.get(String(r.dishId))?.category,
+    unitPrice: r.unitPrice,
+    quantity: r.quantity,
+  })), subtotal);
+
+  const promoDiscount = promo?.discount || 0;
+
   return {
     ok: true,
     items: resolved,
     subtotal,
     serviceFee,
-    total: subtotal + serviceFee,
+    promotion: promo,
+    promoDiscount,
+    total: Math.max(0, subtotal - promoDiscount + serviceFee),
   };
 }
 

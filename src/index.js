@@ -314,6 +314,13 @@ async function main() {
     setInterval(() => checkDeliveries().catch((e) => console.error('Yetkazish tekshiruvi:', e.message)), 2 * 60_000);
   }
 
+  // Dine-in billingi — soatiga bir marta
+  {
+    const { runDineInBilling } = await import('./services/dineInBilling.js');
+    setTimeout(() => runDineInBilling().catch((e) => console.error('Dine-in billing:', e.message)), 120_000);
+    setInterval(() => runDineInBilling().catch((e) => console.error('Dine-in billing:', e.message)), 60 * 60_000);
+  }
+
   // Mijozlarni jalb qilish billingi — soatiga bir marta.
   // 24 soatlik davrni o'tkazib yubormaslik uchun yetarli.
   {
