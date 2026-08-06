@@ -18,9 +18,14 @@ import { menuTransferController } from '../controllers/menuTransfer.js';
 import { promotionController } from '../controllers/promotions.js';
 import { promoAdminController } from '../controllers/promoAdmin.js';
 import { publicPromoController } from '../controllers/publicPromo.js';
+import { dineInController } from '../controllers/dineIn.js';
 import { auth, requireRole } from '../middleware/auth.js';
 
 export const router = Router();
+
+// Qisqartmalar — takrorlanmasin
+const A = [auth, requireRole('admin')];        // Super Admin
+const R = [auth, requireRole('restaurant')];   // Restoran paneli
 
 // ===== Autentifikatsiya =====
 router.post('/auth/telegram', authController.telegram);       // mijoz (webapp)
@@ -90,13 +95,35 @@ router.patch('/addresses/:id', auth, addressController.update);
 router.delete('/addresses/:id', auth, addressController.remove);
 router.patch('/addresses/:id/default', auth, addressController.setDefault);
 
+// ===== DINE-IN =====
+// Mijoz: login TALAB QILINMAYDI
+router.post('/dine-in/scan', dineInController.scan);
+router.get('/dine-in/session/:id', dineInController.getSession);
+
+// Restoran paneli
+router.get('/panel/dine-in', ...R, dineInController.getConfig);
+router.post('/panel/dine-in/request', ...R, dineInController.requestActivation);
+router.patch('/panel/dine-in/theme', ...R, dineInController.updateTheme);
+
+router.get('/panel/tables', ...R, dineInController.listTables);
+router.get('/panel/tables/qr/pdf', ...R, dineInController.getAllQrPdf);
+router.post('/panel/tables', ...R, dineInController.createTable);
+router.post('/panel/tables/bulk', ...R, dineInController.createBulk);
+router.get('/panel/tables/:id/qr', ...R, dineInController.getQr);
+router.post('/panel/tables/:id/regenerate', ...R, dineInController.regenerateQr);
+router.patch('/panel/tables/:id', ...R, dineInController.updateTable);
+router.delete('/panel/tables/:id', ...R, dineInController.deleteTable);
+
+// Super Admin
+router.get('/admin/dine-in', ...A, dineInController.adminList);
+router.patch('/admin/dine-in/:restaurantId', ...A, dineInController.adminSetStatus);
+
 // ===== Aksiya va reklama — Client va Dine-in uchun =====
 router.get('/promotions', publicPromoController.list);
 router.get('/ads', publicPromoController.ads);
 router.post('/ads/:id/event', publicPromoController.trackEvent);
 
 // ===== Mijozlarni jalb qilish — Super Admin =====
-const A = [auth, requireRole('admin')];
 router.get('/admin/promo/overview', ...A, promoAdminController.overview);
 router.get('/admin/promo/restaurants', ...A, promoAdminController.restaurants);
 router.get('/admin/promo/billing/:restaurantId', ...A, promoAdminController.billingHistory);
@@ -107,7 +134,6 @@ router.patch('/admin/promo/tariff', ...A, promoAdminController.updateTariff);
 router.post('/admin/promo/billing/run', ...A, promoAdminController.runBilling);
 
 // ===== Mijozlarni jalb qilish — restoran =====
-const R = [auth, requireRole('restaurant')];
 router.get('/panel/promo/overview', ...R, promotionController.overview);
 
 router.get('/panel/promotions', ...R, promotionController.listPromotions);

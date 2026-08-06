@@ -120,6 +120,8 @@ export const config = {
     // Geocoder API — koordinata ↔ manzil
     geocoderKey: process.env.YANDEX_GEOCODER_KEY || process.env.YANDEX_MAPS_KEY || '',
   },
+  // Mijoz ilovasi manzili — QR havolalari uchun
+  customerBaseUrl: process.env.CUSTOMER_BASE_URL || 'https://lokma.uz',
 };
 
 export async function connectDB() {
