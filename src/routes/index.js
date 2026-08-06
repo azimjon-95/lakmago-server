@@ -21,6 +21,7 @@ import { publicPromoController } from '../controllers/publicPromo.js';
 import { dineInController } from '../controllers/dineIn.js';
 import { dineInOrderController } from '../controllers/dineInOrder.js';
 import { waiterController } from '../controllers/waiter.js';
+import { dineInLiveController } from '../controllers/dineInLive.js';
 import { auth, requireRole, waiterAuth } from '../middleware/auth.js';
 
 export const router = Router();
@@ -105,18 +106,30 @@ router.get('/dine-in/session/:id', dineInController.getSession);
 router.get('/dine-in/menu/:restaurantId', dineInOrderController.menu);
 router.post('/dine-in/orders', dineInOrderController.createFromQr);
 router.get('/dine-in/orders/:sessionId', dineInOrderController.sessionOrders);
+router.post('/dine-in/request', dineInLiveController.createRequest);
+router.get('/dine-in/requests/:sessionId', dineInLiveController.mySessionRequests);
+router.get('/dine-in/receipt/:sessionId', dineInLiveController.receipt);
 
 // Ofitsiant — alohida autentifikatsiya
 router.post('/waiter/login', waiterController.login);
 router.get('/waiter/me', waiterAuth, waiterController.me);
 router.get('/waiter/tables', waiterAuth, waiterController.myTables);
 router.post('/waiter/orders', waiterAuth, dineInOrderController.createFromWaiter);
+router.get('/waiter/requests', waiterAuth, dineInLiveController.listRequests);
+router.patch('/waiter/requests/:id', waiterAuth, dineInLiveController.updateRequest);
 router.get('/waiter/menu/:restaurantId', waiterAuth, dineInOrderController.menu);
 
 // Restoran paneli
 router.get('/panel/dine-in', ...R, dineInController.getConfig);
 router.get('/panel/dine-in/orders', ...R, dineInOrderController.panelOrders);
 router.patch('/panel/dine-in/orders/:id/status', ...R, dineInOrderController.updateStatus);
+router.get('/panel/dine-in/dashboard', ...R, dineInLiveController.dashboard);
+router.get('/panel/dine-in/requests', ...R, dineInLiveController.listRequests);
+router.patch('/panel/dine-in/requests/:id', ...R, dineInLiveController.updateRequest);
+router.post('/panel/dine-in/tables/:tableId/close', ...R, dineInLiveController.closeTable);
+
+router.get('/panel/waiters/earnings', ...R, dineInLiveController.waiterEarnings);
+router.post('/panel/waiters/:id/payout', ...R, dineInLiveController.payWaiter);
 
 router.get('/panel/waiters', ...R, waiterController.list);
 router.post('/panel/waiters', ...R, waiterController.create);

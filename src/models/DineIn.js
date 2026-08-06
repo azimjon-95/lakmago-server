@@ -146,3 +146,31 @@ dineInSessionSchema.index(
 );
 
 export const DineInSession = model('DineInSession', dineInSessionSchema);
+
+// ═══ 4. Stol so'rovlari — ofitsiant chaqirish, hisob ═══
+const tableRequestSchema = new Schema(
+  {
+    restaurantId: { type: Schema.Types.ObjectId, ref: 'Restaurant', required: true, index: true },
+    tableId: { type: Schema.Types.ObjectId, ref: 'Table', required: true, index: true },
+    sessionId: { type: Schema.Types.ObjectId, ref: 'DineInSession', index: true },
+
+    type: { type: String, enum: ['waiter', 'bill'], required: true },
+
+    status: {
+      type: String,
+      enum: ['pending', 'accepted', 'done'],
+      default: 'pending',
+      index: true,
+    },
+
+    acceptedBy: { type: Schema.Types.ObjectId, ref: 'Waiter', default: null },
+    acceptedByName: { type: String, default: '' },
+    acceptedAt: { type: Date, default: null },
+    doneAt: { type: Date, default: null },
+  },
+  { timestamps: true },
+);
+
+tableRequestSchema.index({ restaurantId: 1, status: 1, createdAt: -1 });
+
+export const TableRequest = model('TableRequest', tableRequestSchema);
