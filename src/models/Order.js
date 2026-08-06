@@ -59,7 +59,21 @@ const orderSchema = new Schema(
 
     // ===== YETKAZISH TURI =====
     // 'delivery' — kuryer yetkazadi, 'pickup' — mijoz o'zi olib ketadi
-    fulfillment: { type: String, enum: ['delivery', 'pickup'], default: 'delivery', index: true },
+    fulfillment: { type: String, enum: ['delivery', 'pickup', 'dinein'], default: 'delivery', index: true },
+
+    // ===== DINE-IN =====
+    // Buyurtma manbai: QR (mijoz o'zi) yoki WAITER (ofitsiant)
+    orderSource: { type: String, enum: ['qr', 'waiter', null], default: null, index: true },
+
+    tableId: { type: Schema.Types.ObjectId, ref: 'Table', default: null, index: true },
+    dineInSessionId: { type: Schema.Types.ObjectId, ref: 'DineInSession', default: null, index: true },
+    deviceSessionId: { type: String, default: '' },
+
+    waiterId: { type: Schema.Types.ObjectId, ref: 'Waiter', default: null, index: true },
+    waiterName: { type: String, default: '' },
+
+    // Zal buyurtmasi raqami — #A-124
+    dineInNumber: { type: String, default: '' },
 
     // Manzil — yetkazishda majburiy, olib ketishda bo'sh bo'lishi mumkin
     address: { type: String, default: '' },

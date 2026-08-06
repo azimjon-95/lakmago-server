@@ -31,6 +31,16 @@ const dineInConfigSchema = new Schema(
     suspendedAt: { type: Date, default: null },
     suspendReason: { type: String, default: '' },
 
+    // ===== XIZMAT HAQI =====
+    // Faqat ofitsiant orqali berilgan buyurtmalarga qo'llanadi.
+    // QR buyurtmasiga qo'llanmaydi — mijoz o'zi buyurtma bergan.
+    serviceFeeEnabled: { type: Boolean, default: false },
+    serviceFeeType: { type: String, enum: ['percentage', 'fixed'], default: 'percentage' },
+    serviceFeeValue: { type: Number, default: 10 },
+
+    // Global stop list ishlatilsinmi
+    useGlobalStopList: { type: Boolean, default: true },
+
     // QR dizayni — barcha stollarga umumiy
     qrTheme: {
       backgroundColor: { type: String, default: '#1C1815' },

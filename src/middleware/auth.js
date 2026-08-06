@@ -55,3 +55,46 @@ export function verifyTelegramInitData(initData) {
 export function signToken(userId, role, restaurantId = null) {
   return jwt.sign({ userId, role, restaurantId }, config.jwtSecret, { expiresIn: '30d' });
 }
+
+
+/**
+ * Ofitsiant autentifikatsiyasi.
+ *
+ * Qurilma tokendagi bilan mos kelishi SERVERDA tekshiriladi —
+ * token o'g'irlansa ham boshqa qurilmadan ishlamaydi.
+ */
+export const waiterAuth = async (req, res, next) => {
+  const header = req.headers.authorization || '';
+  const token = header.startsWith('Bearer ') ? header.slice(7) : '';
+
+  if (!token) return res.status(401).json({ error: 'Kirish kerak' });
+
+  try {
+    const payload = jwt.verify(token, config.jwtSecret);
+    if (payload.role !== 'waiter') {
+      return res.status(403).json({ error: 'Ruxsat yo\u2018q' });
+    }
+
+    const { Waiter } = await import('../models/Waiter.js');
+    const waiter = await Waiter.findById(payload.waiterId)
+      .select('deviceId isActive restaurantId').lean();
+
+    if (!waiter || !waiter.isActive) {
+      return res.status(403).json({ error: 'Akkaunt faol emas' });
+    }
+
+    // Qurilma almashtirilgan bo'lsa eski token ishlamaydi
+    if (waiter.deviceId && waiter.deviceId !== payload.deviceId) {
+      return res.status(403).json({
+        error: 'Qurilma o\u2018zgargan. Qayta kiring.',
+        code: 'DEVICE_MISMATCH',
+      });
+    }
+
+    req.waiterId = payload.waiterId;
+    req.restaurantId = String(waiter.restaurantId);
+    next();
+  } catch {
+    return res.status(401).json({ error: 'Sessiya tugagan' });
+  }
+};

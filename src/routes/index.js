@@ -19,7 +19,9 @@ import { promotionController } from '../controllers/promotions.js';
 import { promoAdminController } from '../controllers/promoAdmin.js';
 import { publicPromoController } from '../controllers/publicPromo.js';
 import { dineInController } from '../controllers/dineIn.js';
-import { auth, requireRole } from '../middleware/auth.js';
+import { dineInOrderController } from '../controllers/dineInOrder.js';
+import { waiterController } from '../controllers/waiter.js';
+import { auth, requireRole, waiterAuth } from '../middleware/auth.js';
 
 export const router = Router();
 
@@ -100,9 +102,29 @@ router.patch('/addresses/:id/default', auth, addressController.setDefault);
 router.post('/dine-in/scan', dineInController.scan);
 router.get('/dine-in/session/:id', dineInController.getSession);
 
+router.get('/dine-in/menu/:restaurantId', dineInOrderController.menu);
+router.post('/dine-in/orders', dineInOrderController.createFromQr);
+router.get('/dine-in/orders/:sessionId', dineInOrderController.sessionOrders);
+
+// Ofitsiant — alohida autentifikatsiya
+router.post('/waiter/login', waiterController.login);
+router.get('/waiter/me', waiterAuth, waiterController.me);
+router.get('/waiter/tables', waiterAuth, waiterController.myTables);
+router.post('/waiter/orders', waiterAuth, dineInOrderController.createFromWaiter);
+router.get('/waiter/menu/:restaurantId', waiterAuth, dineInOrderController.menu);
+
 // Restoran paneli
 router.get('/panel/dine-in', ...R, dineInController.getConfig);
+router.get('/panel/dine-in/orders', ...R, dineInOrderController.panelOrders);
+router.patch('/panel/dine-in/orders/:id/status', ...R, dineInOrderController.updateStatus);
+
+router.get('/panel/waiters', ...R, waiterController.list);
+router.post('/panel/waiters', ...R, waiterController.create);
+router.patch('/panel/waiters/:id', ...R, waiterController.update);
+router.post('/panel/waiters/:id/reset-device', ...R, waiterController.resetDevice);
+router.delete('/panel/waiters/:id', ...R, waiterController.remove);
 router.post('/panel/dine-in/request', ...R, dineInController.requestActivation);
+router.patch('/panel/dine-in/settings', ...R, dineInController.updateSettings);
 router.patch('/panel/dine-in/theme', ...R, dineInController.updateTheme);
 
 router.get('/panel/tables', ...R, dineInController.listTables);

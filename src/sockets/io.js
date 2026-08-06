@@ -27,6 +27,11 @@ export function initSocket(httpServer) {
     });
 
     // Admin barcha buyurtmalarni live eshitadi
+    // Dine-in sessiyasi — mijoz buyurtma holatini kuzatadi
+    socket.on('join:session', (sessionId) => {
+      if (sessionId) socket.join(`session:${sessionId}`);
+    });
+
     socket.on('join:admin', () => {
       socket.join('admin');
     });

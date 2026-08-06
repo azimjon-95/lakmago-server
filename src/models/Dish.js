@@ -57,6 +57,12 @@ const dishSchema = new Schema(
     // Restoran o'zi yaratgan bo'lsa null.
     catalogProductId: { type: Schema.Types.ObjectId, ref: 'CatalogProduct', default: null, index: true },
 
+    // ===== DINE-IN NARXI =====
+    // SYNC   — delivery narxidan foydalanadi
+    // CUSTOM — zal uchun alohida narx
+    priceMode: { type: String, enum: ['sync', 'custom'], default: 'sync' },
+    dineInPrice: { type: Number, default: null },
+
     // ===== QO'SHIMCHA MA'LUMOT (barchasi ixtiyoriy) =====
     // Hajm: "0.5 l", "1 l", "330 ml"
     volume: { type: String, default: '' },

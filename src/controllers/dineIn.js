@@ -62,6 +62,36 @@ export const dineInController = {
     res.status(201).json(cfg);
   }),
 
+  // PATCH /api/panel/dine-in/settings — xizmat haqi va stop list
+  updateSettings: asyncHandler(async (req, res) => {
+    const schema = z.object({
+      serviceFeeEnabled: z.boolean().optional(),
+      serviceFeeType: z.enum(['percentage', 'fixed']).optional(),
+      serviceFeeValue: z.number().min(0).max(1000000).optional(),
+      useGlobalStopList: z.boolean().optional(),
+    });
+
+    const parsed = schema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ error: 'Noto\u2018g\u2018ri qiymat' });
+    }
+
+    // Foiz 100 dan oshmasin
+    if (parsed.data.serviceFeeType === 'percentage'
+        && parsed.data.serviceFeeValue > 100) {
+      return res.status(400).json({ error: 'Foiz 100 dan oshmasligi kerak' });
+    }
+
+    const cfg = await DineInConfig.findOneAndUpdate(
+      { restaurantId: rid(req) },
+      parsed.data,
+      { new: true, runValidators: true },
+    );
+
+    if (!cfg) return res.status(404).json({ error: 'Dine-in sozlanmagan' });
+    res.json(cfg);
+  }),
+
   // PATCH /api/panel/dine-in/theme — QR dizayni
   updateTheme: asyncHandler(async (req, res) => {
     const schema = z.object({

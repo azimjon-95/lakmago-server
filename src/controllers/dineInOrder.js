@@ -1,0 +1,261 @@
+import { asyncHandler } from '../middleware/error.js';
+import { Order } from '../models/Order.js';
+import { Table, DineInSession, DineInConfig } from '../models/DineIn.js';
+import { Waiter } from '../models/Waiter.js';
+import { calcDineInOrder, nextDineInNumber, getDineInMenu } from '../services/dineInPricing.js';
+import { getIO } from '../sockets/io.js';
+
+/**
+ * Zal buyurtmalari.
+ *
+ * Ikki manba: QR (mijoz o'zi) va WAITER (ofitsiant).
+ * QR buyurtmasi hech qachon ofitsiant buyurtmasiga aylanmaydi.
+ */
+
+export const dineInOrderController = {
+  // GET /api/dine-in/menu/:restaurantId — zal narxlari bilan
+  menu: asyncHandler(async (req, res) => {
+    const cfg = await DineInConfig.findOne({ restaurantId: req.params.restaurantId }).lean();
+    if (!cfg || cfg.status !== 'active') {
+      return res.status(403).json({ error: 'Dine-in faol emas' });
+    }
+
+    const dishes = await getDineInMenu(req.params.restaurantId);
+    res.json(dishes);
+  }),
+
+  /**
+   * POST /api/dine-in/orders
+   * { sessionId, items, note }
+   *
+   * Mijoz QR orqali buyurtma beradi. Login kerak emas.
+   */
+  createFromQr: asyncHandler(async (req, res) => {
+    const session = await DineInSession.findById(req.body.sessionId);
+    if (!session) {
+      return res.status(404).json({ error: 'Sessiya topilmadi' });
+    }
+
+    // Yopilgan sessiyaga buyurtma qo'shib bo'lmaydi
+    if (session.status !== 'active') {
+      return res.status(400).json({
+        error: 'Sessiya yopilgan. QR kodni qayta skanerlang.',
+        code: 'SESSION_CLOSED',
+      });
+    }
+
+    const cfg = await DineInConfig.findOne({ restaurantId: session.restaurantId }).lean();
+    if (!cfg || cfg.status !== 'active') {
+      return res.status(403).json({ error: 'Dine-in faol emas' });
+    }
+
+    // ===== SERVERDA QAYTA HISOB =====
+    const calc = await calcDineInOrder(req.body.items, session.restaurantId, 'qr');
+    if (!calc.ok) {
+      return res.status(400).json({ error: calc.error, code: calc.code });
+    }
+
+    const order = await createOrder({
+      session,
+      calc,
+      orderSource: 'qr',
+      note: req.body.note,
+    });
+
+    notifyNewOrder(order, session);
+    res.status(201).json(order);
+  }),
+
+  /**
+   * POST /api/waiter/orders
+   * { tableId, items, note }
+   *
+   * Ofitsiant buyurtmasi — xizmat haqi qo'llanadi.
+   */
+  createFromWaiter: asyncHandler(async (req, res) => {
+    const table = await Table.findOne({
+      _id: req.body.tableId,
+      restaurantId: req.restaurantId,
+    });
+    if (!table) return res.status(404).json({ error: 'Stol topilmadi' });
+
+    const waiter = await Waiter.findById(req.waiterId).lean();
+    if (!waiter) return res.status(404).json({ error: 'Ofitsiant topilmadi' });
+
+    // Stol biriktirilganmi
+    if (waiter.tableIds?.length) {
+      const allowed = waiter.tableIds.some((id) => String(id) === String(table._id));
+      if (!allowed) {
+        return res.status(403).json({ error: 'Bu stol sizga biriktirilmagan' });
+      }
+    }
+
+    // Sessiya — bo'lmasa yaratamiz
+    let session = await DineInSession.findOne({
+      tableId: table._id, status: 'active',
+    });
+
+    if (!session) {
+      session = await DineInSession.create({
+        restaurantId: table.restaurantId,
+        branchId: table.branchId || table.restaurantId,
+        tableId: table._id,
+        deviceSessionId: `waiter_${waiter._id}`,
+        status: 'active',
+      });
+      await Table.findByIdAndUpdate(table._id, {
+        status: 'occupied',
+        $inc: { totalSessions: 1 },
+        lastSessionAt: new Date(),
+      });
+    }
+
+    const calc = await calcDineInOrder(req.body.items, req.restaurantId, 'waiter');
+    if (!calc.ok) {
+      return res.status(400).json({ error: calc.error, code: calc.code });
+    }
+
+    const order = await createOrder({
+      session,
+      calc,
+      orderSource: 'waiter',
+      waiter,
+      note: req.body.note,
+    });
+
+    // Xizmat haqi — ofitsiant daromadi
+    if (calc.serviceFee > 0) {
+      await Waiter.findByIdAndUpdate(waiter._id, {
+        $inc: {
+          'earnings.total': calc.serviceFee,
+          'earnings.orders': 1,
+        },
+      });
+    }
+
+    notifyNewOrder(order, session);
+    res.status(201).json(order);
+  }),
+
+  // GET /api/dine-in/orders/:sessionId — sessiya buyurtmalari
+  sessionOrders: asyncHandler(async (req, res) => {
+    const session = await DineInSession.findById(req.params.sessionId).lean();
+    if (!session) return res.status(404).json({ error: 'Sessiya topilmadi' });
+
+    const orders = await Order.find({ dineInSessionId: session._id })
+      .sort({ createdAt: -1 })
+      .lean();
+
+    const total = orders
+      .filter((o) => o.status !== 'cancelled')
+      .reduce((s, o) => s + (o.total || 0), 0);
+
+    res.json({ orders, total, sessionStatus: session.status });
+  }),
+
+  // PATCH /api/panel/dine-in/orders/:id/status
+  updateStatus: asyncHandler(async (req, res) => {
+    const allowed = ['accepted', 'preparing', 'ready', 'served', 'completed', 'cancelled'];
+    const status = req.body.status;
+
+    if (!allowed.includes(status)) {
+      return res.status(400).json({ error: 'Noto\u2018g\u2018ri holat' });
+    }
+
+    const order = await Order.findOneAndUpdate(
+      {
+        _id: req.params.id,
+        restaurantId: req.restaurantId,
+        fulfillment: 'dinein',
+      },
+      { status },
+      { new: true },
+    );
+
+    if (!order) return res.status(404).json({ error: 'Buyurtma topilmadi' });
+
+    const io = getIO();
+    // Mijozga — sessiya xonasi orqali
+    io?.to(`session:${order.dineInSessionId}`).emit('dinein:status', {
+      orderId: String(order._id),
+      status,
+      dineInNumber: order.dineInNumber,
+    });
+    io?.to(`restaurant:${order.restaurantId}`).emit('dinein:order', order);
+
+    res.json(order);
+  }),
+
+  // GET /api/panel/dine-in/orders — restoran paneli
+  panelOrders: asyncHandler(async (req, res) => {
+    const filter = {
+      restaurantId: req.restaurantId,
+      fulfillment: 'dinein',
+    };
+
+    if (req.query.active === '1') {
+      filter.status = { $nin: ['completed', 'cancelled'] };
+    }
+
+    const orders = await Order.find(filter)
+      .populate('tableId', 'tableNumber tableName')
+      .sort({ createdAt: -1 })
+      .limit(100)
+      .lean();
+
+    res.json(orders);
+  }),
+};
+
+/** Buyurtma yaratish — ikkala manba uchun umumiy. */
+async function createOrder({ session, calc, orderSource, waiter, note }) {
+  const dineInNumber = await nextDineInNumber(session.restaurantId);
+
+  const order = await Order.create({
+    restaurantId: session.restaurantId,
+    fulfillment: 'dinein',
+    orderSource,
+
+    tableId: session.tableId,
+    dineInSessionId: session._id,
+    deviceSessionId: session.deviceSessionId,
+    dineInNumber,
+
+    ...(waiter ? {
+      waiterId: waiter._id,
+      waiterName: [waiter.firstName, waiter.lastName].filter(Boolean).join(' '),
+    } : {}),
+
+    items: calc.items,
+    subtotal: calc.subtotal,
+    serviceFee: calc.serviceFee,
+    deliveryFee: 0,
+    total: calc.total,
+
+    status: 'pending',
+    note: String(note || '').slice(0, 300),
+    paymentMethod: 'cash',
+  });
+
+  // Sessiyaga bog'laymiz
+  await DineInSession.findByIdAndUpdate(session._id, {
+    $push: { orderIds: order._id },
+  });
+
+  await Table.findByIdAndUpdate(session.tableId, { status: 'ordering' });
+
+  return order;
+}
+
+/** Restoran paneliga xabar — ovoz va bildirishnoma uchun. */
+function notifyNewOrder(order, session) {
+  const io = getIO();
+  io?.to(`restaurant:${order.restaurantId}`).emit('dinein:new', {
+    orderId: String(order._id),
+    dineInNumber: order.dineInNumber,
+    tableId: String(session.tableId),
+    total: order.total,
+    orderSource: order.orderSource,
+    itemCount: order.items?.length || 0,
+  });
+}
