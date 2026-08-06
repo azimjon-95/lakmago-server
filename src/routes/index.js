@@ -115,6 +115,7 @@ router.post('/waiter/login', waiterController.login);
 router.get('/waiter/me', waiterAuth, waiterController.me);
 router.get('/waiter/tables', waiterAuth, waiterController.myTables);
 router.post('/waiter/orders', waiterAuth, dineInOrderController.createFromWaiter);
+router.get('/waiter/orders', waiterAuth, dineInOrderController.waiterOrders);
 router.get('/waiter/requests', waiterAuth, dineInLiveController.listRequests);
 router.patch('/waiter/requests/:id', waiterAuth, dineInLiveController.updateRequest);
 router.get('/waiter/menu/:restaurantId', waiterAuth, dineInOrderController.menu);

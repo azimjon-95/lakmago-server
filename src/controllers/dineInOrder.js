@@ -189,6 +189,48 @@ export const dineInOrderController = {
     res.json({ orders, total, sessionStatus: session.status });
   }),
 
+  // GET /api/waiter/orders — ofitsiant o'z buyurtmalari
+  waiterOrders: asyncHandler(async (req, res) => {
+    const filter = { waiterId: req.waiterId, fulfillment: 'dinein' };
+
+    if (req.query.active === '1') {
+      filter.status = { $nin: ['completed', 'cancelled'] };
+    }
+
+    const orders = await Order.find(filter)
+      .populate('tableId', 'tableNumber tableName')
+      .sort({ createdAt: -1 })
+      .limit(Number(req.query.limit) || 50)
+      .lean();
+
+    // Bugungi jamlanma
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+
+    const today = await Order.aggregate([
+      {
+        $match: {
+          waiterId: req.waiterId,
+          status: { $ne: 'cancelled' },
+          createdAt: { $gte: todayStart },
+        },
+      },
+      {
+        $group: {
+          _id: null,
+          orders: { $sum: 1 },
+          sales: { $sum: '$total' },
+          serviceFee: { $sum: '$serviceFee' },
+        },
+      },
+    ]);
+
+    res.json({
+      orders,
+      today: today[0] || { orders: 0, sales: 0, serviceFee: 0 },
+    });
+  }),
+
   // PATCH /api/panel/dine-in/orders/:id/status
   updateStatus: asyncHandler(async (req, res) => {
     const allowed = ['accepted', 'preparing', 'ready', 'served', 'completed', 'cancelled'];
@@ -243,7 +285,12 @@ export const dineInOrderController = {
     res.json(order);
   }),
 
-  // GET /api/panel/dine-in/orders — restoran paneli
+  /**
+   * GET /api/panel/dine-in/orders
+   *
+   * active=1 — faqat faol (jonli sahifa uchun)
+   * Aks holda tarix: sahifalash, sana va manba filtri.
+   */
   panelOrders: asyncHandler(async (req, res) => {
     const filter = {
       restaurantId: req.restaurantId,
@@ -252,15 +299,61 @@ export const dineInOrderController = {
 
     if (req.query.active === '1') {
       filter.status = { $nin: ['completed', 'cancelled'] };
+
+      const orders = await Order.find(filter)
+        .populate('tableId', 'tableNumber tableName')
+        .sort({ createdAt: -1 })
+        .limit(100)
+        .lean();
+
+      return res.json(orders);
     }
 
-    const orders = await Order.find(filter)
-      .populate('tableId', 'tableNumber tableName')
-      .sort({ createdAt: -1 })
-      .limit(100)
-      .lean();
+    // ===== TARIX =====
+    if (req.query.status) filter.status = req.query.status;
+    if (req.query.source) filter.orderSource = req.query.source;
 
-    res.json(orders);
+    if (req.query.from || req.query.to) {
+      filter.createdAt = {};
+      if (req.query.from) filter.createdAt.$gte = new Date(req.query.from);
+      if (req.query.to) {
+        const to = new Date(req.query.to);
+        to.setHours(23, 59, 59, 999);
+        filter.createdAt.$lte = to;
+      }
+    }
+
+    const page = Math.max(1, Number(req.query.page) || 1);
+    const limit = Math.min(100, Number(req.query.limit) || 25);
+
+    const [orders, total, totals] = await Promise.all([
+      Order.find(filter)
+        .populate('tableId', 'tableNumber tableName')
+        .sort({ createdAt: -1 })
+        .skip((page - 1) * limit)
+        .limit(limit)
+        .lean(),
+      Order.countDocuments(filter),
+      Order.aggregate([
+        { $match: { ...filter, status: { $ne: 'cancelled' } } },
+        {
+          $group: {
+            _id: null,
+            revenue: { $sum: '$total' },
+            serviceFee: { $sum: '$serviceFee' },
+            discount: { $sum: '$promotionDiscount' },
+          },
+        },
+      ]),
+    ]);
+
+    res.json({
+      orders,
+      page,
+      pages: Math.ceil(total / limit),
+      total,
+      summary: totals[0] || { revenue: 0, serviceFee: 0, discount: 0 },
+    });
   }),
 };
 
