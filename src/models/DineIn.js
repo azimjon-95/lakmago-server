@@ -48,15 +48,22 @@ const dineInConfigSchema = new Schema(
     // Global stop list ishlatilsinmi
     useGlobalStopList: { type: Boolean, default: true },
 
-    // QR dizayni — barcha stollarga umumiy
+    // QR dizayni — barcha stollarga umumiy.
+    // Dizayn (ranglar, joylashuv) QAT'IY bir xil; faqat rasm va
+    // matnlar restoran tomonidan o'zgartiriladi.
     qrTheme: {
-      backgroundColor: { type: String, default: '#1C1815' },
-      backgroundImage: { type: String, default: '' },
-      textColor: { type: String, default: '#F7F2EA' },
-      accentColor: { type: String, default: '#F5A524' },
+      backgroundImage: { type: String, default: '' },   // yuqoridagi foto
       logoUrl: { type: String, default: '' },
-      headline: { type: String, default: '' },      // "Menyuni oching"
-      footnote: { type: String, default: '' },      // "Skanerlang"
+      eyebrow: { type: String, default: '' },           // "DIGITAL"
+      menuWord: { type: String, default: '' },          // "MENYU"
+      headline: { type: String, default: '' },          // "QR KODNI SKANERLANG"
+      footnote: { type: String, default: '' },          // pastki izoh
+
+      // ⚠️ Eskirgan — dizayn bir xil bo'lgani uchun ishlatilmaydi.
+      // Faqat eski yozuvlar buzilmasligi uchun qoldirilgan.
+      backgroundColor: { type: String, default: '' },
+      textColor: { type: String, default: '' },
+      accentColor: { type: String, default: '' },
     },
   },
   { timestamps: true },

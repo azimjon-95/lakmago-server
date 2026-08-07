@@ -113,15 +113,15 @@ export const dineInController = {
 
   // PATCH /api/panel/dine-in/theme — QR dizayni
   updateTheme: asyncHandler(async (req, res) => {
+    // Dizayn qat'iy — faqat rasm va matnlar o'zgaradi.
     const schema = z.object({
-      backgroundColor: z.string().max(30).optional(),
       backgroundImage: z.string().max(500).optional(),
-      textColor: z.string().max(30).optional(),
-      accentColor: z.string().max(30).optional(),
       logoUrl: z.string().max(500).optional(),
-      headline: z.string().max(60).optional(),
-      footnote: z.string().max(80).optional(),
-    });
+      eyebrow: z.string().max(16).optional(),
+      menuWord: z.string().max(16).optional(),
+      headline: z.string().max(44).optional(),
+      footnote: z.string().max(120).optional(),
+    }).strip();   // eski rang maydonlari kelsa — e'tiborsiz qoldiriladi
 
     const parsed = schema.safeParse(req.body);
     if (!parsed.success) {
