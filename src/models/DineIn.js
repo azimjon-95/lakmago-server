@@ -96,6 +96,15 @@ const tableSchema = new Schema(
 
     isActive: { type: Boolean, default: true },
 
+    // ===== ZAL XARITASI =====
+    // Stolning zaldagi o'rni (grid koordinatasi)
+    x: { type: Number, default: 0 },
+    y: { type: Number, default: 0 },
+    shape: { type: String, enum: ['round', 'square', 'rect'], default: 'round' },
+
+    // Hozir nechta mijoz o'tirgan
+    guestCount: { type: Number, default: 0 },
+
     // Statistika
     totalSessions: { type: Number, default: 0 },
     lastSessionAt: { type: Date, default: null },
@@ -136,6 +145,9 @@ const dineInSessionSchema = new Schema(
       default: 'active',
       index: true,
     },
+
+    // Nechta mijoz o'tirgan — ofitsiant belgilaydi
+    guestCount: { type: Number, default: 0 },
 
     // Sessiya davomida qilingan buyurtmalar
     orderIds: [{ type: Schema.Types.ObjectId, ref: 'Order' }],

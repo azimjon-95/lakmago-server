@@ -274,11 +274,104 @@ export const waiterController = {
       orderMap.get(k).push(o);
     }
 
-    res.json(tables.map((t) => ({
-      ...t,
-      session: sessionMap.get(String(t._id)) || null,
-      activeOrders: orderMap.get(String(t._id)) || [],
-    })));
+    res.json(tables.map((t) => {
+      const session = sessionMap.get(String(t._id)) || null;
+      const tableOrders = orderMap.get(String(t._id)) || [];
+
+      return {
+        ...t,
+        session,
+        activeOrders: tableOrders,
+        // Zal xaritasi uchun
+        guestCount: session?.guestCount || t.guestCount || 0,
+        orderTotal: tableOrders.reduce((s, o) => s + (o.total || 0), 0),
+        isBusy: Boolean(session),
+      };
+    }));
+  }),
+
+  /**
+   * PATCH /api/waiter/tables/:id/guests  { count }
+   *
+   * Stolda nechta mijoz o'tirganini belgilaydi.
+   */
+  setGuests: asyncHandler(async (req, res) => {
+    const count = Math.max(0, Math.min(50, Number(req.body.count) || 0));
+
+    const table = await Table.findOne({
+      _id: req.params.id,
+      restaurantId: req.restaurantId,
+    });
+    if (!table) return res.status(404).json({ error: 'Stol topilmadi' });
+
+    // Ofitsiantga biriktirilganmi
+    const waiter = await Waiter.findById(req.waiterId).select('tableIds').lean();
+    if (waiter?.tableIds?.length) {
+      const allowed = waiter.tableIds.some((id) => String(id) === String(table._id));
+      if (!allowed) {
+        return res.status(403).json({ error: 'Bu stol sizga biriktirilmagan' });
+      }
+    }
+
+    table.guestCount = count;
+    if (count > 0 && table.status === 'available') table.status = 'occupied';
+    await table.save();
+
+    // Faol sessiyaga ham yozamiz
+    await DineInSession.updateOne(
+      { tableId: table._id, status: 'active' },
+      { guestCount: count },
+    );
+
+    getIO()?.to(`restaurant:${req.restaurantId}`).emit('table:update', {
+      tableId: String(table._id),
+      status: table.status,
+      guestCount: count,
+    });
+
+    res.json({ guestCount: count, status: table.status });
+  }),
+
+  /**
+   * GET /api/waiter/tables/:id — bitta stol tafsiloti
+   *
+   * Buyurtmalar, taomlar, hisob — hammasi bir so'rovda.
+   */
+  tableDetail: asyncHandler(async (req, res) => {
+    const table = await Table.findOne({
+      _id: req.params.id,
+      restaurantId: req.restaurantId,
+    }).lean();
+    if (!table) return res.status(404).json({ error: 'Stol topilmadi' });
+
+    const session = await DineInSession.findOne({
+      tableId: table._id, status: 'active',
+    }).lean();
+
+    const orders = session
+      ? await Order.find({ dineInSessionId: session._id })
+          .sort({ createdAt: -1 })
+          .lean()
+      : [];
+
+    const active = orders.filter((o) => o.status !== 'cancelled');
+    const total = active.reduce((s, o) => s + (o.total || 0), 0);
+    const serviceFee = active.reduce((s, o) => s + (o.serviceFee || 0), 0);
+
+    res.json({
+      table: {
+        ...table,
+        guestCount: session?.guestCount || table.guestCount || 0,
+      },
+      session,
+      orders,
+      summary: {
+        orders: active.length,
+        subtotal: active.reduce((s, o) => s + (o.subtotal || 0), 0),
+        serviceFee,
+        total,
+      },
+    });
   }),
 };
 
