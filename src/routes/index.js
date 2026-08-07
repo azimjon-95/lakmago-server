@@ -217,6 +217,7 @@ router.post('/panel/catalog/:id/add', auth, requireRole('restaurant'), catalogPr
 router.get('/maps/config', mapsController.config);
 router.get('/maps/geocode', mapsController.geocode);
 router.get('/maps/reverse', mapsController.reverse);
+router.get('/maps/delivery-quote', mapsController.deliveryQuote);
 
 // ===== Moliya (admin) =====
 router.get('/admin/billing/overview', auth, requireRole('admin'), billingController.overview);

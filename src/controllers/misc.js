@@ -4,7 +4,9 @@ import { signToken, verifyTelegramInitData } from '../middleware/auth.js';
 import { Banner } from '../models/User.js';
 import { Restaurant } from '../models/Restaurant.js';
 import { Dish } from '../models/Dish.js';
-import { calcDeliveryFee, calcServiceFee, checkMinOrder, isRestaurantOpen } from '../services/orderPricing.js';
+import { calcDeliveryFee, calcServiceFee, checkMinOrder } from '../services/orderPricing.js';
+import { isRestaurantOpen as isOpenTz } from '../services/restaurantTime.js';
+import { quoteDelivery } from '../services/deliveryEngine.js';
 import { applyPromotion, markPromotionUsed } from '../services/promotions.js';
 import { User } from '../models/User.js';
 import { Order } from '../models/Order.js';
@@ -191,7 +193,7 @@ export const orderController = {
 
     const restIds = orders.map((o) => o.restaurantId);
     const restDocs = await Restaurant.find({ _id: { $in: restIds } })
-      .select('name deliveryFee freeDeliveryThreshold minOrderAmount serviceFeePercent serviceFeeMin serviceFeeMax prepMinutes openTime closeTime isActive isBlocked isApproved pickupEnabled')
+      .select('name deliveryFee freeDeliveryThreshold minOrderAmount serviceFeePercent serviceFeeMin serviceFeeMax prepMinutes openTime closeTime timezone workingDays isActive isBlocked isApproved pickupEnabled lat lng delivery')
       .lean();
     const restMap = new Map(restDocs.map((r) => [String(r._id), r]));
 
@@ -213,7 +215,7 @@ export const orderController = {
       // Ish vaqti — yopiq bo'lsa buyurtma qabul qilinmaydi.
       // Belgilangan vaqtga buyurtma bundan mustasno: mijoz
       // ochilish vaqtiga rejalashtirishi mumkin.
-      if (timingMode !== 'scheduled' && !isRestaurantOpen(rest)) {
+      if (timingMode !== 'scheduled' && !isOpenTz(rest)) {
         return res.status(400).json({
           error: `${rest.name} hozir yopiq`
             + (rest.openTime ? ` · Ish vaqti ${rest.openTime}–${rest.closeTime}` : ''),
@@ -264,7 +266,28 @@ export const orderController = {
       }
 
       // Yetkazish va xizmat haqini QAYTA hisoblaymiz
-      o.deliveryFee = calcDeliveryFee(o.subtotal, rest, isPickup);
+      // ===== YETKAZISH NARXI =====
+      // Masofa bo'yicha hisoblanadi. Koordinata yo'q bo'lsa
+      // eski usul (freeDeliveryThreshold) ishlaydi.
+      if (!isPickup && rest.delivery?.type && addressLat && addressLng) {
+        const quote = await quoteDelivery(rest, {
+          lat: addressLat, lng: addressLng,
+        });
+
+        if (!quote.available) {
+          return res.status(400).json({
+            error: quote.reason || 'Bu manzilga yetkazib berilmaydi',
+            code: quote.code || 'DELIVERY_UNAVAILABLE',
+            restaurantId: String(o.restaurantId),
+            distanceKm: quote.distanceKm,
+          });
+        }
+
+        o.deliveryFee = quote.price;
+        o._distanceKm = quote.distanceKm;
+      } else {
+        o.deliveryFee = calcDeliveryFee(o.subtotal, rest, isPickup);
+      }
       o.serviceFee = calcServiceFee(o.subtotal, rest);
 
       // Aksiya — SERVERDA hisoblanadi, client qiymatiga ishonilmaydi
@@ -353,6 +376,7 @@ export const orderController = {
         addressLat: addressLat ?? null,
         addressLng: addressLng ?? null,
         addressNote: addressNote || '',
+        ...(o._distanceKm != null ? { distanceKm: o._distanceKm } : {}),
         etaMinutes: o.etaMinutes,
         // Kuryer faqat yetkazishda tayinlanadi
         ...(isPickup ? {} : { courierName: COURIERS[Math.floor(Math.random() * COURIERS.length)] }),

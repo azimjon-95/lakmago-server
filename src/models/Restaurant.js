@@ -68,6 +68,43 @@ const restaurantSchema = new Schema(
     // Minimal buyurtma summasi (so'mda)
     // Minimal buyurtma summasi (taomlar). 0 = cheklovsiz
     minOrderAmount: { type: Number, default: 0 },
+
+    // ===== ISH VAQTI =====
+    // Vaqt zonasi qat'iy — qurilma vaqtiga bog'lanmaydi.
+    // Rossiyadan kirilsa ham O'zbekiston vaqti bo'yicha
+    // hisoblanadi.
+    timezone: { type: String, default: 'Asia/Tashkent' },
+
+    // Ish kunlari. Bo'sh bo'lsa — har kuni.
+    workingDays: [{
+      type: String,
+      enum: ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'],
+    }],
+
+    // ===== YETKAZISH TIZIMI =====
+    delivery: {
+      // FREE — bepul, PAID — masofaga qarab, DISABLED — yo'q
+      type: {
+        type: String,
+        enum: ['free', 'paid', 'disabled'],
+        default: 'free',
+      },
+
+      // Yetkazish radiusi (km). Undan uzoqqa buyurtma qabul
+      // qilinmaydi.
+      maxDistanceKm: { type: Number, default: 10 },
+
+      pricing: {
+        // Shu masofagacha bepul
+        freeKm: { type: Number, default: 0 },
+        // Boshlang'ich narx
+        basePrice: { type: Number, default: 0 },
+        // Bepul masofadan keyin har km uchun
+        extraKmPrice: { type: Number, default: 0 },
+        // Eng ko'p yetkazish narxi (0 = cheklovsiz)
+        maxPrice: { type: Number, default: 0 },
+      },
+    },
     // Shu summadan boshlab yetkazish bepul. 0 = doim pullik
     freeDeliveryThreshold: { type: Number, default: 0 },
 

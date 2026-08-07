@@ -57,6 +57,44 @@ export const mapsController = {
     }
   }),
 
+  /**
+   * GET /api/maps/delivery-quote?restaurantId=&lat=&lng=
+   *
+   * Masofa va yetkazish narxi. Buyurtma berishdan oldin
+   * mijozga ko'rsatiladi.
+   */
+  deliveryQuote: asyncHandler(async (req, res) => {
+    const { Restaurant } = await import('../models/Restaurant.js');
+    const { quoteDelivery } = await import('../services/deliveryEngine.js');
+
+    const lat = Number(req.query.lat);
+    const lng = Number(req.query.lng);
+
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+      return res.status(400).json({ error: 'Koordinata noto\u2018g\u2018ri' });
+    }
+
+    const restaurant = await Restaurant.findById(req.query.restaurantId)
+      .select('name lat lng delivery deliveryFee')
+      .lean();
+
+    if (!restaurant) {
+      return res.status(404).json({ error: 'Restoran topilmadi' });
+    }
+
+    const quote = await quoteDelivery(restaurant, { lat, lng });
+
+    res.json({
+      restaurantId: String(restaurant._id),
+      restaurantName: restaurant.name,
+      distanceKm: quote.distanceKm,
+      deliveryAvailable: quote.available,
+      deliveryPrice: quote.price,
+      ...(quote.reason ? { reason: quote.reason, code: quote.code } : {}),
+      ...(quote.breakdown ? { breakdown: quote.breakdown } : {}),
+    });
+  }),
+
   // GET /api/maps/reverse?lat=&lng= — koordinatadan manzil
   reverse: asyncHandler(async (req, res) => {
     const lat = Number(req.query.lat);

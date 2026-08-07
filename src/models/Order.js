@@ -82,6 +82,8 @@ const orderSchema = new Schema(
     addressLng: { type: Number, default: null },
     // Manzil tafsiloti (podez, qavat, xonadon)
     addressNote: { type: String, default: '' },
+    // Restorandan manzilgacha masofa (km)
+    distanceKm: { type: Number, default: null },
 
     // ===== VAQT REJALASHTIRISH =====
     // 'asap' — tayyor bo'lishi bilan (standart), 'scheduled' — belgilangan vaqtga

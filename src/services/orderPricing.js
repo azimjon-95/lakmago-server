@@ -108,15 +108,5 @@ function toMinutes(hhmm) {
   return h * 60 + min;
 }
 
-export function isRestaurantOpen(restaurant, now = new Date()) {
-  const open = toMinutes(restaurant?.openTime);
-  const close = toMinutes(restaurant?.closeTime);
-
-  if (open === null || close === null) return true;
-  if (open === close) return true;
-
-  const cur = now.getHours() * 60 + now.getMinutes();
-
-  if (open < close) return cur >= open && cur < close;
-  return cur >= open || cur < close;
-}
+// Eski nom — vaqt zonasi bilan ishlaydigan versiyaga yo'naltiriladi
+export { isRestaurantOpen } from './restaurantTime.js';

@@ -315,6 +315,18 @@ export const restaurantPanelController = {
       lng: z.number().min(-180).max(180).nullable().optional(),
 
       // Ish vaqti
+      timezone: z.string().max(50).optional(),
+      workingDays: z.array(z.enum(['mon','tue','wed','thu','fri','sat','sun'])).optional(),
+      delivery: z.object({
+        type: z.enum(['free','paid','disabled']).optional(),
+        maxDistanceKm: z.number().min(0).max(200).optional(),
+        pricing: z.object({
+          freeKm: z.number().min(0).max(200).optional(),
+          basePrice: z.number().min(0).max(1000000).optional(),
+          extraKmPrice: z.number().min(0).max(1000000).optional(),
+          maxPrice: z.number().min(0).max(1000000).optional(),
+        }).optional(),
+      }).optional(),
       openTime: z.string().regex(/^\d{2}:\d{2}$/).optional(),
       closeTime: z.string().regex(/^\d{2}:\d{2}$/).optional(),
 
