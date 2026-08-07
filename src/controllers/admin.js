@@ -27,18 +27,67 @@ export const adminController = {
     const totalRevenue = revenueAgg[0]?.total ?? 0;
     const commission = Math.round(totalRevenue * 0.12); // 12% platforma komissiyasi
 
-    // Bugungi buyurtmalar
+    // ===== BUGUN =====
     const startOfDay = new Date();
     startOfDay.setHours(0, 0, 0, 0);
-    const todayOrders = await Order.countDocuments({ createdAt: { $gte: startOfDay } });
+    const startOfYesterday = new Date(startOfDay.getTime() - 864e5);
 
-    // Eng ko'p buyurtma qilingan taomlar (psixologiya/marketing uchun)
-    const topDishes = await Order.aggregate([
-      { $unwind: '$items' },
-      { $group: { _id: '$items.name', count: { $sum: '$items.quantity' }, revenue: { $sum: { $multiply: ['$items.unitPrice', '$items.quantity'] } } } },
-      { $sort: { count: -1 } },
-      { $limit: 8 },
+    // Hali yopilmagan — diqqat talab qiladigan buyurtmalar
+    const OPEN = ['pending', 'accepted', 'preparing', 'ready', 'delivering'];
+
+    const dayShape = (from, to) => ([
+      { $match: to ? { createdAt: { $gte: from, $lt: to } } : { createdAt: { $gte: from } } },
+      {
+        $group: {
+          _id: null,
+          orders: { $sum: 1 },
+          delivered: { $sum: { $cond: [{ $eq: ['$status', 'delivered'] }, 1, 0] } },
+          cancelled: { $sum: { $cond: [{ $eq: ['$status', 'cancelled'] }, 1, 0] } },
+          open: { $sum: { $cond: [{ $in: ['$status', OPEN] }, 1, 0] } },
+          revenue: { $sum: { $cond: [{ $eq: ['$status', 'delivered'] }, '$total', 0] } },
+        },
+      },
     ]);
+
+    const settings = await getSettings();
+    const pct = settings.commissionMode === 'none' ? 0 : settings.commissionPercent;
+
+    const [todayAgg, yesterdayAgg, byRestaurant] = await Promise.all([
+      Order.aggregate(dayShape(startOfDay)),
+      Order.aggregate(dayShape(startOfYesterday, startOfDay)),
+
+      // Bugun qaysi muassasaga ko'p taom berilyapti
+      Order.aggregate([
+        { $match: { createdAt: { $gte: startOfDay }, status: { $ne: 'cancelled' } } },
+        { $unwind: '$items' },
+        {
+          $group: {
+            _id: '$restaurantId',
+            name: { $first: '$restaurantName' },
+            dishes: { $sum: '$items.quantity' },
+            revenue: { $sum: { $multiply: ['$items.unitPrice', '$items.quantity'] } },
+            orderIds: { $addToSet: '$_id' },
+            openIds: {
+              $addToSet: { $cond: [{ $in: ['$status', OPEN] }, '$_id', '$$REMOVE'] },
+            },
+          },
+        },
+        {
+          $project: {
+            name: 1, dishes: 1, revenue: 1,
+            orders: { $size: '$orderIds' },
+            open: { $size: '$openIds' },
+          },
+        },
+        { $sort: { dishes: -1 } },
+      ]),
+    ]);
+
+    const empty = { orders: 0, delivered: 0, cancelled: 0, open: 0, revenue: 0 };
+    const t = todayAgg[0] || empty;
+    const y = yesterdayAgg[0] || empty;
+
+    const dishesToday = byRestaurant.reduce((s, r) => s + r.dishes, 0);
 
     res.json({
       restaurants,
@@ -46,10 +95,33 @@ export const adminController = {
       pendingRestaurants: restaurants - activeRestaurants,
       users,
       orders,
-      todayOrders,
+      todayOrders: t.orders,
       totalRevenue,
       commission,
-      topDishes: topDishes.map((d) => ({ name: d._id, count: d.count, revenue: d.revenue })),
+      commissionPercent: pct,
+
+      today: {
+        orders: t.orders,
+        delivered: t.delivered,
+        cancelled: t.cancelled,
+        open: t.open,
+        dishes: dishesToday,
+        revenue: t.revenue,
+        commission: Math.round(t.revenue * (pct / 100)),
+        avgCheck: t.delivered ? Math.round(t.revenue / t.delivered) : 0,
+      },
+      yesterday: { orders: y.orders, revenue: y.revenue },
+
+      // Bugungi reyting — eng ko'p taom bergan muassasalar
+      todayByRestaurant: byRestaurant.slice(0, 10).map((r) => ({
+        id: String(r._id),
+        name: r.name || 'Nomsiz',
+        dishes: r.dishes,
+        orders: r.orders,
+        open: r.open,
+        revenue: r.revenue,
+      })),
+      activeRestaurantsToday: byRestaurant.length,
     });
   }),
 
