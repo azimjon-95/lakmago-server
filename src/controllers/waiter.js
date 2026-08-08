@@ -151,8 +151,19 @@ export const waiterController = {
       return res.status(400).json({ error: 'Login va parol kiriting' });
     }
 
-    const waiter = await Waiter.findOne({ login: String(login).toLowerCase() });
+    // trim: eski yozuvlarda (sxemaga trim qo'shilishidan oldin)
+    // login oxirida bo'sh joy qolgan bo'lishi mumkin
+    const loginKey = String(login).trim().toLowerCase();
+    const waiter = await Waiter.findOne({ login: loginKey });
+
     if (!waiter || !(await bcrypt.compare(password, waiter.passwordHash))) {
+      // Javobda sabab ko'rsatilmaydi — akkaunt bor-yo'qligini
+      // bilib olishga yo'l qo'ymaslik uchun. Lekin restoran
+      // nosozlikni topa olishi kerak, shuning uchun logga yozamiz.
+      console.warn(
+        '[waiter:login] muvaffaqiyatsiz —',
+        waiter ? `login topildi (${loginKey}), parol mos emas` : `bunday login yo'q: "${loginKey}"`,
+      );
       return res.status(401).json({ error: 'Login yoki parol noto\u2018g\u2018ri' });
     }
 
