@@ -229,6 +229,49 @@ async function askRating(chatId, order) {
   });
 }
 
+/**
+ * Restoran buyurtmani "yetkazildi" deb belgilaganda baho so'rash.
+ *
+ * Avval baho faqat bitta yo'l bilan so'ralardi: mijoz botdagi
+ * "Oldim" tugmasini bosganda. Lekin odatda restoran o'zi
+ * "Yetkazildi" ni bosadi — u holda buyurtma 'delivering' dan
+ * chiqib ketadi, checkDeliveries uni boshqa ko'rmaydi va mijoz
+ * hech qachon baho so'ralmaydi. Olib ketish (pickup) va zal
+ * buyurtmalarida esa 'delivering' holati umuman bo'lmaydi.
+ */
+export async function askRatingForOrder(orderOrId) {
+  if (!config.telegramBotToken) return false;
+
+  const order = typeof orderOrId === 'object' && orderOrId?._id
+    ? orderOrId
+    : await Order.findById(orderOrId);
+  if (!order) return false;
+
+  // Zal buyurtmasida mijoz hisobi bo'lmaydi
+  if (!order.userId) return false;
+
+  if (!order.deliveryCheck) {
+    order.deliveryCheck = {
+      askedCount: 0, lastAskedAt: null, confirmed: false,
+      confirmedAt: null, reviewAsked: false, pendingRating: null,
+    };
+  }
+
+  // Ikki marta so'ramaymiz
+  if (order.deliveryCheck.reviewAsked) return false;
+
+  const user = await User.findById(order.userId).select('telegramId').lean();
+  if (!user?.telegramId) return false;
+
+  order.deliveryCheck.reviewAsked = true;
+  order.deliveryCheck.confirmed = true;
+  order.deliveryCheck.confirmedAt = order.deliveryCheck.confirmedAt || new Date();
+  await order.save();
+
+  await askRating(user.telegramId, order);
+  return true;
+}
+
 // ===== 5. BAHO JAVOBI =====
 export async function handleRatingResponse(cq) {
   const data = cq.data || '';

@@ -247,6 +247,8 @@ export const restaurantPanelController = {
       preparing: '👨‍🍳 Buyurtmangiz tayyorlanmoqda',
       ready: '🍽 Buyurtmangiz tayyor',
       delivering: '🚴 Kuryer buyurtmangizni olib ketdi',
+      // Yetkazildi xabari yo'q edi — mijoz oxirgi holatni bilmasdi
+      delivered: '✅ Buyurtmangiz yetkazildi. Yoqimli ishtaha!',
       cancelled: '❌ Buyurtmangiz bekor qilindi',
     };
     // ===== HISOB-KITOB =====
@@ -255,6 +257,13 @@ export const restaurantPanelController = {
       const { settleOrder } = await import('../services/billing.js');
       await settleOrder(order._id).catch((e) =>
         console.error('[billing] settleOrder:', e.message));
+
+      // Baho so'raymiz. Avval bu faqat mijoz botda "Oldim" ni
+      // bosganda ishlardi; restoran o'zi yetkazildi deb
+      // belgilaganda (odatdagi yo'l) hech narsa so'ralmasdi.
+      const { askRatingForOrder } = await import('../services/deliveryCheck.js');
+      askRatingForOrder(order).catch((e) =>
+        console.error('[rating] askRatingForOrder:', e.message));
     }
 
     // Bekor qilindi → to'langan bo'lsa pul qaytariladi
