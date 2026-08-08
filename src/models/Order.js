@@ -14,7 +14,15 @@ const orderItemSchema = new Schema(
 
 const orderSchema = new Schema(
   {
-    userId: { type: Schema.Types.ObjectId, ref: 'User', required: true, index: true },
+    // Zal (dine-in) buyurtmasida mijoz login qilmaydi: QR skanerlagan
+    // mehmon ham, ofitsiant kiritgan buyurtma ham userId'siz keladi.
+    // Shuning uchun majburiylik faqat yetkazish/olib ketishga tegishli.
+    userId: {
+      type: Schema.Types.ObjectId,
+      ref: 'User',
+      required: function () { return this.fulfillment !== 'dinein'; },
+      index: true,
+    },
     restaurantId: { type: Schema.Types.ObjectId, ref: 'Restaurant', required: true, index: true },
     restaurantName: { type: String, required: true },
 

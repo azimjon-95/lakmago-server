@@ -2,6 +2,7 @@ import { asyncHandler } from '../middleware/error.js';
 import { Order } from '../models/Order.js';
 import { Table, DineInSession, DineInConfig } from '../models/DineIn.js';
 import { Waiter } from '../models/Waiter.js';
+import { Restaurant } from '../models/Restaurant.js';
 import { calcDineInOrder, nextDineInNumber, getDineInMenu } from '../services/dineInPricing.js';
 import { getIO } from '../sockets/io.js';
 
@@ -361,8 +362,13 @@ export const dineInOrderController = {
 async function createOrder({ session, calc, orderSource, waiter, note, userId, bonusUsed }) {
   const dineInNumber = await nextDineInNumber(session.restaurantId);
 
+  // restaurantName sxemada majburiy — berilmasa buyurtma saqlanmaydi
+  const restaurant = await Restaurant.findById(session.restaurantId)
+    .select('name').lean();
+
   const order = await Order.create({
     restaurantId: session.restaurantId,
+    restaurantName: restaurant?.name || 'Restoran',
     fulfillment: 'dinein',
     orderSource,
 
