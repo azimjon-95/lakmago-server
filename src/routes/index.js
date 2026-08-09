@@ -4,6 +4,7 @@ import { bannerController, authController, orderController } from '../controller
 import { reservationController, paymentController } from '../controllers/services.js';
 import { adminController } from '../controllers/admin.js';
 import { panelAuthController } from '../controllers/panelAuth.js';
+import { notificationController } from '../controllers/notifications.js';
 import { restaurantPanelController } from '../controllers/restaurantPanel.js';
 import { uploadController } from '../controllers/upload.js';
 import { referralController } from '../controllers/referralController.js';
@@ -123,6 +124,10 @@ router.post('/waiter/tables/:tableId/close', waiterAuth, dineInLiveController.cl
 router.get('/waiter/requests', waiterAuth, dineInLiveController.listRequests);
 router.patch('/waiter/requests/:id', waiterAuth, dineInLiveController.updateRequest);
 router.get('/waiter/menu/:restaurantId', waiterAuth, dineInOrderController.menu);
+
+// Bildirishnomalar — admin ham, restoran ham (auth ichida ajratiladi)
+router.get('/panel/notifications', auth, notificationController.list);
+router.patch('/panel/notifications/:id', auth, notificationController.updateStatus);
 
 // Restoran paneli
 router.get('/panel/dine-in', ...R, dineInController.getConfig);

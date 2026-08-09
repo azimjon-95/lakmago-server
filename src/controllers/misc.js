@@ -11,6 +11,7 @@ import { applyPromotion, markPromotionUsed } from '../services/promotions.js';
 import { User } from '../models/User.js';
 import { Order } from '../models/Order.js';
 import { getIO } from '../sockets/io.js';
+import { notify } from '../services/notifications.js';
 import { notifyUser } from '../services/telegram.js';
 import { parseReferralCode, attachReferral, rewardReferralIfSubscribed, checkChannelSubscription, buildReferralLink } from '../services/referral.js';
 
@@ -392,6 +393,20 @@ export const orderController = {
       // Real-time: restoranга yangi buyurtma (signal chalinadi)
       io?.to(`restaurant:${o.restaurantId}`).emit('order:new', doc);
       io?.to('admin').emit('order:new', doc);
+
+      // Markaziy bildirishnoma — bazaga yoziladi, socket uzilsa
+      // qayta ulanганda yo'qolmaydi
+      notify({
+        notificationId: `order:${doc._id}`,
+        audience: 'restaurant',
+        restaurantId: o.restaurantId,
+        type: 'order',
+        title: 'Yangi buyurtma',
+        body: `${doc.items?.length || 0} ta taom · ${doc.total?.toLocaleString('ru-RU') || 0} so'm`,
+        refType: 'order',
+        refId: doc._id,
+        meta: { fulfillment: doc.fulfillment, total: doc.total },
+      }).catch((e) => console.error('[notify:order]', e.message));
     }
 
     res.status(201).json({ groupId, orders: created, bonusUsed: bonusToUse });

@@ -3,6 +3,7 @@ import { asyncHandler } from '../middleware/error.js';
 import { Reservation } from '../models/Reservation.js';
 import { Order } from '../models/Order.js';
 import { getIO } from '../sockets/io.js';
+import { notify } from '../services/notifications.js';
 import { notifyUser } from '../services/telegram.js';
 
 const reservationSchema = z.object({
@@ -51,6 +52,18 @@ export const reservationController = {
       guests: reservation.guests,
     });
     getIO()?.to('admin').emit('reservation:new', { reservationId: String(reservation._id) });
+
+    notify({
+      notificationId: `reservation:${reservation._id}`,
+      audience: 'restaurant',
+      restaurantId: parsed.data.restaurantId,
+      type: 'reservation',
+      title: 'Yangi stol broni',
+      body: `${reservation.name} · ${reservation.date} ${reservation.time} · ${reservation.guests} kishi`,
+      refType: 'reservation',
+      refId: reservation._id,
+      meta: { guests: reservation.guests, phone: reservation.phone },
+    }).catch((e) => console.error('[notify:reservation]', e.message));
 
     res.status(201).json(reservation);
   }),

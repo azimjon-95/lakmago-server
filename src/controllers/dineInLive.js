@@ -4,6 +4,7 @@ import { Order } from '../models/Order.js';
 import { Waiter } from '../models/Waiter.js';
 import { Ledger } from '../models/Ledger.js';
 import { getIO } from '../sockets/io.js';
+import { notify } from '../services/notifications.js';
 
 /**
  * Zal jonli boshqaruvi: so'rovlar, sessiya, statistika, chek.
@@ -77,6 +78,19 @@ export const dineInLiveController = {
 
     // Restoran paneli va ofitsiantlar
     io?.to(`restaurant:${session.restaurantId}`).emit('dinein:request', payload);
+
+    const tableLabel = table?.tableName || `Stol ${table?.tableNumber ?? ''}`;
+    notify({
+      notificationId: `request:${request._id}`,
+      audience: 'restaurant',
+      restaurantId: session.restaurantId,
+      type: type === 'bill' ? 'bill_request' : 'waiter_call',
+      title: type === 'bill' ? 'Hisob so\u2018raldi' : 'Ofitsiant chaqirilmoqda',
+      body: tableLabel,
+      refType: 'table',
+      refId: session.tableId,
+      meta: { requestType: type, tableNumber: table?.tableNumber },
+    }).catch((e) => console.error('[notify:request]', e.message));
 
     res.status(201).json(request);
   }),

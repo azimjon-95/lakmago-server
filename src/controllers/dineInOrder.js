@@ -5,6 +5,7 @@ import { Waiter } from '../models/Waiter.js';
 import { Restaurant } from '../models/Restaurant.js';
 import { calcDineInOrder, nextDineInNumber, getDineInMenu } from '../services/dineInPricing.js';
 import { getIO } from '../sockets/io.js';
+import { notify } from '../services/notifications.js';
 
 /**
  * Zal buyurtmalari.
@@ -426,6 +427,18 @@ async function createOrder({ session, calc, orderSource, waiter, note, userId, b
 /** Restoran paneliga xabar — ovoz va bildirishnoma uchun. */
 function notifyNewOrder(order, session) {
   const io = getIO();
+
+  notify({
+    notificationId: `hall:${order._id}`,
+    audience: 'restaurant',
+    restaurantId: order.restaurantId,
+    type: 'hall_order',
+    title: order.orderSource === 'waiter' ? 'Ofitsiant buyurtmasi' : 'Zal buyurtmasi',
+    body: `${order.dineInNumber} · ${order.items?.length || 0} ta taom · ${order.total?.toLocaleString('ru-RU') || 0} so'm`,
+    refType: 'order',
+    refId: order._id,
+    meta: { tableId: String(session.tableId), orderSource: order.orderSource },
+  }).catch((e) => console.error('[notify:hall]', e.message));
   io?.to(`restaurant:${order.restaurantId}`).emit('dinein:new', {
     orderId: String(order._id),
     dineInNumber: order.dineInNumber,
