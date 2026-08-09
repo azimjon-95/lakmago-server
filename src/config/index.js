@@ -124,6 +124,12 @@ export const config = {
   },
   // Mijoz ilovasi manzili — QR havolalari uchun
   customerBaseUrl: process.env.CUSTOMER_BASE_URL || 'https://lokma.uz',
+
+  // Web Push (VAPID). Kalitlar bo'lmasa push jim o'chadi —
+  // qolgan tizim ishlayveradi.
+  vapidPublicKey: process.env.VAPID_PUBLIC_KEY || '',
+  vapidPrivateKey: process.env.VAPID_PRIVATE_KEY || '',
+  vapidSubject: process.env.VAPID_SUBJECT || 'mailto:support@lokma.uz',
 };
 
 export async function connectDB() {

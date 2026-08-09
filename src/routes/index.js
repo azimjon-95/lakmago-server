@@ -129,6 +129,11 @@ router.get('/waiter/menu/:restaurantId', waiterAuth, dineInOrderController.menu)
 router.get('/panel/notifications', auth, notificationController.list);
 router.patch('/panel/notifications/:id', auth, notificationController.updateStatus);
 
+// Web Push obunasi — qamrov tokendan olinadi
+router.get('/panel/push/key', auth, notificationController.publicKey);
+router.post('/panel/push/subscribe', auth, notificationController.subscribe);
+router.post('/panel/push/unsubscribe', auth, notificationController.unsubscribe);
+
 // Restoran paneli
 router.get('/panel/dine-in', ...R, dineInController.getConfig);
 router.get('/panel/dine-in/orders', ...R, dineInOrderController.panelOrders);

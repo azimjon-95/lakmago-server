@@ -21,6 +21,7 @@ const notificationSchema = new Schema(
     // Kimga: 'admin' yoki muayyan restoran
     audience: { type: String, enum: ['admin', 'restaurant'], required: true, index: true },
     restaurantId: { type: Schema.Types.ObjectId, ref: 'Restaurant', index: true },
+    branchId: { type: Schema.Types.ObjectId, ref: 'Restaurant', index: true },
 
     type: {
       type: String,
@@ -28,6 +29,13 @@ const notificationSchema = new Schema(
       enum: ['order', 'hall_order', 'reservation', 'waiter_call', 'bill_request', 'support'],
       index: true,
     },
+
+    /**
+     * Muhimlik. CRITICAL navbatda oldinga o'tadi — mijoz stolda
+     * kutib turganda ofitsiant chaqiruvi oddiy buyurtma
+     * ortida qolib ketmasligi kerak.
+     */
+    priority: { type: String, enum: ['CRITICAL', 'HIGH', 'NORMAL'], default: 'NORMAL', index: true },
 
     title: { type: String, required: true },
     body: { type: String, default: '' },

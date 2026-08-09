@@ -1,5 +1,6 @@
 import { Notification, nextSeq } from '../models/Notification.js';
 import { getIO } from '../sockets/io.js';
+import { sendPush } from './push.js';
 
 /**
  * Markaziy bildirishnoma xizmati.
@@ -12,6 +13,16 @@ import { getIO } from '../sockets/io.js';
  * uzilsa hodisa butunlay yo'qolardi, panel yangilansa bajarilmagan
  * ish esdan chiqardi. Endi hammasi shu yerdan o'tadi.
  */
+
+/** Har tur uchun muhimlik — bitta joyda belgilanadi. */
+const PRIORITY_BY_TYPE = {
+  waiter_call: 'CRITICAL',   // mijoz stolda kutib turibdi
+  bill_request: 'CRITICAL',
+  hall_order: 'HIGH',
+  order: 'HIGH',
+  reservation: 'NORMAL',
+  support: 'NORMAL',
+};
 
 /** Har tur uchun ovoz — bitta joyda belgilanadi. */
 const SOUND_BY_TYPE = {
@@ -32,8 +43,8 @@ const SOUND_BY_TYPE = {
  * @returns {object|null} yaratilgan yozuv, dublikat bo'lsa null
  */
 export async function notify({
-  notificationId, audience, restaurantId, type,
-  title, body = '', refType = '', refId = '', meta = {},
+  notificationId, audience, restaurantId, branchId, type,
+  title, body = '', refType = '', refId = '', meta = {}, priority,
 }) {
   if (!notificationId || !type || !title) return null;
 
@@ -48,7 +59,9 @@ export async function notify({
       notificationId,
       audience,
       restaurantId: restaurantId || undefined,
+      branchId: branchId || undefined,
       type,
+      priority: priority || PRIORITY_BY_TYPE[type] || 'NORMAL',
       title,
       body,
       sound: SOUND_BY_TYPE[type] ?? 'orders',
@@ -66,6 +79,11 @@ export async function notify({
   }
 
   emitNotification(doc);
+
+  // Brauzer yopiq bo'lsa ham yetib borsin. Push xatosi asosiy
+  // oqimni to'xtatmasligi kerak — shuning uchun kutilmaydi.
+  sendPush(toPayload(doc)).catch((e) => console.error('[push]', e.message));
+
   return doc.toObject();
 }
 
@@ -90,7 +108,9 @@ export function toPayload(doc) {
     seq: doc.seq,
     audience: doc.audience,
     restaurantId: doc.restaurantId ? String(doc.restaurantId) : null,
+    branchId: doc.branchId ? String(doc.branchId) : null,
     type: doc.type,
+    priority: doc.priority || 'NORMAL',
     title: doc.title,
     body: doc.body,
     sound: doc.sound,

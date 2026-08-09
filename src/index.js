@@ -10,6 +10,7 @@ import { errorHandler, notFound } from './middleware/error.js';
 import { initSocket } from './sockets/io.js';
 import { handleBotUpdate } from './services/telegram.js';
 import { ensureDefaultAdmin } from './services/bootstrap.js';
+import { initPush } from './services/push.js';
 
 async function main() {
   await connectDB();
@@ -286,6 +287,11 @@ async function main() {
   app.use(errorHandler);
 
   initSocket(httpServer);
+
+  // Web Push. VAPID kalitlari bo'lmasa jim o'chadi — qolgan
+  // tizim ishlayveradi, faqat brauzer yopiq holatda xabar
+  // bormaydi.
+  initPush();
 
   httpServer.listen(config.port, () => {
     console.log(`✓ LokmaGo API http://localhost:${config.port}`);
