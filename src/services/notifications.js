@@ -31,7 +31,7 @@ const SOUND_BY_TYPE = {
   reservation: 'reservations',
   waiter_call: 'hall-orders',
   bill_request: 'hall-orders',
-  support: 'none',
+  support: 'reservations',   // alohida MP3 yo'q — yumshoq ohang
 };
 
 /**

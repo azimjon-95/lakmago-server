@@ -3,6 +3,7 @@ import { asyncHandler } from '../middleware/error.js';
 import { SupportChat } from '../models/SupportChat.js';
 import { User } from '../models/User.js';
 import { getIO } from '../sockets/io.js';
+import { notify } from '../services/notifications.js';
 import { notifyUser } from '../services/telegram.js';
 
 const messageSchema = z.object({
@@ -63,6 +64,21 @@ export const supportController = {
     chat.lastMessageAt = new Date();
     chat.lastMessageText = text.slice(0, 120);
     await chat.save();
+
+    // Markaziy bildirishnoma — yordam so'rovi ham boshqa
+    // hodisalar kabi saqlanadi va uzilishdan keyin tiklanadi
+    notify({
+      // Har xabar alohida: bir suhbatdagi ikkinchi xabar ham
+      // e'tibordan chetda qolmasligi kerak
+      notificationId: `support:${chat._id}:${chat.messages.length}`,
+      audience: 'admin',
+      type: 'support',
+      title: 'Yordam so\u2018rovi',
+      body: `${chat.firstName || 'Mijoz'}: ${text.slice(0, 60)}`,
+      refType: 'support',
+      refId: chat._id,
+      meta: { chatId: String(chat._id) },
+    }).catch((e) => console.error('[notify:support]', e.message));
 
     // Adminga real-time signal (to'liq ma'lumot bilan)
     getIO()?.to('admin').emit('support:message', {
