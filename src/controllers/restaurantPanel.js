@@ -349,6 +349,8 @@ export const restaurantPanelController = {
       // Olib ketish
       pickupEnabled: z.boolean().optional(),
       pickupDiscountPercent: z.number().min(0).max(50).optional(),
+      // Yetkazish ustamasi — zal narxiga nisbatan
+      deliveryMarkupPercent: z.number().min(0).max(100).optional(),
       prepMinutes: z.number().int().min(1).max(240).optional(),
 
       // Stol bron qilish

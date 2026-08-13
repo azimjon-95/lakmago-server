@@ -20,11 +20,23 @@ export async function recordSuccess({
 }) {
   const key = buildIdempotencyKey(order._id, provider, providerTransactionId);
 
+  /*
+   * Bo'linish foizi restoran bilan tuzilgan KELISHUVDAN olinadi:
+   * restoran komissiyasi + mijoz haqi = shlyuzga ketadigan yagona
+   * foiz. Kelishuv bo'lmasa standart qiymat ishlatiladi.
+   */
+  let percent = lokmaPercent;
+  if (percent === undefined || percent === null) {
+    const { activeAgreement } = await import('../models/CommissionAgreement.js');
+    const agreement = await activeAgreement(order.restaurantId);
+    percent = agreement?.totalSplitPercent;
+  }
+
   // Allaqachon qayd etilganmi
   const existing = await Payment.findOne({ idempotencyKey: key });
   if (existing && existing.status === 'SUCCESS') return existing;
 
-  const split = computeSplit(provider, amountTiyin, lokmaPercent);
+  const split = computeSplit(provider, amountTiyin, percent);
   const gateway = getProvider(provider);
 
   // Paynet o'zi bo'ladi → o'tkazma kerak emas.
@@ -50,7 +62,7 @@ export async function recordSuccess({
           restaurantAmount: split.restaurantAmount,
           lokmaGrossCommission: split.lokmaGrossCommission,
           lokmaNetCommission: split.lokmaNetCommission,
-          lokmaPercentApplied: lokmaPercent ?? 0,
+          lokmaPercentApplied: percent ?? 0,
           payoutStatus,
           idempotencyKey: key,
           paidAt: new Date(),

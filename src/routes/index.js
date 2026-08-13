@@ -5,6 +5,7 @@ import { reservationController, paymentController } from '../controllers/service
 import { adminController } from '../controllers/admin.js';
 import { panelAuthController } from '../controllers/panelAuth.js';
 import { notificationController } from '../controllers/notifications.js';
+import { agreementController } from '../controllers/agreements.js';
 import { restaurantPanelController } from '../controllers/restaurantPanel.js';
 import { uploadController } from '../controllers/upload.js';
 import { referralController } from '../controllers/referralController.js';
@@ -124,6 +125,13 @@ router.post('/waiter/tables/:tableId/close', waiterAuth, dineInLiveController.cl
 router.get('/waiter/requests', waiterAuth, dineInLiveController.listRequests);
 router.patch('/waiter/requests/:id', waiterAuth, dineInLiveController.updateRequest);
 router.get('/waiter/menu/:restaurantId', waiterAuth, dineInOrderController.menu);
+
+// Komissiya shartnomalari (admin) va yetkazish ustamasi (restoran)
+router.get('/admin/agreements', ...A, agreementController.list);
+router.put('/admin/agreements/:restaurantId', ...A, agreementController.upsert);
+router.get('/admin/agreements/:restaurantId/history', ...A, agreementController.history);
+router.get('/panel/agreement', ...R, agreementController.myAgreement);
+router.patch('/panel/delivery-markup', ...R, agreementController.setDeliveryMarkup);
 
 // Bildirishnomalar — admin ham, restoran ham (auth ichida ajratiladi)
 router.get('/panel/notifications', auth, notificationController.list);

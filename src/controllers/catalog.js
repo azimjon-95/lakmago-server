@@ -95,11 +95,13 @@ export const restaurantController = {
     const dish = await Dish.findById(req.params.id).lean();
     if (!dish) return res.status(404).json({ error: 'Taom topilmadi' });
     // Taom restorani bloklangan/nofaol bo'lsa ko'rsatmaymiz
-    const restaurant = await Restaurant.findById(dish.restaurantId).select('isBlocked isActive name').lean();
+    const restaurant = await Restaurant.findById(dish.restaurantId)
+      .select('isBlocked isActive name deliveryMarkupPercent').lean();
     if (!restaurant || restaurant.isBlocked || !restaurant.isActive) {
       return res.status(404).json({ error: 'Taom mavjud emas' });
     }
-    res.json({ ...dish, restaurantName: restaurant.name });
+    const [priced] = await withCustomerPrices([dish]);
+    res.json({ ...priced, restaurantName: restaurant.name });
   }),
 
   // GET /api/restaurants/:id/dishes
@@ -115,7 +117,10 @@ export const restaurantController = {
     })
       .select('restaurantId name description section category prepMinutes price oldPrice weight weightGram calories protein fat carbs ingredients optionGroups isHit isTrending isDiscounted tint icon images imageUrl isAvailable')
       .lean();
-    res.json(dishes);
+
+    // Mijozga yetkazish narxi ko'rsatiladi: baza + ustama + xizmat haqi.
+    // Zal menyusi alohida endpointda (dineInPricing) va u tegilmaydi.
+    res.json(await withCustomerPrices(dishes));
   }),
 
   // GET /api/restaurants/:id/orders  (restoran paneli uchun)
@@ -162,7 +167,8 @@ export const dishController = {
       restaurantId: { $in: visible.map((r) => r._id) },
     }).limit(20).lean();
 
-    res.json(dishes.map((d) => {
+    const priced = await withCustomerPrices(dishes);
+    res.json(priced.map((d) => {
       const r = restMap.get(String(d.restaurantId));
       return {
         ...d,
@@ -187,7 +193,8 @@ export const dishController = {
       restaurantId: { $in: visible.map((r) => r._id) },
     }).limit(20).lean();
 
-    res.json(dishes.map((d) => {
+    const priced = await withCustomerPrices(dishes);
+    res.json(priced.map((d) => {
       const r = restMap.get(String(d.restaurantId));
       return {
         ...d,
@@ -220,7 +227,8 @@ export const dishController = {
       .lean();
 
     const hasMore = dishes.length > limit;
-    const items = (hasMore ? dishes.slice(0, limit) : dishes).map((d) => {
+    const pricedAll = await withCustomerPrices(hasMore ? dishes.slice(0, limit) : dishes);
+    const items = pricedAll.map((d) => {
       const r = restMap.get(String(d.restaurantId));
       return {
         ...d,

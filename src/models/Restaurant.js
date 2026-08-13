@@ -144,6 +144,17 @@ const restaurantSchema = new Schema(
     pickupEnabled: { type: Boolean, default: true },
     // Olib ketishda chegirma (foizda) — mijozni rag'batlantirish
     pickupDiscountPercent: { type: Number, default: 0 },
+
+    /**
+     * Yetkazish ustamasi — restoran o'zi belgilaydi.
+     *
+     * Zal narxi 10 000 bo'lsa va ustama 5% bo'lsa, yetkazishda
+     * 10 500 ko'rinadi. Restoran yetkazish xarajatini shu orqali
+     * qoplaydi.
+     *
+     * Dine-in va bronda QO'LLANMAYDI — u yerda zal narxi qoladi.
+     */
+    deliveryMarkupPercent: { type: Number, default: 0, min: 0, max: 100 },
     // Tayyorlash vaqti (daqiqa) — olib ketish uchun "nechida tayyor" hisobi
     prepMinutes: { type: Number, default: 20 },
 
