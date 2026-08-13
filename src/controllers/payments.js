@@ -59,6 +59,46 @@ export const paymentController = {
     }
   }),
 
+  /**
+   * GET /api/payments/order/:orderId
+   *
+   * Mijoz to'lov holatini so'raydi. Manba — SERVER yozuvi,
+   * mijozdan kelgan "to'ladim" emas.
+   *
+   * uiState mijoz ilovasi ko'rsatadigan xabar kalitini beradi.
+   */
+  orderStatus: asyncHandler(async (req, res) => {
+    const order = await Order.findOne({
+      _id: req.params.orderId, userId: req.userId,
+    }).select('_id status isPaid total').lean();
+    if (!order) return res.status(404).json({ error: 'Buyurtma topilmadi' });
+
+    const { Payment } = await import('../models/Payment.js');
+    const payment = await Payment.findOne({ orderId: order._id })
+      .sort({ createdAt: -1 })
+      .select('status provider amount paidAt metadata').lean();
+
+    // Holat → mijozga ko'rsatiladigan xabar
+    const UI = {
+      PENDING: 'payment_pending',      // "Платёж обрабатывается"
+      PROCESSING: 'payment_pending',
+      SUCCESS: 'order_accepted',       // "Заказ принят"
+      FAILED: 'payment_failed',        // "Оплата не прошла"
+      CANCELLED: 'payment_failed',
+      REFUNDED: 'payment_refunded',
+    };
+
+    res.json({
+      orderId: String(order._id),
+      orderStatus: order.status,
+      isPaid: Boolean(order.isPaid),
+      paymentStatus: payment?.status || (order.isPaid ? 'SUCCESS' : 'PENDING'),
+      uiState: UI[payment?.status] || (order.isPaid ? 'order_accepted' : 'payment_pending'),
+      provider: payment?.provider || null,
+      paidAt: payment?.paidAt || null,
+    });
+  }),
+
   // GET /api/payments/status — qaysi tizimlar ulangan
   status: asyncHandler(async (_req, res) => {
     res.json({

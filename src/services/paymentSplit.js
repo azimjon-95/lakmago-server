@@ -42,8 +42,13 @@ export function splitPaynet(totalTiyin, lokmaPercent = config.split.defaultLokma
   // Ayirma — tiyin yo'qolmasligi uchun
   const restaurantAmount = total - lokmaGross;
 
-  // Paynet haqi FAQAT LokmaGo ulushidan
-  const providerFee = percentOf(total, config.split.paynetFeePercent);
+  /*
+   * Paynet haqi LokmaGo ULUSHIDAN olinadi (umumiy summadan emas):
+   *   100 000 → brutto 10 000 → haq 250 (10 000 ning 2.5%) → netto 9 750
+   * Restoran ulushi hech qanday holatda tegilmaydi.
+   */
+  const feeBase = config.split.paynetFeeBase === 'TOTAL' ? total : lokmaGross;
+  const providerFee = percentOf(feeBase, config.split.paynetFeePercent);
   const lokmaNet = lokmaGross - providerFee;
 
   return {
@@ -53,7 +58,8 @@ export function splitPaynet(totalTiyin, lokmaPercent = config.split.defaultLokma
     lokmaGrossCommission: lokmaGross,
     providerFee,
     lokmaNetCommission: lokmaNet,
-    // Paynet o'zi bo'lgani uchun keyinchalik bank o'tkazmasi kerak emas
+    // Shlyuz o'zi yuboradi — bank o'tkazmasi kerak emas
+    payoutAmount: 0,
     requiresBankPayout: false,
   };
 }
@@ -73,7 +79,8 @@ export function splitClick(totalTiyin, lokmaPercent = config.split.defaultLokmaP
   const restaurantAmount = total - lokmaGross;
 
   // Click haqi UMUMIY summadan olinadi (Paynetdan farqi shu)
-  const providerFee = percentOf(total, config.split.clickFeePercent);
+  const feeBase = config.split.clickFeeBase === 'LOKMA_SHARE' ? lokmaGross : total;
+  const providerFee = percentOf(feeBase, config.split.clickFeePercent);
   const lokmaNet = lokmaGross - providerFee;
 
   return {
@@ -83,6 +90,8 @@ export function splitClick(totalTiyin, lokmaPercent = config.split.defaultLokmaP
     lokmaGrossCommission: lokmaGross,
     providerFee,
     lokmaNetCommission: lokmaNet,
+    // LokmaGo qarzdor — shu summa bank orqali yuboriladi
+    payoutAmount: restaurantAmount,
     requiresBankPayout: true,
   };
 }

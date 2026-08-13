@@ -97,8 +97,8 @@ export async function sendPayout(payoutId) {
   if (!payout) return null;
 
   // Yakunlangan holatga qayta tegmaymiz
-  if (['CONFIRMED', 'CANCELLED'].includes(payout.status)) return payout;
-  if (payout.attempts >= MAX_ATTEMPTS && payout.status === 'FAILED') return payout;
+  if (['SUCCESS', 'CANCELLED'].includes(payout.status)) return payout;
+  if (payout.attempts >= MAX_ATTEMPTS && payout.status === 'RETRY_REQUIRED') return payout;
 
   const bank = getBankProvider(payout.bankProvider);
   if (!bank.isConfigured()) {
@@ -119,18 +119,19 @@ export async function sendPayout(payoutId) {
       description: `LokmaGo hisob-kitob ${payout._id}`,
     });
 
-    payout.status = res.status === 'CONFIRMED' ? 'CONFIRMED' : 'SENT';
+    // Bank darhol tasdiqlasa SUCCESS, aks holda tasdiq kutiladi
+    payout.status = res.status === 'CONFIRMED' ? 'SUCCESS' : 'PROCESSING';
     payout.bankReference = res.reference || '';
     payout.sentAt = new Date();
     payout.lastError = '';
     payout.nextRetryAt = null;
-    if (payout.status === 'CONFIRMED') payout.confirmedAt = new Date();
+    if (payout.status === 'SUCCESS') payout.confirmedAt = new Date();
     await payout.save();
 
     await Payment.updateMany(
       { _id: { $in: payout.paymentIds } },
       {
-        payoutStatus: payout.status === 'CONFIRMED' ? 'SETTLED' : 'PROCESSING',
+        payoutStatus: payout.status === 'SUCCESS' ? 'SUCCESS' : 'PROCESSING',
         payoutReference: payout.bankReference,
       },
     );
@@ -138,12 +139,13 @@ export async function sendPayout(payoutId) {
     payout.lastError = String(err?.message || err).slice(0, 300);
 
     if (payout.attempts >= MAX_ATTEMPTS) {
-      payout.status = 'FAILED';
+      // Odam aralashuvi kerak — cheksiz urinmaymiz
+      payout.status = 'RETRY_REQUIRED';
       payout.nextRetryAt = null;
       // To'lovlarni qaytarib qo'yamiz — keyingi partiyaga tushsin
       await Payment.updateMany(
         { _id: { $in: payout.paymentIds } },
-        { payoutStatus: 'FAILED' },
+        { payoutStatus: 'RETRY_REQUIRED' },
       );
     } else {
       payout.status = 'PENDING';
@@ -161,16 +163,16 @@ export async function sendPayout(payoutId) {
 export async function confirmPayout(payoutId, bankReference = '') {
   const payout = await Payout.findById(payoutId);
   if (!payout) return null;
-  if (payout.status === 'CONFIRMED') return payout;   // idempotent
+  if (payout.status === 'SUCCESS') return payout;   // idempotent
 
-  payout.status = 'CONFIRMED';
+  payout.status = 'SUCCESS';
   payout.confirmedAt = new Date();
   if (bankReference) payout.bankReference = bankReference;
   await payout.save();
 
   await Payment.updateMany(
     { _id: { $in: payout.paymentIds } },
-    { payoutStatus: 'SETTLED', payoutReference: payout.bankReference },
+    { payoutStatus: 'SUCCESS', payoutReference: payout.bankReference },
   );
 
   return payout;

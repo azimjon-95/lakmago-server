@@ -22,7 +22,7 @@ const payoutSchema = new Schema(
 
     status: {
       type: String,
-      enum: ['PENDING', 'PROCESSING', 'SENT', 'CONFIRMED', 'FAILED', 'CANCELLED'],
+      enum: ['PENDING', 'PROCESSING', 'SUCCESS', 'FAILED', 'RETRY_REQUIRED', 'CANCELLED'],
       default: 'PENDING',
       index: true,
     },

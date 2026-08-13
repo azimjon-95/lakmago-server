@@ -143,8 +143,23 @@ export const config = {
    */
   split: {
     defaultLokmaPercent: num(process.env.SPLIT_LOKMA_PERCENT, 10),
+
+    /**
+     * Paynet haqi 2.5%, lekin NIMADAN?
+     *
+     * TZ misoli: 100 000 → LokmaGo brutto 10 000 → Paynet haqi 250
+     *            → LokmaGo netto 9 750
+     * 250 = 10 000 ning 2.5% i, ya'ni haq LOKMAGO ULUSHIDAN olinadi,
+     * umumiy summadan emas (u holda 2 500 bo'lardi).
+     *
+     * Baza sozlanadi: LOKMA_SHARE (standart) yoki TOTAL.
+     */
     paynetFeePercent: num(process.env.PAYNET_FEE_PERCENT, 2.5),
+    paynetFeeBase: process.env.PAYNET_FEE_BASE || 'LOKMA_SHARE',
+
+    /** Click haqi UMUMIY summadan olinadi (1.5% = 1 500). */
     clickFeePercent: num(process.env.CLICK_FEE_PERCENT, 1.5),
+    clickFeeBase: process.env.CLICK_FEE_BASE || 'TOTAL',
   },
 
   /**

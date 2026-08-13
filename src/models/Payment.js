@@ -31,7 +31,7 @@ const paymentSchema = new Schema(
 
     status: {
       type: String,
-      enum: ['PENDING', 'SUCCESS', 'FAILED', 'CANCELLED', 'REFUNDED'],
+      enum: ['PENDING', 'PROCESSING', 'SUCCESS', 'FAILED', 'CANCELLED', 'REFUNDED'],
       default: 'PENDING',
       index: true,
     },
@@ -52,10 +52,11 @@ const paymentSchema = new Schema(
      */
     payoutStatus: {
       type: String,
-      enum: ['NOT_REQUIRED', 'PENDING', 'PROCESSING', 'SETTLED', 'FAILED'],
+      enum: ['NOT_REQUIRED', 'PENDING', 'PROCESSING', 'SUCCESS', 'FAILED', 'RETRY_REQUIRED'],
       default: 'NOT_REQUIRED',
       index: true,
     },
+    payoutAmount: { type: Number, default: 0 },   // bank orqali yuboriladigan summa
     payoutReference: { type: String, default: '' },   // bank hujjat raqami
     payoutId: { type: Schema.Types.ObjectId, ref: 'Payout', index: true },
 
@@ -82,6 +83,45 @@ const paymentSchema = new Schema(
 
 // "Shu restoranning to'lanmagan ulushlari" — payout uchun asosiy so'rov
 paymentSchema.index({ restaurantId: 1, payoutStatus: 1, status: 1 });
+
+/* ═══════════════════════════════════════════
+   Holat mashinasi
+
+   PENDING → PROCESSING → SUCCESS
+   PENDING → PROCESSING → FAILED / CANCELLED
+   SUCCESS → REFUNDED   (faqat qaytarish)
+
+   SUCCESS dan FAILED ga QAYTIB BO'LMAYDI: buyurtma allaqachon
+   oshxonaga ketgan, pul olingan. Kechikkan yoki takroriy
+   webhook uni bekor qilmasligi kerak.
+   ═══════════════════════════════════════════ */
+const ALLOWED_NEXT = {
+  PENDING: ['PROCESSING', 'SUCCESS', 'FAILED', 'CANCELLED'],
+  PROCESSING: ['SUCCESS', 'FAILED', 'CANCELLED'],
+  SUCCESS: ['REFUNDED'],          // orqaga yo'l yo'q
+  FAILED: ['PENDING'],            // qayta urinish mumkin
+  CANCELLED: [],
+  REFUNDED: [],
+};
+
+/** O'tish ruxsat etilganmi. */
+export function canTransition(from, to) {
+  if (from === to) return true;                    // idempotent
+  return (ALLOWED_NEXT[from] || []).includes(to);
+}
+
+/** Yakuniy holat — boshqa o'zgarmaydi. */
+export function isFinalStatus(status) {
+  return ['SUCCESS', 'CANCELLED', 'REFUNDED'].includes(status);
+}
+
+paymentSchema.methods.moveTo = function moveTo(next) {
+  if (!canTransition(this.status, next)) {
+    throw new Error(`To'lov holati ${this.status} → ${next} ga o'tolmaydi`);
+  }
+  this.status = next;
+  return this;
+};
 
 /** Bir buyurtma + provayder uchun barqaror kalit. */
 export function buildIdempotencyKey(orderId, provider, providerTransactionId = '') {

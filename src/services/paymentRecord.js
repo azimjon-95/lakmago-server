@@ -1,4 +1,4 @@
-import { Payment, buildIdempotencyKey } from '../models/Payment.js';
+import { Payment, buildIdempotencyKey, canTransition } from '../models/Payment.js';
 import { Order } from '../models/Order.js';
 import { computeSplit } from './paymentSplit.js';
 import { getProvider } from './providers/index.js';
@@ -63,8 +63,70 @@ export async function recordSuccess({
     throw err;
   }
 
-  await releaseOrderToKitchen(order._id, provider);
+  /*
+   * Buyurtmani oshxonaga chiqarish.
+   *
+   * MUHIM: bu qadam yiqilsa ham to'lov SUCCESS bo'lib qoladi —
+   * pul olingan, uni "yo'q" deb bo'lmaydi. Buyurtma
+   * dispatchPending bo'lib belgilanadi va qayta urinish
+   * mexanizmi (retryPendingDispatch) uni oshxonaga chiqaradi.
+   * Admin panelda bu holat ko'rinadi.
+   */
+  try {
+    await releaseOrderToKitchen(order._id, provider);
+    await Payment.updateOne(
+      { _id: payment._id },
+      { $set: { 'metadata.dispatched': true, 'metadata.dispatchError': '' } },
+    );
+  } catch (err) {
+    console.error('[payment] buyurtma oshxonaga chiqmadi:', err.message);
+    await Payment.updateOne(
+      { _id: payment._id },
+      {
+        $set: {
+          'metadata.dispatched': false,
+          'metadata.dispatchError': String(err.message).slice(0, 200),
+          'metadata.dispatchAttempts': (payment.metadata?.dispatchAttempts || 0) + 1,
+        },
+      },
+    );
+  }
+
   return payment;
+}
+
+/**
+ * Oshxonaga chiqmay qolgan buyurtmalarni qayta yuborish.
+ *
+ * To'lov o'tgan, lekin dispatch paytida texnik xato bo'lgan
+ * holatlar uchun. Rejalashtiruvchi chaqiradi.
+ *
+ * Yangi to'lov YARATMAYDI va buyurtmani takrorlamaydi —
+ * faqat mavjud buyurtma holatini to'g'rilaydi.
+ */
+export async function retryPendingDispatch(limit = 50) {
+  const stuck = await Payment.find({
+    status: 'SUCCESS',
+    'metadata.dispatched': false,
+  }).limit(limit).lean();
+
+  const fixed = [];
+  for (const p of stuck) {
+    try {
+      await releaseOrderToKitchen(p.orderId, p.provider);
+      await Payment.updateOne({ _id: p._id }, { $set: { 'metadata.dispatched': true } });
+      fixed.push(String(p._id));
+    } catch (err) {
+      await Payment.updateOne(
+        { _id: p._id },
+        {
+          $set: { 'metadata.dispatchError': String(err.message).slice(0, 200) },
+          $inc: { 'metadata.dispatchAttempts': 1 },
+        },
+      );
+    }
+  }
+  return fixed;
 }
 
 /**
@@ -97,12 +159,26 @@ async function releaseOrderToKitchen(orderId, provider) {
   io?.to('admin').emit('order:new', order);
 }
 
-/** To'lov muvaffaqiyatsiz yoki bekor qilinganda. */
+/**
+ * To'lov muvaffaqiyatsiz yoki bekor qilinganda.
+ *
+ * SUCCESS bo'lgan to'lovni FAILED qilmaydi: kechikkan yoki
+ * takroriy webhook allaqachon bajarilgan buyurtmani bekor
+ * qilmasligi kerak. Qaytarish alohida oqim (refund).
+ */
 export async function recordFailure({ order, provider, providerTransactionId, reason }) {
   const key = buildIdempotencyKey(order._id, provider, providerTransactionId);
-  return Payment.findOneAndUpdate(
-    { idempotencyKey: key },
-    { status: reason === 'PAYMENT_FAILED' ? 'FAILED' : 'CANCELLED', refundReason: reason },
-    { new: true },
-  );
+  const payment = await Payment.findOne({ idempotencyKey: key });
+  if (!payment) return null;
+
+  const next = reason === 'PAYMENT_FAILED' ? 'FAILED' : 'CANCELLED';
+  if (!canTransition(payment.status, next)) {
+    console.warn(`[payment] ${payment.status} → ${next} rad etildi (${key})`);
+    return payment;
+  }
+
+  payment.status = next;
+  payment.refundReason = reason;
+  await payment.save();
+  return payment;
 }

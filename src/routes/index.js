@@ -246,6 +246,7 @@ router.post('/payments/click/complete', gatewayController.clickComplete);
 // Mijoz uchun
 router.get('/payments/status', gatewayController.status);
 router.get('/payments/link/:orderId', auth, gatewayController.getLink);
+router.get('/payments/order/:orderId', auth, gatewayController.orderStatus);
 
 // ===== To'lov kartalari =====
 router.get('/cards', auth, cardController.list);

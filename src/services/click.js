@@ -143,6 +143,23 @@ export async function clickComplete(body) {
   tx.performTime = Date.now();
   await tx.save();
 
+  /*
+   * Buyurtmani oshxonaga chiqarish va moliyaviy yozuvni yaratish
+   * MARKAZIY joyda (paymentRecord.js) bajariladi:
+   *   • idempotent — takroriy webhook ikki marta yubormaydi
+   *   • bo'linish hisobi (restoran/LokmaGo ulushi) yoziladi
+   *   • Click split qilmagani uchun payout navbatga qo'yiladi
+   *   • dispatch yiqilsa to'lov SUCCESS qoladi va qayta urinadi
+   */
+  const { recordSuccess } = await import('./paymentRecord.js');
+  await recordSuccess({
+    order,
+    provider: 'click',
+    providerTransactionId: String(body.click_trans_id),
+    transactionId: tx._id,
+    amountTiyin: Math.round(order.total * 100),
+  });
+
   const updated = await Order.findByIdAndUpdate(
     tx.orderId,
     {
