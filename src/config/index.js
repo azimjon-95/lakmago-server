@@ -55,6 +55,12 @@ export function isAllowedOrigin(origin) {
   return false;
 }
 
+/** Muhit o'zgaruvchisidan son. Noto'g'ri bo'lsa — standart qiymat. */
+function num(value, fallback) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : fallback;
+}
+
 export const config = {
   port: Number(process.env.PORT ?? 4000),
   mongoUri: process.env.MONGO_URI ?? 'mongodb://localhost:27017/lokmago',
@@ -105,12 +111,48 @@ export const config = {
   },
 
   click: {
+    enabled: process.env.CLICK_ENABLED !== 'false',
     serviceId: process.env.CLICK_SERVICE_ID || '',
     merchantId: process.env.CLICK_MERCHANT_ID || '',
     merchantUserId: process.env.CLICK_MERCHANT_USER_ID || '',
     secretKey: process.env.CLICK_SECRET_KEY || '',
     returnUrl: process.env.CLICK_RETURN_URL || '',
   },
+
+  paynet: {
+    // Paynet rasmiy hujjati kelgach to'ldiriladi
+    enabled: process.env.PAYNET_ENABLED === 'true',
+    merchantId: process.env.PAYNET_MERCHANT_ID || '',
+    serviceId: process.env.PAYNET_SERVICE_ID || '',
+    secretKey: process.env.PAYNET_SECRET_KEY || '',
+    baseUrl: process.env.PAYNET_BASE_URL || '',
+    returnUrl: process.env.PAYNET_RETURN_URL || '',
+  },
+
+  /**
+   * Bo'linish foizlari — HECH QAYERDA qattiq yozilmaydi.
+   *
+   * Standart qiymatlar biznes modelidan:
+   *   Paynet: 90% restoran / 10% LokmaGo, Paynet 2.5% LokmaGo
+   *           ulushidan → LokmaGo net 7.5%
+   *   Click:  1.5% umumiy summadan, split yo'q — LokmaGo keyin
+   *           bank orqali restoranga o'tkazadi
+   *
+   * Restoran bo'yicha alohida shartnoma bo'lsa
+   * CommissionAgreement ustun keladi.
+   */
+  split: {
+    defaultLokmaPercent: num(process.env.SPLIT_LOKMA_PERCENT, 10),
+    paynetFeePercent: num(process.env.PAYNET_FEE_PERCENT, 2.5),
+    clickFeePercent: num(process.env.CLICK_FEE_PERCENT, 1.5),
+  },
+
+  /**
+   * Restoran merchant kalitlarini shifrlash uchun.
+   * Berilmasa jwtSecret dan hosil qilinadi — ishlab chiqarishda
+   * albatta alohida kalit qo'ying.
+   */
+  secretsKey: process.env.SECRETS_ENCRYPTION_KEY || '',
 
   // Yandex Maps — xarita va manzil aniqlash.
   // Kalitlar developer.tech.yandex.ru dan olinadi (bepul tarif bor).

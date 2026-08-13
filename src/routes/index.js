@@ -239,7 +239,8 @@ router.patch('/admin/restaurants/:id/commission', auth, requireRole('admin'), bi
 
 // ===== To'lov tizimlari =====
 // Webhook'lar — auth YO'Q (tizimlar o'z imzosi bilan tekshiriladi)
-router.post('/payments/payme', gatewayController.paymeWebhook);
+router.post('/payments/payme', gatewayController.paymeWebhook);   // eskirgan
+router.post('/payments/paynet', gatewayController.paynetWebhook);
 router.post('/payments/click/prepare', gatewayController.clickPrepare);
 router.post('/payments/click/complete', gatewayController.clickComplete);
 // Mijoz uchun
