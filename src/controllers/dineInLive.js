@@ -12,8 +12,11 @@ import { notify } from '../services/notifications.js';
  * Mavjud Socket.IO ishlatiladi — yangi ulanish yaratilmaydi.
  */
 
-// Spam oldini olish: shu muddat ichida qayta chaqirib bo'lmaydi
-const REQUEST_COOLDOWN_MS = 90_000;
+// Spam oldini olish: shu muddat ichida qayta chaqirib bo'lmaydi.
+// Mijoz interfeysidagi 3 daqiqalik sanoq bilan ANIQ mos —
+// muddat tugagach mijoz qayta chaqira oladi, xodim javob
+// bermagan bo'lsa ham.
+const REQUEST_COOLDOWN_MS = 3 * 60_000;
 
 export const dineInLiveController = {
   // ═══ MIJOZ: chaqiruv va hisob ═══
