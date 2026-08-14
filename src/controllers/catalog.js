@@ -7,6 +7,67 @@ import { Order } from '../models/Order.js';
 // aniq 404 qaytarsin (masalan eski mock ID 'r1' kelганда).
 const isValidId = (id) => typeof id === 'string' && /^[a-f\d]{24}$/i.test(id);
 
+
+/**
+ * Bir necha restoran uchun narx koeffitsientlarini bir marta oladi.
+ *
+ * Har taomga alohida so'rov yubormaslik uchun: 50 ta taom bo'lsa
+ * ham shartnomalar va ustamalar ikkita so'rovda olinadi.
+ */
+async function pricingMap(restaurantIds) {
+  const { CommissionAgreement } = await import('../models/CommissionAgreement.js');
+  const now = new Date();
+
+  const [restaurants, agreements] = await Promise.all([
+    Restaurant.find({ _id: { $in: restaurantIds } })
+      .select('deliveryMarkupPercent').lean(),
+    CommissionAgreement.find({
+      restaurantId: { $in: restaurantIds },
+      status: 'ACTIVE',
+      effectiveFrom: { $lte: now },
+      $or: [{ effectiveTo: null }, { effectiveTo: { $gt: now } }],
+    }).lean(),
+  ]);
+
+  const markup = new Map(restaurants.map((r) =>
+    [String(r._id), Number(r.deliveryMarkupPercent) || 0]));
+  const fee = new Map(agreements.map((a) =>
+    [String(a.restaurantId), Number(a.customerFeePercent) || 0]));
+
+  const map = new Map();
+  restaurantIds.forEach((id) => {
+    const key = String(id);
+    map.set(key, {
+      deliveryMarkupPercent: markup.get(key) || 0,
+      customerFeePercent: fee.get(key) || 0,
+    });
+  });
+  return map;
+}
+
+/**
+ * Ro'yxatdagi taomlarga mijoz narxini qo'yadi.
+ *
+ * MUHIM: narx hisobi yiqilsa ham menyu KO'RINISHI kerak —
+ * mijoz taomlarni umuman ko'rmay qolgandan ko'ra baza narxni
+ * ko'rgani yaxshiroq. Shuning uchun xato ushlanadi.
+ */
+async function withCustomerPrices(dishes) {
+  if (!Array.isArray(dishes) || dishes.length === 0) return dishes || [];
+  try {
+    const { applyPricing } = await import('../services/customerPricing.js');
+    const ids = [...new Set(dishes.map((d) => String(d.restaurantId)).filter(Boolean))];
+    if (ids.length === 0) return dishes;
+
+    const ctxMap = await pricingMap(ids);
+    const zero = { deliveryMarkupPercent: 0, customerFeePercent: 0 };
+    return dishes.map((d) => applyPricing(d, ctxMap.get(String(d.restaurantId)) || zero));
+  } catch (err) {
+    console.error('[pricing] narx qo\'llanmadi, baza narx ko\'rsatiladi:', err.message);
+    return dishes;
+  }
+}
+
 export const restaurantController = {
   // GET /api/restaurants?category=milliy&cursor=<createdAt>&limit=20
   // Cursor-based pagination — katta ro'yxatlar tez yuklanadi
