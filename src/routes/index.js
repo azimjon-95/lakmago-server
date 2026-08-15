@@ -265,6 +265,7 @@ router.patch('/cards/:id/default', auth, cardController.setDefault);
 // ===== Qo'llab-quvvatlash chati =====
 // Mijoz tomoni
 router.get('/support/chat', auth, supportController.myChat);
+router.get('/support/presence', supportController.presence);
 router.post('/support/message', auth, supportController.sendMessage);
 // Admin tomoni
 router.get('/admin/support', auth, requireRole('admin'), supportController.list);

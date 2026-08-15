@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { asyncHandler } from '../middleware/error.js';
 import { SupportChat } from '../models/SupportChat.js';
 import { User } from '../models/User.js';
-import { getIO } from '../sockets/io.js';
+import { getIO, getSupportPresence } from '../sockets/io.js';
 import { notify } from '../services/notifications.js';
 import { notifyUser } from '../services/telegram.js';
 
@@ -31,6 +31,11 @@ async function ensureChat(userId) {
 }
 
 export const supportController = {
+  // GET /api/support/presence — boshlang'ich holat (socket ulanishidan oldin)
+  presence: asyncHandler(async (_req, res) => {
+    res.json(getSupportPresence());
+  }),
+
   // ===== MIJOZ TOMONI =====
 
   // GET /api/support/chat — mening suhbatim
