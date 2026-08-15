@@ -34,13 +34,21 @@ const agreementSchema = new Schema(
      * CUSTOMER_FINAL_PRICE — mijoz to'lagan yakuniy summadan
      * DELIVERY_PRICE      — xizmat haqisiz, faqat taom narxidan
      *
-     * Bu ikki qoida turli natija beradi (TZ Test 1 va Test 2
-     * bir-biriga zid — 81 UZS farq). Shuning uchun sozlanadi.
+     * ESKIRGAN MAYDON — endi ishlatilmaydi.
+     *
+     * Avval ikki xil hisoblash qoidasi bor edi va ular har xil
+     * natija berardi (10 000 bazada 5%+5% — biri 11 000, ikkinchisi
+     * 11 025 chiqarardi). Bu chalkashlikka olib keldi: mijoz
+     * xizmat haqi restoran ustamasi USTIGA emas, BAZANING O'ZIDAN
+     * hisoblanishi kerak edi. Endi formula YAGONA va qattiq
+     * yozilgan (services/pricingEngine.js, services/customerPricing.js) —
+     * bu maydon faqat eski yozuvlar bilan moslik uchun qoldirildi,
+     * hisob-kitobga ta'sir qilmaydi.
      */
     billingBase: {
       type: String,
-      enum: ['CUSTOMER_FINAL_PRICE', 'DELIVERY_PRICE'],
-      default: 'CUSTOMER_FINAL_PRICE',
+      enum: ['CUSTOMER_FINAL_PRICE', 'DELIVERY_PRICE', 'BASE_ADDITIVE'],
+      default: 'BASE_ADDITIVE',
     },
 
     status: { type: String, enum: ['ACTIVE', 'ARCHIVED'], default: 'ACTIVE', index: true },

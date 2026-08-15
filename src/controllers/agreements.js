@@ -14,7 +14,6 @@ import { Restaurant } from '../models/Restaurant.js';
 const agreementSchema = z.object({
   restaurantCommissionPercent: z.number().min(0).max(100),
   customerFeePercent: z.number().min(0).max(100),
-  billingBase: z.enum(['CUSTOMER_FINAL_PRICE', 'DELIVERY_PRICE']).optional(),
   note: z.string().max(300).optional(),
 });
 
@@ -41,7 +40,6 @@ export const agreementController = {
           restaurantCommissionPercent: a.restaurantCommissionPercent,
           customerFeePercent: a.customerFeePercent,
           totalSplitPercent: a.totalSplitPercent,
-          billingBase: a.billingBase,
           effectiveFrom: a.effectiveFrom,
           note: a.note,
         } : null,
@@ -77,7 +75,6 @@ export const agreementController = {
       restaurantCommissionPercent: parsed.data.restaurantCommissionPercent,
       customerFeePercent: parsed.data.customerFeePercent,
       totalSplitPercent: parsed.data.restaurantCommissionPercent + parsed.data.customerFeePercent,
-      billingBase: parsed.data.billingBase || 'CUSTOMER_FINAL_PRICE',
       note: parsed.data.note || '',
       effectiveFrom: now,
       status: 'ACTIVE',

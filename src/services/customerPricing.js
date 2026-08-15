@@ -3,28 +3,40 @@ import { activeAgreement } from '../models/CommissionAgreement.js';
 /**
  * Mijozga ko'rsatiladigan narx.
  *
- * Restoran taom uchun BAZA narxni kiritadi. Mijoz ko'radigan narx
- * shundan hosil bo'ladi:
+ * QOIDA (2026-08-14 da restoran + admin bilan tasdiqlangan):
+ * ikkala foiz ham BAZA narxdan hisoblanadi va bir-biriga
+ * QO'SHILADI — biri ikkinchisining ustiga qo'yilmaydi.
  *
  *   Baza 10 000
- *     + yetkazish ustamasi 5%   → 10 500   (restoran belgilaydi)
- *     + mijoz xizmat haqi 5%    → 11 025   (shartnomadan)
+ *     + yetkazish ustamasi 5% (restoran belgilaydi)  → +500
+ *     + mijoz xizmat haqi 5%  (LokmaGo shartnomasi)   → +500
+ *     ─────────────────────────────────────────────────────
+ *     Mijoz ko'radi: 11 000
  *
- * Dine-in va bronda ikkalasi ham QO'LLANMAYDI — zal narxi qoladi.
- * Shuning uchun bir taom mijozga ikki xil narxda ko'rinadi va bu
- * to'g'ri: yetkazishda qo'shimcha xarajat bor.
+ * Avval ikkinchi foiz BIRINCHISI qo'shilgan natijaga qo'llanardi
+ * (10 000 → 10 500 → 10 500×1.05 = 11 025) — bu noto'g'ri edi:
+ * mijoz xizmat haqi asl taom narxidan emas, restoran ustamasi
+ * bilan "shishirilgan" summadan olinardi. Endi ikkalasi ham
+ * doim BIR XIL baza — 10 000 — dan hisoblanadi, natija esa
+ * ularning yig'indisi.
  *
- * Foizlar bazaga bir marta va ketma-ket qo'llanadi — ustama ustiga
- * haq, haq ustiga yana ustama emas.
+ * Bu formula pul bo'linishi bilan ham (paymentSplit orqali)
+ * TO'LIQ MOS: restoran = baza + ustama − restoran komissiyasi,
+ * LokmaGo = restoran komissiyasi + mijoz haqi. Ikkalasi
+ * yig'ilsa mijoz narxiga teng chiqadi — boshqa formula
+ * ishlatilsa bu tenglik buziladi va pul "yo'qolib qoladi".
+ *
+ * Dine-in va bronda (PreOrderScreen) HECH IKKALASI ham
+ * qo'llanmaydi — restoran o'z narxi to'liq ko'rinadi.
  */
 
 /** Foizni butun songa qo'llash (tiyin yoki so'm — birlik muhim emas). */
-function addPercent(amount, percent) {
+function pctOf(amount, percent) {
   const p = Number(percent) || 0;
-  if (p <= 0) return Math.round(amount);
+  if (p <= 0) return 0;
   // Bazis punkt orqali — Float bo'linish yo'q
   const bp = Math.round(p * 100);
-  return Math.round(amount) + Math.floor((Math.round(amount) * bp) / 10000);
+  return Math.floor((Math.round(amount) * bp) / 10000);
 }
 
 /**
@@ -42,15 +54,20 @@ export async function priceContext(restaurant) {
   };
 }
 
-/** Yetkazish/olib ketish uchun mijoz narxi. */
+/**
+ * Yetkazish/olib ketish uchun mijoz narxi.
+ *
+ * Ikkala foiz BAZADAN, mustaqil hisoblanadi va qo'shiladi.
+ */
 export function customerPrice(basePrice, ctx) {
   const base = Math.round(Number(basePrice) || 0);
   if (base <= 0) return 0;
-  const withMarkup = addPercent(base, ctx.deliveryMarkupPercent);
-  return addPercent(withMarkup, ctx.customerFeePercent);
+  const markupAmt = pctOf(base, ctx.deliveryMarkupPercent);
+  const feeAmt = pctOf(base, ctx.customerFeePercent);
+  return base + markupAmt + feeAmt;
 }
 
-/** Zal va bron: narx o'zgarmaydi. */
+/** Zal va bron: narx o'zgarmaydi — restoranning o'z narxi. */
 export function dineInPrice(basePrice) {
   return Math.round(Number(basePrice) || 0);
 }

@@ -1,12 +1,30 @@
 /**
- * Narx dvigateli.
+ * Narx dvigateli — buyurtma yaratish va pul bo'linishi uchun.
  *
- * Zanjir (har foiz FAQAT BIR MARTA qo'llanadi):
+ * QOIDA (customerPricing.js bilan BIR XIL — bu ikkalasi doim
+ * mos kelishi SHART, aks holda mijoz ko'rgan narx va haqiqatda
+ * hisoblangan/bo'lingan summa bir-biriga to'g'ri kelmay qoladi):
  *
- *   BasePrice
- *     → × (1 + DeliveryMarkup%)   = DeliveryPrice
- *     → + DeliveryPrice × CustomerFee%  = CustomerFinalPrice
- *     → bo'linish: restoran / LokmaGo
+ *   BasePrice = 10 000
+ *     DeliveryMarkupAmount = BasePrice × DeliveryMarkup%     (masalan 5% → 500)
+ *     CustomerFeeAmount    = BasePrice × CustomerFee%        (masalan 5% → 500)
+ *     CustomerFinalPrice   = BasePrice + DeliveryMarkupAmount + CustomerFeeAmount
+ *                          = 11 000
+ *
+ * Ikkala foiz ham MUSTAQIL ravishda BASE'dan hisoblanadi va
+ * qo'shiladi — biri ikkinchisining natijasiga qo'llanmaydi
+ * (5% ustiga yana 5% emas).
+ *
+ * Bo'linish xuddi shu bazadan:
+ *   RestaurantPayout = BasePrice + DeliveryMarkupAmount − RestaurantCommissionAmount
+ *                     = 10 000 + 500 − 500 = 10 000
+ *   LokmaGoRevenue    = RestaurantCommissionAmount + CustomerFeeAmount
+ *                     = 500 + 500 = 1 000
+ *
+ * Tekshiruv: RestaurantPayout + LokmaGoRevenue === CustomerFinalPrice
+ * har doim rost bo'ladi (10 000 + 1 000 = 11 000) — chunki
+ * ikkalasi ham bir xil ikkita miqdordan (ustama, komissiya/haq)
+ * tuziladi, faqat ishorasi teskari.
  *
  * Dine-in va bron: faqat BasePrice. Ustama ham, mijoz haqi ham
  * qo'llanmaydi, bo'linish 0% — mijoz zalda o'tirib to'laydi.
@@ -52,33 +70,17 @@ export function priceDelivery(basePriceTiyin, agreement, deliveryMarkupPercent =
   const markup = Number(deliveryMarkupPercent || 0);
   const restCom = Number(agreement?.restaurantCommissionPercent || 0);
   const custFee = Number(agreement?.customerFeePercent || 0);
-  const billingBase = agreement?.billingBase || 'CUSTOMER_FINAL_PRICE';
 
-  // 1-bosqich: restoran ustamasi
-  const deliveryPrice = base + applyPercent(base, markup);
+  // Ikkala miqdor ham MUSTAQIL, bazadan hisoblanadi
+  const markupAmount = applyPercent(base, markup);
+  const customerFeeAmount = applyPercent(base, custFee);
+  const restaurantCommissionAmount = applyPercent(base, restCom);
 
-  // 2-bosqich: mijoz xizmat haqi — DeliveryPrice dan (base dan emas)
-  const customerFeeAmount = applyPercent(deliveryPrice, custFee);
-  const customerFinalPrice = deliveryPrice + customerFeeAmount;
+  const deliveryPrice = base + markupAmount;               // faqat ko'rsatish uchun
+  const customerFinalPrice = base + markupAmount + customerFeeAmount;
 
-  // 3-bosqich: bo'linish
-  const aggregated = restCom + custFee;
-
-  let restaurantPayout;
-  if (billingBase === 'DELIVERY_PRICE') {
-    /*
-     * Zanjirli qoida: restoran o'z narxini oladi, undan faqat
-     * O'Z komissiyasi chegiriladi. Mijoz haqi LokmaGo'ga o'tadi.
-     * 0% komissiyada restoran hech narsa yo'qotmaydi.
-     */
-    restaurantPayout = deliveryPrice - applyPercent(deliveryPrice, restCom);
-  } else {
-    // Yig'ma qoida: umumiy foiz yakuniy summadan
-    restaurantPayout = customerFinalPrice - applyPercent(customerFinalPrice, aggregated);
-  }
-
-  // LokmaGo — AYIRMA: tiyin yo'qolmaydi, yig'indi doim to'g'ri
-  const lokmaGross = customerFinalPrice - restaurantPayout;
+  const restaurantPayoutAmount = base + markupAmount - restaurantCommissionAmount;
+  const lokmaGrossRevenue = restaurantCommissionAmount + customerFeeAmount;
 
   return {
     basePrice: base,
@@ -88,10 +90,10 @@ export function priceDelivery(basePriceTiyin, agreement, deliveryMarkupPercent =
     customerFeeAmount,
     customerFinalPrice,
     restaurantCommissionPercent: restCom,
-    aggregatedSplitPercent: aggregated,
-    billingBase,
-    restaurantPayoutAmount: restaurantPayout,
-    lokmaGrossRevenue: lokmaGross,
+    aggregatedSplitPercent: restCom + custFee,
+    billingBase: 'BASE_ADDITIVE',
+    restaurantPayoutAmount,
+    lokmaGrossRevenue,
   };
 }
 
