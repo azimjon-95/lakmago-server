@@ -2,6 +2,7 @@ import { asyncHandler } from '../middleware/error.js';
 import { Restaurant } from '../models/Restaurant.js';
 import { Dish } from '../models/Dish.js';
 import { Order } from '../models/Order.js';
+import { isRestaurantOpen } from '../services/restaurantTime.js';
 
 // MongoDB ObjectId formatини tekshirish — noto'g'ri ID kelса server yiqilmasин,
 // aniq 404 qaytarsin (masalan eski mock ID 'r1' kelганда).
@@ -84,14 +85,19 @@ export const restaurantController = {
 
     // select: faqat karta uchun kerakli maydonlar (tarmoq trafigini kamaytiradi)
     const restaurants = await Restaurant.find(filter)
-      .select('name cuisine category kind rating reviewCount deliveryMin deliveryMax deliveryFee freeDeliveryThreshold minOrderAmount discount isFresh tint icon images imageUrl createdAt pickupEnabled prepMinutes shopTypes openTime closeTime')
+      .select('name cuisine category kind rating reviewCount deliveryMin deliveryMax deliveryFee freeDeliveryThreshold minOrderAmount discount isFresh tint icon images imageUrl createdAt pickupEnabled prepMinutes shopTypes openTime closeTime timezone workingDays')
       .sort({ createdAt: -1 })
       .limit(limit + 1)
       .lean();
 
     // Keyingi sahifa bormi?
     const hasMore = restaurants.length > limit;
-    const items = hasMore ? restaurants.slice(0, limit) : restaurants;
+    const items = (hasMore ? restaurants.slice(0, limit) : restaurants)
+      // isOpen — DOIM Toshkent (yoki restoranning o'z) vaqt
+      // mintaqasidan hisoblanadi, mijoz qurilmasi qaysi davlatda
+      // bo'lishidan qat'i nazar bir xil natija. Mijoz o'zi
+      // qayta hisoblamasin — bitta haqiqat manbai shu yerda.
+      .map((r) => ({ ...r, isOpen: isRestaurantOpen(r) }));
     const nextCursor = hasMore ? items[items.length - 1].createdAt : null;
 
     res.json({ items, nextCursor, hasMore });
@@ -107,6 +113,11 @@ export const restaurantController = {
     if (restaurant.isBlocked || !restaurant.isActive) {
       return res.status(404).json({ error: 'Restoran hozircha mavjud emas' });
     }
+
+    // isOpen — DOIM Toshkent (yoki restoranning o'z) vaqt
+    // mintaqasidan hisoblanadi, mijoz qurilmasi qaysi davlatda
+    // bo'lishidan qat'i nazar bir xil natija.
+    restaurant.isOpen = isRestaurantOpen(restaurant);
 
     // Mijozlar sharhlari — baholangan buyurtmalardan yig'iladi.
     // Xato bo'lsa restoran baribir ochiladi, faqat sharhlar
