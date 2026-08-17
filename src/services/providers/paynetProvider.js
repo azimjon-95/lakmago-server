@@ -34,8 +34,21 @@ export class PaynetProvider extends PaymentProvider {
     );
   }
 
-  /** Paynet split qo'llaydi — restoran ulushi to'g'ridan-to'g'ri ketadi. */
-  supportsSplit() { return true; }
+  /*
+   * HOZIRCHA (2026-08-17 biznes qarori) Paynet split YO'Q —
+   * hisob-kitob to'liq LokmaGo hisobiga tushadi, restoran ulushi
+   * har kuni QO'LDA (bank orqali) yuboriladi, Moliya bo'limidagi
+   * kunlik hisobot orqali. Paynet API o'zi split funksiyasini
+   * qo'llab-quvvatlasa ham, biz hali undan foydalanmayapmiz —
+   * shuning uchun false.
+   *
+   * Kelayotgan split integratsiyasi uchun: shu yerni true ga
+   * qaytarish YETARLI — paymentRecord.js'dagi payoutStatus
+   * mantig'i avtomatik moslashadi (services/paymentRecord.js:
+   * `payoutStatus = gateway?.supportsSplit() ? 'NOT_REQUIRED' : 'PENDING'`),
+   * boshqa hech narsani o'zgartirish shart emas.
+   */
+  supportsSplit() { return false; }
 
   /**
    * Mijozga to'lov havolasi.

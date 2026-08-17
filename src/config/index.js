@@ -132,11 +132,18 @@ export const config = {
   /**
    * Bo'linish foizlari — HECH QAYERDA qattiq yozilmaydi.
    *
-   * Standart qiymatlar biznes modelidan:
-   *   Paynet: 90% restoran / 10% LokmaGo, Paynet 2.5% LokmaGo
-   *           ulushidan → LokmaGo net 7.5%
-   *   Click:  1.5% umumiy summadan, split yo'q — LokmaGo keyin
-   *           bank orqali restoranga o'tkazadi
+   * Standart qiymatlar biznes modelidan (2026-08-17 tasdiqlangan):
+   *   Click:  1.5% umumiy summadan
+   *   Paynet: 1% umumiy summadan
+   *   Ikkalasi ham split QILMAYDI — to'liq summa LokmaGo hisobiga
+   *   tushadi (shlyuz o'z haqini ushlab qolgandan keyin), restoran
+   *   ulushi HAR KUNI QO'LDA (bank orqali) o'tkaziladi — Moliya
+   *   bo'limidagi kunlik hisobot shuni ko'rsatadi.
+   *
+   * Restoran o'z to'liq kelishilgan ulushini oladi — qaysi shlyuz
+   * ishlatilganidan qat'i nazar. Shlyuz haqi LokmaGo ulushidan
+   * "yeyiladi" (LokmaGo netto kamayadi), restoran ulushiga
+   * TA'SIR QILMAYDI.
    *
    * Restoran bo'yicha alohida shartnoma bo'lsa
    * CommissionAgreement ustun keladi.
@@ -144,18 +151,9 @@ export const config = {
   split: {
     defaultLokmaPercent: num(process.env.SPLIT_LOKMA_PERCENT, 10),
 
-    /**
-     * Paynet haqi 2.5%, lekin NIMADAN?
-     *
-     * TZ misoli: 100 000 → LokmaGo brutto 10 000 → Paynet haqi 250
-     *            → LokmaGo netto 9 750
-     * 250 = 10 000 ning 2.5% i, ya'ni haq LOKMAGO ULUSHIDAN olinadi,
-     * umumiy summadan emas (u holda 2 500 bo'lardi).
-     *
-     * Baza sozlanadi: LOKMA_SHARE (standart) yoki TOTAL.
-     */
-    paynetFeePercent: num(process.env.PAYNET_FEE_PERCENT, 2.5),
-    paynetFeeBase: process.env.PAYNET_FEE_BASE || 'LOKMA_SHARE',
+    /** Paynet haqi 1%, UMUMIY summadan (Click bilan bir xil qoida). */
+    paynetFeePercent: num(process.env.PAYNET_FEE_PERCENT, 1),
+    paynetFeeBase: process.env.PAYNET_FEE_BASE || 'TOTAL',
 
     /** Click haqi UMUMIY summadan olinadi (1.5% = 1 500). */
     clickFeePercent: num(process.env.CLICK_FEE_PERCENT, 1.5),

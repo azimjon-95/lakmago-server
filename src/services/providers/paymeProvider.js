@@ -25,7 +25,9 @@ export class PaymeProvider extends PaymentProvider {
     return this.isConfigured() && process.env.PAYME_ENABLED !== 'false';
   }
 
-  supportsSplit() { return true; }
+  // Eskirgan (legacy) — Paynet bilan bir xil qoidaga bo'ysunadi:
+  // hozircha split yo'q, qo'lda o'tkaziladi.
+  supportsSplit() { return false; }
 
   async createCheckout(order) {
     if (!this.acceptsNewPayments()) {

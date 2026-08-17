@@ -24,11 +24,18 @@ function percentOf(amountTiyin, percent) {
 }
 
 /**
- * Paynet: shlyuz pulni o'zi bo'ladi.
+ * Paynet: HOZIRCHA (2026-08-17) shlyuz o'zi bo'lmaydi.
  *
- * 100% mijozdan → 90% restoranga to'g'ridan-to'g'ri,
- * 10% LokmaGo balansiga. Paynet o'z haqini (2.5%) LokmaGo
- * ulushidan oladi — restoran ulushi tegilmaydi.
+ * Biznes qarori: split funksiyasi hali yoqilmagan — Paynet ham,
+ * Click ham to'liq summani (o'z haqini ushlab qolgandan keyin)
+ * LokmaGo hisobiga o'tkazadi. Restoran ulushi har kuni QO'LDA
+ * (bank orqali) yuboriladi — Moliya bo'limidagi kunlik hisobot
+ * shu asosda tuziladi.
+ *
+ * Shuning uchun requiresBankPayout: true — Click bilan bir xil.
+ * Kelajakda Paynet split yoqilsa, shu yerda o'zgartiriladi
+ * (payoutAmount: 0, requiresBankPayout: false) — qolgan butun
+ * hisoblash mantig'i (foizlar, netto) o'zgarishsiz qoladi.
  *
  * @param totalTiyin  mijoz to'lagan summa (tiyin)
  * @param lokmaPercent  LokmaGo ulushi %, shartnomadan yoki standart
@@ -43,24 +50,27 @@ export function splitPaynet(totalTiyin, lokmaPercent = config.split.defaultLokma
   const restaurantAmount = total - lokmaGross;
 
   /*
-   * Paynet haqi LokmaGo ULUSHIDAN olinadi (umumiy summadan emas):
-   *   100 000 → brutto 10 000 → haq 250 (10 000 ning 2.5%) → netto 9 750
-   * Restoran ulushi hech qanday holatda tegilmaydi.
+   * Paynet haqi UMUMIY summadan (Click bilan bir xil qoida,
+   * 2026-08-17 tasdiqlangan):
+   *   100 000 → haq 1% = 1 000 → LokmaGo hisobiga 99 000 tushadi
+   * Restoran ulushi (kelishuv bo'yicha, masalan 90 000) bunga
+   * qaramay TO'LIQ to'lanadi — shlyuz haqi faqat LokmaGo NETTO
+   * daromadini kamaytiradi.
    */
-  const feeBase = config.split.paynetFeeBase === 'TOTAL' ? total : lokmaGross;
+  const feeBase = config.split.paynetFeeBase === 'LOKMA_SHARE' ? lokmaGross : total;
   const providerFee = percentOf(feeBase, config.split.paynetFeePercent);
   const lokmaNet = lokmaGross - providerFee;
 
   return {
     provider: 'paynet',
     total,
-    restaurantAmount,       // shlyuz to'g'ridan-to'g'ri yuboradi
+    restaurantAmount,       // restoranga QARZ — kelishuv bo'yicha to'liq
     lokmaGrossCommission: lokmaGross,
     providerFee,
     lokmaNetCommission: lokmaNet,
-    // Shlyuz o'zi yuboradi — bank o'tkazmasi kerak emas
-    payoutAmount: 0,
-    requiresBankPayout: false,
+    // HOZIRCHA qo'lda (bank orqali) yuboriladi — Click bilan bir xil
+    payoutAmount: restaurantAmount,
+    requiresBankPayout: true,
   };
 }
 

@@ -14,6 +14,8 @@ import { supportController } from '../controllers/support.js';
 import { cardController } from '../controllers/cards.js';
 import { paymentController as gatewayController } from '../controllers/payments.js';
 import { billingController } from '../controllers/billing.js';
+import { settlementController } from '../controllers/settlement.js';
+import { expenseController } from '../controllers/expense.js';
 import { mapsController } from '../controllers/maps.js';
 import { catalogProductController } from '../controllers/catalogProducts.js';
 import { menuTransferController } from '../controllers/menuTransfer.js';
@@ -244,6 +246,15 @@ router.get('/admin/billing/ledger', auth, requireRole('admin'), billingControlle
 router.get('/admin/billing/restaurant/:id', auth, requireRole('admin'), billingController.restaurantSummary);
 router.post('/admin/billing/payout', auth, requireRole('admin'), billingController.payout);
 router.patch('/admin/restaurants/:id/commission', auth, requireRole('admin'), billingController.setCommission);
+
+// Kunlik hisob-kitob — Click/Paynet ajratilgan, qo'lda tasdiqlash
+router.get('/admin/settlement/daily', auth, requireRole('admin'), settlementController.daily);
+router.post('/admin/settlement/confirm', auth, requireRole('admin'), settlementController.confirm);
+
+// Kirim-chiqim (platformaning o'z xarajatlari)
+router.get('/admin/expenses', auth, requireRole('admin'), expenseController.list);
+router.post('/admin/expenses', auth, requireRole('admin'), expenseController.create);
+router.delete('/admin/expenses/:id', auth, requireRole('admin'), expenseController.remove);
 
 // ===== To'lov tizimlari =====
 // Webhook'lar — auth YO'Q (tizimlar o'z imzosi bilan tekshiriladi)
