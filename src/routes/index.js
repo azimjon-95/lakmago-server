@@ -17,6 +17,7 @@ import { billingController } from '../controllers/billing.js';
 import { settlementController } from '../controllers/settlement.js';
 import { expenseController } from '../controllers/expense.js';
 import { staffController } from '../controllers/staff.js';
+import { panelAdsController, adminAdsController, publicAdsController } from '../controllers/ads.js';
 import { mapsController } from '../controllers/maps.js';
 import { catalogProductController } from '../controllers/catalogProducts.js';
 import { menuTransferController } from '../controllers/menuTransfer.js';
@@ -144,6 +145,22 @@ router.get('/admin/agreements', ...A, agreementController.list);
 router.put('/admin/agreements/:restaurantId', ...A, agreementController.upsert);
 router.get('/admin/agreements/:restaurantId/history', ...A, agreementController.history);
 router.get('/panel/agreement', ...R, agreementController.myAgreement);
+
+// Reklama (banner) so'rovlari — restoran paneli
+router.get('/panel/ads', ...R, panelAdsController.list);
+router.get('/panel/ads/price', ...R, panelAdsController.price);
+router.get('/panel/ads/images', ...R, panelAdsController.images);
+router.post('/panel/ads', ...R, panelAdsController.create);
+router.delete('/panel/ads/:id', ...R, panelAdsController.cancel);
+
+// Reklama tasdiqlash — admin / marketing bo'limi
+router.get('/admin/ads', ...AS('marketing'), adminAdsController.list);
+router.patch('/admin/ads/:id/approve', ...AS('marketing'), adminAdsController.approve);
+router.patch('/admin/ads/:id/reject', ...AS('marketing'), adminAdsController.reject);
+
+// Ochiq — mijoz ilovasi bosh sahifa banneri
+router.get('/ads/banner', publicAdsController.banner);
+router.post('/ads/:id/click', publicAdsController.click);
 router.patch('/panel/delivery-markup', ...R, agreementController.setDeliveryMarkup);
 
 // Bildirishnomalar — admin ham, restoran ham (auth ichida ajratiladi)

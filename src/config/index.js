@@ -148,6 +148,15 @@ export const config = {
    * Restoran bo'yicha alohida shartnoma bo'lsa
    * CommissionAgreement ustun keladi.
    */
+  /**
+   * Reklama (banner) — kunlik narx, so'mda.
+   *
+   * SODDA: bitta umumiy narx, hammaga bir xil (restoran yoki
+   * taom reklamasi bo'lishidan qat'i nazar). Kelajakda turlarga
+   * qarab farqlantirilsa, shu yerga kengaytiriladi.
+   */
+  adPricePerDaySom: num(process.env.AD_PRICE_PER_DAY, 20000),
+
   split: {
     defaultLokmaPercent: num(process.env.SPLIT_LOKMA_PERCENT, 10),
 
