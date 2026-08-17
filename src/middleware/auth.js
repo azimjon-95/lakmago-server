@@ -18,6 +18,7 @@ export function auth(req, res, next) {
     req.userId = payload.userId;
     req.role = payload.role;
     req.restaurantId = payload.restaurantId ?? null;
+    req.department = payload.department ?? null;
     next();
   } catch {
     return res.status(401).json({ error: 'Token yaroqsiz' });
@@ -52,8 +53,26 @@ export function verifyTelegramInitData(initData) {
   return Object.fromEntries(params.entries());
 }
 
-export function signToken(userId, role, restaurantId = null) {
-  return jwt.sign({ userId, role, restaurantId }, config.jwtSecret, { expiresIn: '30d' });
+export function signToken(userId, role, restaurantId = null, department = null) {
+  return jwt.sign({ userId, role, restaurantId, department }, config.jwtSecret, { expiresIn: '30d' });
+}
+
+/**
+ * Sahifa darajasidagi ruxsat — xodim (staff) faqat o'z bo'limiga
+ * tegishli sahifalarga kira oladi. Admin va restoran uchun
+ * cheklovsiz o'tadi (ular alohida requireRole bilan himoyalangan).
+ *
+ * Ishlatish: router.get('/admin/billing/...', auth, requireRole('admin','staff'), requirePage('billing'), ctrl)
+ */
+export function requirePage(pageKey) {
+  return async (req, res, next) => {
+    if (req.role !== 'staff') return next();   // faqat staff uchun qo'shimcha tekshiruv
+    const { canAccessPage } = await import('../config/permissions.js');
+    if (!canAccessPage('staff', req.department, pageKey)) {
+      return res.status(403).json({ error: 'Bu bo\u2018limga ruxsatingiz yo\u2018q' });
+    }
+    next();
+  };
 }
 
 

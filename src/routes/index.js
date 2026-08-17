@@ -16,6 +16,7 @@ import { paymentController as gatewayController } from '../controllers/payments.
 import { billingController } from '../controllers/billing.js';
 import { settlementController } from '../controllers/settlement.js';
 import { expenseController } from '../controllers/expense.js';
+import { staffController } from '../controllers/staff.js';
 import { mapsController } from '../controllers/maps.js';
 import { catalogProductController } from '../controllers/catalogProducts.js';
 import { menuTransferController } from '../controllers/menuTransfer.js';
@@ -26,13 +27,23 @@ import { dineInController } from '../controllers/dineIn.js';
 import { dineInOrderController } from '../controllers/dineInOrder.js';
 import { waiterController } from '../controllers/waiter.js';
 import { dineInLiveController } from '../controllers/dineInLive.js';
-import { auth, requireRole, waiterAuth } from '../middleware/auth.js';
+import { auth, requireRole, requirePage, waiterAuth } from '../middleware/auth.js';
 
 export const router = Router();
 
 // Qisqartmalar — takrorlanmasin
 const A = [auth, requireRole('admin')];        // Super Admin
 const R = [auth, requireRole('restaurant')];   // Restoran paneli
+
+/*
+ * LokmaGo xodimi (staff) — admin bilan BIRGA ruxsat etiladi,
+ * lekin FAQAT o'z bo'limiga tegishli sahifaga (requirePage).
+ * Admin har doim o'tadi (requirePage o'zi buni hisobga oladi —
+ * faqat role==='staff' bo'lsa tekshiradi).
+ *
+ * Ishlatish: router.get('/admin/billing/x', ...AS('billing'), ctrl)
+ */
+const AS = (page) => [auth, requireRole('admin', 'staff'), requirePage(page)];
 
 // ===== Autentifikatsiya =====
 router.post('/auth/telegram', authController.telegram);       // mijoz (webapp)
@@ -175,7 +186,7 @@ router.patch('/panel/tables/:id', ...R, dineInController.updateTable);
 router.delete('/panel/tables/:id', ...R, dineInController.deleteTable);
 
 // Super Admin
-router.get('/admin/dine-in', ...A, dineInController.adminList);
+router.get('/admin/dine-in', ...AS('dinein'), dineInController.adminList);
 router.get('/admin/dine-in/tariff', ...A, dineInController.getTariff);
 router.patch('/admin/dine-in/tariff', ...A, dineInController.updateTariff);
 router.get('/admin/dine-in/billing/:restaurantId', ...A, dineInController.billingHistory);
@@ -240,21 +251,28 @@ router.get('/maps/reverse', mapsController.reverse);
 router.get('/maps/delivery-quote', mapsController.deliveryQuote);
 
 // ===== Moliya (admin) =====
-router.get('/admin/billing/overview', auth, requireRole('admin'), billingController.overview);
-router.get('/admin/billing/restaurants', auth, requireRole('admin'), billingController.byRestaurant);
-router.get('/admin/billing/ledger', auth, requireRole('admin'), billingController.ledger);
-router.get('/admin/billing/restaurant/:id', auth, requireRole('admin'), billingController.restaurantSummary);
-router.post('/admin/billing/payout', auth, requireRole('admin'), billingController.payout);
+router.get('/admin/billing/overview', ...AS('billing'), billingController.overview);
+router.get('/admin/billing/restaurants', ...AS('billing'), billingController.byRestaurant);
+router.get('/admin/billing/ledger', ...AS('billing'), billingController.ledger);
+router.get('/admin/billing/restaurant/:id', ...AS('billing'), billingController.restaurantSummary);
+router.post('/admin/billing/payout', ...AS('billing'), billingController.payout);
 router.patch('/admin/restaurants/:id/commission', auth, requireRole('admin'), billingController.setCommission);
 
 // Kunlik hisob-kitob — Click/Paynet ajratilgan, qo'lda tasdiqlash
-router.get('/admin/settlement/daily', auth, requireRole('admin'), settlementController.daily);
-router.post('/admin/settlement/confirm', auth, requireRole('admin'), settlementController.confirm);
+router.get('/admin/settlement/daily', ...AS('billing'), settlementController.daily);
+router.post('/admin/settlement/confirm', ...AS('billing'), settlementController.confirm);
 
 // Kirim-chiqim (platformaning o'z xarajatlari)
-router.get('/admin/expenses', auth, requireRole('admin'), expenseController.list);
-router.post('/admin/expenses', auth, requireRole('admin'), expenseController.create);
-router.delete('/admin/expenses/:id', auth, requireRole('admin'), expenseController.remove);
+router.get('/admin/expenses', ...AS('billing'), expenseController.list);
+router.post('/admin/expenses', ...AS('billing'), expenseController.create);
+router.delete('/admin/expenses/:id', ...AS('billing'), expenseController.remove);
+
+// Xodimlar (LokmaGo jamoasi) — FAQAT admin yollaydi/boshqaradi
+router.get('/admin/staff', ...A, staffController.list);
+router.get('/admin/staff/departments', ...A, staffController.departments);
+router.post('/admin/staff', ...A, staffController.create);
+router.patch('/admin/staff/:id', ...A, staffController.update);
+router.delete('/admin/staff/:id', ...A, staffController.remove);
 
 // ===== To'lov tizimlari =====
 // Webhook'lar — auth YO'Q (tizimlar o'z imzosi bilan tekshiriladi)
@@ -286,18 +304,18 @@ router.patch('/admin/support/:id/resolve', auth, requireRole('admin'), supportCo
 
 // ===== Admin paneli (role: admin) — dastur egasi =====
 router.get('/admin/stats', auth, requireRole('admin'), adminController.stats);
-router.get('/admin/restaurants', auth, requireRole('admin'), adminController.restaurants);
-router.get('/admin/restaurants/:id/dishes', auth, requireRole('admin'), adminController.restaurantDishes);
-router.get('/admin/restaurants/:id/reservations', auth, requireRole('admin'), adminController.restaurantReservations);
-router.post('/admin/restaurants', auth, requireRole('admin'), adminController.createRestaurant);
-router.patch('/admin/restaurants/:id', auth, requireRole('admin'), adminController.updateRestaurant);
+router.get('/admin/restaurants', ...AS('restaurants'), adminController.restaurants);
+router.get('/admin/restaurants/:id/dishes', ...AS('restaurants'), adminController.restaurantDishes);
+router.get('/admin/restaurants/:id/reservations', ...AS('restaurants'), adminController.restaurantReservations);
+router.post('/admin/restaurants', ...AS('restaurants'), adminController.createRestaurant);
+router.patch('/admin/restaurants/:id', ...AS('restaurants'), adminController.updateRestaurant);
 router.patch('/admin/restaurants/:id/password', auth, requireRole('admin'), adminController.resetRestaurantPassword);
 router.delete('/admin/restaurants/:id', auth, requireRole('admin'), adminController.deleteRestaurant);
 router.patch('/admin/restaurants/:id/block', auth, requireRole('admin'), adminController.toggleBlock);
 router.get('/admin/settings', auth, requireRole('admin'), adminController.getSettingsData);
 router.patch('/admin/settings', auth, requireRole('admin'), adminController.updateSettings);
 router.get('/admin/revenue', auth, requireRole('admin'), adminController.revenue);
-router.get('/admin/banners', auth, requireRole('admin'), adminController.banners);
+router.get('/admin/banners', ...AS('banners'), adminController.banners);
 router.post('/admin/banners', auth, requireRole('admin'), adminController.createBanner);
 router.patch('/admin/banners/:id', auth, requireRole('admin'), adminController.updateBanner);
 router.delete('/admin/banners/:id', auth, requireRole('admin'), adminController.deleteBanner);
@@ -309,7 +327,7 @@ router.post('/admin/groups/:chatId/broadcast', auth, requireRole('admin'), admin
 router.post('/admin/groups/broadcast-all', auth, requireRole('admin'), adminController.broadcastAll);
 router.post('/admin/groups/check', auth, requireRole('admin'), adminController.runGroupCheck);
 // Buyurtmalar nazorati
-router.get('/admin/orders', auth, requireRole('admin'), adminController.orders);
-router.get('/admin/orders/live', auth, requireRole('admin'), adminController.liveOrders);
-router.get('/admin/orders', auth, requireRole('admin'), adminController.allOrders);
+router.get('/admin/orders', ...AS('orders'), adminController.orders);
+router.get('/admin/orders/live', ...AS('orders'), adminController.liveOrders);
+router.get('/admin/orders', ...AS('orders'), adminController.allOrders);
 router.get('/admin/users', auth, requireRole('admin'), adminController.users);
