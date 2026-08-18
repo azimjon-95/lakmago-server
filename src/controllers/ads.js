@@ -10,6 +10,8 @@ const createSchema = z.object({
   dishId: z.string().length(24).optional(),
   imageUrl: z.string().min(1),
   days: z.number().int().min(1).max(90),
+  customTitle: z.string().max(80).optional(),
+  customDescription: z.string().max(200).optional(),
 });
 
 /* ============================================
@@ -53,19 +55,33 @@ export const panelAdsController = {
     if (!parsed.success) {
       return res.status(400).json({ error: 'Noto\u2018g\u2018ri ma\u2018lumot', details: parsed.error.flatten() });
     }
-    const { targetType, dishId, imageUrl, days } = parsed.data;
+    const { targetType, dishId, imageUrl, days, customTitle, customDescription } = parsed.data;
 
+    /*
+     * targetType==='dish' ikki yo'l bilan yaratilishi mumkin:
+     *   a) dishId berilgan — mavjud taomga bog'lanadi, modalda
+     *      HAQIQIY taom ma'lumoti (nomi, narxi) ko'rsatiladi
+     *   b) dishId YO'Q — restoran o'zi rasm yuklab, o'zi
+     *      sarlavha/tavsif yozadi (masalan menyuda hali yo'q
+     *      maxsus taklif). Bu holda customTitle MAJBURIY —
+     *      aks holda modalda ko'rsatiladigan hech narsa bo'lmaydi.
+     */
     if (targetType === 'dish') {
-      if (!dishId) return res.status(400).json({ error: 'Taom tanlanmagan' });
-      const dish = await Dish.findOne({ _id: dishId, restaurantId: req.restaurantId });
-      if (!dish) return res.status(404).json({ error: 'Taom topilmadi' });
+      if (dishId) {
+        const dish = await Dish.findOne({ _id: dishId, restaurantId: req.restaurantId });
+        if (!dish) return res.status(404).json({ error: 'Taom topilmadi' });
+      } else if (!customTitle?.trim()) {
+        return res.status(400).json({ error: 'Taom tanlanmagan yoki sarlavha yozilmagan' });
+      }
     }
 
     const pricePerDay = config.adPricePerDaySom * 100;   // so'm -> tiyin
     const ad = await Ad.create({
       restaurantId: req.restaurantId,
       targetType,
-      dishId: targetType === 'dish' ? dishId : null,
+      dishId: targetType === 'dish' && dishId ? dishId : null,
+      customTitle: (customTitle || '').trim(),
+      customDescription: (customDescription || '').trim(),
       imageUrl,
       days,
       pricePerDay,
@@ -175,6 +191,12 @@ export const publicAdsController = {
       imageUrl: a.imageUrl,
       restaurantId: String(a.restaurantId._id),
       restaurantName: a.restaurantId.name,
+      // Moslashtirilgan matn — restoran o'zi yozgan (rasm+matn
+      // yoki taomga bog'lanmagan reklama uchun). Bo'sh bo'lsa,
+      // mijoz tarafida standart matnga (restoran nomi yoki
+      // haqiqiy taom nomi) qaytiladi.
+      customTitle: a.customTitle || null,
+      customDescription: a.customDescription || null,
       dish: a.dishId ? {
         id: String(a.dishId._id), name: a.dishId.name,
         price: a.dishId.price, imageUrl: a.dishId.imageUrl,

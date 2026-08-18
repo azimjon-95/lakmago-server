@@ -22,7 +22,22 @@ const adSchema = new Schema(
     },
 
     targetType: { type: String, enum: ['restaurant', 'dish'], required: true },
+    // Faqat 'dish' turida VA "mavjud taomdan" tanlansa to'ldiriladi.
+    // Bo'sh bo'lishi mumkin — restoran o'zi rasm+matn yozganda
+    // (haqiqiy taom yozuviga bog'lanmagan reklama).
     dishId: { type: Schema.Types.ObjectId, ref: 'Dish', default: null },
+
+    /*
+     * Moslashtirilgan matn — restoran o'zi yozadi. Ikki holatda
+     * ishlatiladi:
+     *   1) targetType==='restaurant' — modalda restoran nomi
+     *      o'rniga (yoki qo'shimcha) ko'rsatish uchun, ixtiyoriy
+     *   2) targetType==='dish' VA dishId=null — restoran mavjud
+     *      taomga bog'lamasdan, o'zi xohlagan sarlavha/tavsifni
+     *      yozganda (majburiy, chunki boshqa ma'lumot manbai yo'q)
+     */
+    customTitle: { type: String, default: '', maxlength: 80 },
+    customDescription: { type: String, default: '', maxlength: 200 },
 
     // Banner rasmi — restoran o'zining mavjud rasmidan (restoran
     // yoki taom galereyasidan) tanlaydi, YOKI yangi yuklaydi.
