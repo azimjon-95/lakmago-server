@@ -145,6 +145,20 @@ const restaurantSchema = new Schema(
     // Olib ketishda chegirma (foizda) — mijozni rag'batlantirish
     pickupDiscountPercent: { type: Number, default: 0 },
 
+    /*
+     * ===== YETKAZIB BERISH (delivery) =====
+     * Ba'zi muassasalarda yetkazish xizmati UMUMAN bo'lmasligi
+     * mumkin (faqat o'zi olib ketish va/yoki stol bron qilish).
+     * Buni LokmaGo admin paneli boshqaradi.
+     *
+     * false bo'lsa: mijoz savatida "Yetkazib berish" tanlovi
+     * o'chirilgan (disabled) holatda ko'rinadi, avtomatik
+     * "O'zim olib ketaman" tanlanadi va ogohlantirish chiqadi.
+     * Server tomonda ham buyurtma yaratishda tekshiriladi —
+     * frontendni chetlab o'tib bo'lmaydi.
+     */
+    deliveryEnabled: { type: Boolean, default: true },
+
     /**
      * Yetkazish ustamasi — restoran o'zi belgilaydi.
      *

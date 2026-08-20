@@ -194,7 +194,7 @@ export const orderController = {
 
     const restIds = orders.map((o) => o.restaurantId);
     const restDocs = await Restaurant.find({ _id: { $in: restIds } })
-      .select('name deliveryFee freeDeliveryThreshold minOrderAmount serviceFeePercent serviceFeeMin serviceFeeMax prepMinutes openTime closeTime timezone workingDays isActive isBlocked isApproved pickupEnabled lat lng delivery')
+      .select('name deliveryFee freeDeliveryThreshold minOrderAmount serviceFeePercent serviceFeeMin serviceFeeMax prepMinutes openTime closeTime timezone workingDays isActive isBlocked isApproved pickupEnabled deliveryEnabled lat lng delivery')
       .lean();
     const restMap = new Map(restDocs.map((r) => [String(r._id), r]));
 
@@ -224,6 +224,23 @@ export const orderController = {
           restaurantId: String(o.restaurantId),
           openTime: rest.openTime,
           closeTime: rest.closeTime,
+        });
+      }
+
+      /*
+       * Yetkazib berish yoqilganmi.
+       *
+       * Ba'zi muassasalarda yetkazish xizmati umuman bo'lmaydi
+       * (faqat olib ketish / stol bron qilish). Mijoz ilovasida
+       * bu tanlov o'chirilgan ko'rinadi, LEKIN frontendga
+       * ISHONMAYMIZ — kimdir to'g'ridan-to'g'ri API'ga so'rov
+       * yuborsa ham shu yerda to'xtatiladi.
+       */
+      if (!isPickup && rest.deliveryEnabled === false) {
+        return res.status(400).json({
+          error: `${rest.name} yetkazib berish xizmatini ko'rsatmaydi \u2014 o'zingiz olib ketishingiz mumkin`,
+          code: 'DELIVERY_DISABLED',
+          restaurantId: String(o.restaurantId),
         });
       }
 

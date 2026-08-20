@@ -140,7 +140,25 @@ export async function listSince({ audience, restaurantId, afterSeq = 0, limit = 
 
 /** Hali javob berilmagan bildirishnomalar (panel qayta yuklanganda). */
 export async function listPending({ audience, restaurantId, limit = 50 }) {
-  const filter = { audience, status: { $in: ['NEW', 'DELIVERED', 'SEEN'] } };
+  /*
+   * XATO TUZATILDI (2026-08): avval vaqt chegarasi YO'Q edi —
+   * bir necha kun oldingi, hech kim javob bermagan bildirishnoma
+   * ham "kutilmoqda" deb qaytaverardi. Natijada panelga har
+   * kirganda eski, allaqachon ahamiyatsiz bildirishnomalar
+   * yuklanib, takroriy ovoz (repeat loop) ularni HADEB
+   * chalayverardi — foydalanuvchi "bo'sh bildirishnomada muzika
+   * chalinmoqda" deb shikoyat qilgan holat aynan shu.
+   *
+   * Endi faqat OXIRGI 12 SOAT ichidagilar qaytadi: undan eskisi
+   * amalda ahamiyatini yo'qotgan (buyurtma allaqachon bajarilgan
+   * yoki bekor bo'lgan), shuning uchun bezovta qilmasligi kerak.
+   */
+  const MAX_AGE_MS = 12 * 60 * 60 * 1000;
+  const filter = {
+    audience,
+    status: { $in: ['NEW', 'DELIVERED', 'SEEN'] },
+    createdAt: { $gte: new Date(Date.now() - MAX_AGE_MS) },
+  };
   if (audience === 'restaurant') filter.restaurantId = restaurantId;
 
   const docs = await Notification.find(filter)

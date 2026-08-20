@@ -202,6 +202,7 @@ export const adminController = {
       reservationNote: z.string().optional(),
       // Olib ketish
       pickupEnabled: z.boolean().optional(),
+      deliveryEnabled: z.boolean().optional(),
       pickupDiscountPercent: z.number().optional(),
       prepMinutes: z.number().optional(),
       // Do'kon yo'nalishlari
@@ -250,7 +251,7 @@ export const adminController = {
       // Stol bron qilish
       'reservationEnabled', 'reservationNote',
       // Olib ketish va do'kon yo'nalishlari
-      'pickupEnabled', 'pickupDiscountPercent', 'prepMinutes', 'shopTypes',
+      'pickupEnabled', 'deliveryEnabled', 'pickupDiscountPercent', 'prepMinutes', 'shopTypes',
     ];
     const update = {};
     for (const k of allowed) if (k in req.body) update[k] = req.body[k];
