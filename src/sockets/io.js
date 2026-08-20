@@ -1,6 +1,7 @@
 import { Server as HttpServer } from 'http';
 import { Server as SocketServer } from 'socket.io';
 import { config, isAllowedOrigin } from '../config/index.js';
+import { getRedis } from '../services/cache.js';
 
 let io = null;
 
@@ -24,6 +25,28 @@ function broadcastPresence() {
   });
 }
 
+
+/**
+ * Socket.io ni Redis adapteriga ulaydi (mavjud bo'lsa).
+ * Xato bo'lsa — jim, bitta nusxa rejimida davom etadi.
+ */
+async function setupRedisAdapter() {
+  try {
+    const base = getRedis();
+    if (!base) return;   // Redis yo'q — bitta nusxa rejimi
+
+    const { createAdapter } = await import('@socket.io/redis-adapter');
+    // Pub/Sub uchun ALOHIDA ulanishlar kerak: obuna bo'lgan
+    // ulanishda oddiy buyruqlar ishlamaydi (Redis qoidasi)
+    const pubClient = base.duplicate();
+    const subClient = base.duplicate();
+    io.adapter(createAdapter(pubClient, subClient));
+    console.log('[socket] Redis adapter yoqildi (ko\u2018p nusxa rejimi)');
+  } catch (e) {
+    console.warn('[socket] Redis adapter ulanmadi, bitta nusxa rejimi:', e.message);
+  }
+}
+
 export function initSocket(httpServer) {
   io = new SocketServer(httpServer, {
     // Bir nechta frontend (client/admin/Vercel) — moslashuvchan CORS
@@ -33,6 +56,24 @@ export function initSocket(httpServer) {
       credentials: true,
     },
   });
+
+  /*
+   * Redis adapter — bir nechta server nusxasi uchun.
+   *
+   * NEGA KERAK: agar server 2+ nusxada ishlasa (yuk taqsimlash,
+   * PM2 cluster, bir nechta konteyner), socket xonalari HAR
+   * NUSXADA ALOHIDA bo'ladi. Natijada 1-nusxaga ulangan
+   * restoranga 2-nusxada yaratilgan buyurtma haqida xabar
+   * YETIB BORMAYDI — "buyurtma keldi, lekin restoran ko'rmadi"
+   * kabi jiddiy nosozlik.
+   *
+   * Redis adapter barcha nusxalarni bitta kanalga ulaydi:
+   * io.to(...).emit(...) qaysi nusxadan chaqirilishidan qat'i
+   * nazar hamma joyga yetadi.
+   *
+   * Redis yo'q bo'lsa — bitta nusxa rejimida oddiy ishlayveradi.
+   */
+  setupRedisAdapter();
 
   io.on('connection', (socket) => {
 

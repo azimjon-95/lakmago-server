@@ -1,4 +1,5 @@
 import { asyncHandler } from '../middleware/error.js';
+import { cached, KEYS, TTL } from '../services/cache.js';
 import { Restaurant } from '../models/Restaurant.js';
 import { Dish } from '../models/Dish.js';
 import { Order } from '../models/Order.js';
@@ -83,12 +84,28 @@ export const restaurantController = {
     }
     const limit = Math.min(Number(req.query.limit) || 20, 50);
 
-    // select: faqat karta uchun kerakli maydonlar (tarmoq trafigini kamaytiradi)
-    const restaurants = await Restaurant.find(filter)
+    /*
+     * KESHLASH — DIQQAT BILAN.
+     *
+     * FAQAT baza so'rovi natijasi keshlanadi. `isOpen` maydoni
+     * kesh ichiga KIRMAYDI va har so'rovda qaytadan hisoblanadi
+     * (pastda) — chunki u VAQTGA bog'liq: 2 daqiqalik kesh ham
+     * restoran yopilgandan keyin uni "ochiq" ko'rsatib qo'yardi.
+     * Bu yaqinda tuzatilgan vaqt-mintaqasi xatosini qaytarib
+     * keltirgan bo'lardi.
+     *
+     * Kesh kaliti so'rov parametrlaridan tuziladi — turli
+     * kategoriya/sahifa alohida keshlanadi.
+     */
+    const cacheKey = KEYS.catalogList(
+      `${req.query.category || 'all'}:${req.query.cursor || '0'}:${limit}`,
+    );
+
+    const restaurants = await cached(cacheKey, TTL.catalog, () => Restaurant.find(filter)
       .select('name cuisine category kind rating reviewCount deliveryMin deliveryMax deliveryFee freeDeliveryThreshold minOrderAmount discount isFresh tint icon images imageUrl createdAt pickupEnabled deliveryEnabled prepMinutes shopTypes openTime closeTime timezone workingDays')
       .sort({ createdAt: -1 })
       .limit(limit + 1)
-      .lean();
+      .lean());
 
     // Keyingi sahifa bormi?
     const hasMore = restaurants.length > limit;

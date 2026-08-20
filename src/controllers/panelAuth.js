@@ -4,6 +4,7 @@ import { signToken } from '../middleware/auth.js';
 import { User } from '../models/User.js';
 import { StaffUser } from '../models/StaffUser.js';
 import { getAllowedPages, DEPARTMENT_LABELS } from '../config/permissions.js';
+import { warmupRestaurant } from '../services/restaurantWarmup.js';
 
 const loginSchema = z.object({
   login: z.string().min(2),
@@ -43,6 +44,19 @@ export const panelAuthController = {
       await user.save();
 
       const token = signToken(String(user._id), user.role, user.restaurantId ? String(user.restaurantId) : null);
+
+      /*
+       * Restoran kirdi — uning BUTUN ma'lumotini fon rejimida
+       * Redisga yuklaymiz (profil + barcha taomlar).
+       *
+       * `await` YO'Q — ataylab: login javobi kutib turmasligi
+       * kerak. Warm-up tugamasa ham panel ochilaveradi, shunchaki
+       * birinchi so'rovlar bazadan o'qiydi.
+       */
+      if (user.role === 'restaurant' && user.restaurantId) {
+        warmupRestaurant(user.restaurantId).catch(() => {});
+      }
+
       return res.json({
         token,
         user: {

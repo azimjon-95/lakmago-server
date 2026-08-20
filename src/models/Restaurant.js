@@ -1,4 +1,5 @@
 import { Schema, model } from 'mongoose';
+import { cacheInvalidationPlugin } from './cacheInvalidation.js';
 
 const restaurantSchema = new Schema(
   {
@@ -204,5 +205,8 @@ const restaurantSchema = new Schema(
 restaurantSchema.index({ isApproved: 1, isActive: 1, isBlocked: 1, category: 1 });
 restaurantSchema.index({ isApproved: 1, isActive: 1, isBlocked: 1, createdAt: -1 }); // cursor pagination
 restaurantSchema.index({ name: 'text', cuisine: 'text' }); // matn qidiruvi
+
+// Har qanday yozuv amalidan keyin Redis keshini avtomatik tozalaydi
+restaurantSchema.plugin(cacheInvalidationPlugin, { kind: 'restaurant' });
 
 export const Restaurant = model('Restaurant', restaurantSchema);

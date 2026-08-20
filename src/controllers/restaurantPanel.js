@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { cached, KEYS, TTL } from '../services/cache.js';
 import { asyncHandler } from '../middleware/error.js';
 import { Restaurant } from '../models/Restaurant.js';
 import { Dish } from '../models/Dish.js';
@@ -38,7 +39,22 @@ export const restaurantPanelController = {
 
   // GET /api/panel/dishes — o'z taomlari (barchasi, STOPdagilar ham)
   dishes: asyncHandler(async (req, res) => {
-    const dishes = await Dish.find({ restaurantId: rid(req) }).sort({ section: 1, name: 1 });
+    const id = String(rid(req));
+    /*
+     * KESHDAN o'qiladi (login paytida allaqachon to'ldirilgan —
+     * services/restaurantWarmup.js). Menyu eng ko'p ochiladigan
+     * sahifa, shuning uchun eng katta foyda shu yerda.
+     *
+     * Kesh yangilanishi haqida tashvishlanmasa bo'ladi: Dish
+     * modeliga ulangan plagin har qanday o'zgarishda (qo'shish,
+     * tahrirlash, o'chirish, stop-list) keshni AVTOMATIK
+     * tozalaydi (models/cacheInvalidation.js).
+     */
+    const dishes = await cached(
+      KEYS.restaurantDishes(id),
+      TTL.dishes,
+      () => Dish.find({ restaurantId: id }).sort({ section: 1, name: 1 }).lean(),
+    );
     res.json(dishes);
   }),
 

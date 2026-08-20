@@ -8,6 +8,7 @@ import { config, connectDB, isAllowedOrigin } from './config/index.js';
 import { router } from './routes/index.js';
 import { errorHandler, notFound } from './middleware/error.js';
 import { initSocket } from './sockets/io.js';
+import { initCache } from './services/cache.js';
 import { handleBotUpdate } from './services/telegram.js';
 import { ensureDefaultAdmin } from './services/bootstrap.js';
 import { initPush } from './services/push.js';
@@ -16,6 +17,13 @@ import mongoSanitize from 'express-mongo-sanitize';
 
 async function main() {
   await connectDB();
+
+  /*
+   * Redis keshni ishga tushiramiz. REDIS_URL berilmagan bo'lsa
+   * jim o'tkazib yuboriladi — dastur keshsiz ishlayveradi
+   * (services/cache.js dagi izohga qarang).
+   */
+  initCache();
 
   // Default admin (dastur egasi) akkauntini yaratish/tekshirish
   await ensureDefaultAdmin();

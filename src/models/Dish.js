@@ -1,4 +1,5 @@
 import { Schema, model } from 'mongoose';
+import { cacheInvalidationPlugin } from './cacheInvalidation.js';
 
 const optionSchema = new Schema(
   {
@@ -91,5 +92,8 @@ const dishSchema = new Schema(
 dishSchema.index({ restaurantId: 1, isAvailable: 1, section: 1 }); // restoran menyusi
 dishSchema.index({ isTrending: 1, isAvailable: 1 });               // trend taomlar
 dishSchema.index({ isDiscounted: 1, isAvailable: 1 });             // chegirmadagilar
+
+// Har qanday yozuv amalidan keyin Redis keshini avtomatik tozalaydi
+dishSchema.plugin(cacheInvalidationPlugin, { kind: 'dish' });
 
 export const Dish = model('Dish', dishSchema);
