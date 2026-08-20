@@ -35,10 +35,26 @@ export function requireRole(...roles) {
 }
 
 // Telegram WebApp initData'ni tekshirish (xavfsiz login)
+/**
+ * Telegram WebApp initData'ni tasdiqlaydi.
+ *
+ * XAVFSIZLIK (2026-08 audit natijasida qattiqlashtirildi):
+ *  1) Hash solishtirish crypto.timingSafeEqual orqali — oddiy
+ *     !== operatori satrlarni belgima-belgi solishtiradi,
+ *     nazariy jihatdan vaqt-hujumiga (timing attack) ochiq
+ *     qoldiradi (tashqi tarmoq orqali amalda amalga oshirish
+ *     juda qiyin bo'lsa-da, to'g'ri usul shu).
+ *  2) auth_date tekshiriladi — Telegram'ning o'zi tavsiya
+ *     qiladigan choralardan: eski, biroq TO'G'RI imzolangan
+ *     initData satri (masalan brauzer tarixidan yoki log
+ *     fayldan olingan) qayta ishlatilishining (replay attack)
+ *     oldini oladi. 24 soatdan eski bo'lsa rad etiladi.
+ */
 export function verifyTelegramInitData(initData) {
   if (!config.telegramBotToken) return null;
   const params = new URLSearchParams(initData);
   const hash = params.get('hash');
+  if (!hash) return null;
   params.delete('hash');
   const dataCheckString = Array.from(params.entries()).
   sort(([a], [b]) => a.localeCompare(b)).
@@ -49,7 +65,19 @@ export function verifyTelegramInitData(initData) {
   update(config.telegramBotToken).
   digest();
   const computed = crypto.createHmac('sha256', secretKey).update(dataCheckString).digest('hex');
-  if (computed !== hash) return null;
+
+  // Doimiy-vaqtli solishtirish — uzunlik farq qilsa ham xato
+  // tashlamasligi uchun avval uzunlikni tekshiramiz
+  const computedBuf = Buffer.from(computed, 'hex');
+  const hashBuf = Buffer.from(hash, 'hex');
+  if (computedBuf.length !== hashBuf.length) return null;
+  if (!crypto.timingSafeEqual(computedBuf, hashBuf)) return null;
+
+  // Eskirganini tekshirish — 24 soatdan katta bo'lsa rad etamiz
+  const authDate = Number(params.get('auth_date'));
+  const MAX_AGE_SEC = 24 * 60 * 60;
+  if (!authDate || Date.now() / 1000 - authDate > MAX_AGE_SEC) return null;
+
   return Object.fromEntries(params.entries());
 }
 

@@ -61,10 +61,32 @@ function num(value, fallback) {
   return Number.isFinite(n) ? n : fallback;
 }
 
+/*
+ * XAVFSIZLIK (2026-08 audit): JWT_SECRET ishlab chiqarishda
+ * MAJBURIY. Avval o'rnatilmasa jim tarzda 'dev-secret' (barchaga
+ * ma'lum, taxmin qilish oson) qiymatga o'tar edi — bu degani
+ * kimdir shu qiymatni bilsa, ADMIN huquqli token ham SOXTALASHTIRA
+ * olardi. Endi: production'da o'rnatilmasa server UMUMAN
+ * ISHGA TUSHMAYDI (jim ishlashdan ko'ra darhol, ochiq xato
+ * berish xavfsizroq). Faqat lokal ishlab chiqishda (NODE_ENV
+ * !== 'production') qulaylik uchun standart qiymat qoldi.
+ */
+const isProd = process.env.NODE_ENV === 'production';
+const jwtSecretFromEnv = process.env.JWT_SECRET;
+if (isProd && (!jwtSecretFromEnv || jwtSecretFromEnv === 'dev-secret')) {
+  throw new Error(
+    "[XAVFSIZLIK] JWT_SECRET production muhitida o'rnatilishi SHART "
+    + '(kuchli, tasodifiy qiymat — masalan `openssl rand -hex 32`). '
+    + "Server ataylab ishga tushmaydi, chunki bu qiymatsiz JWT tokenlar "
+    + 'oson soxtalashtiriladi.',
+  );
+}
+const jwtSecret = jwtSecretFromEnv || 'dev-secret';
+
 export const config = {
   port: Number(process.env.PORT ?? 4000),
   mongoUri: process.env.MONGO_URI ?? 'mongodb://localhost:27017/lokmago',
-  jwtSecret: process.env.JWT_SECRET ?? 'dev-secret',
+  jwtSecret,
   telegramBotToken: process.env.TELEGRAM_BOT_TOKEN ?? '',
   // Frontend manzillari (aniq ajratilган)
   webappOrigin,            // mijoz webapp'и (WEBAPP_URL)

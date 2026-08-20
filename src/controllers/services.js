@@ -189,14 +189,10 @@ export const paymentController = {
     res.json({ checkoutUrl, provider, amount: order.total });
   }),
 
-  // POST /api/payments/callback  (provider webhook — to'lov tasdiqlanishi)
-  callback: asyncHandler(async (req, res) => {
-    const { orderId, success } = req.body;
-    if (success) {
-      await Order.findByIdAndUpdate(orderId, { status: 'preparing' });
-    }
-    res.json({ received: true });
-  })
+  // POST /api/payments/callback — O'CHIRILDI (routes/index.js dagi
+  // izohga qarang: bu imzo tekshiruvisiz, soxta "to'landi" xabarini
+  // qabul qilardi — xavfsizlik teshigi edi, hech qanday haqiqiy
+  // mijoz uni chaqirmasdi).
 };
 
 // Payme/Click checkout URL yasovchi (real kalitlar env'dan olinadi)

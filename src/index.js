@@ -11,6 +11,8 @@ import { initSocket } from './sockets/io.js';
 import { handleBotUpdate } from './services/telegram.js';
 import { ensureDefaultAdmin } from './services/bootstrap.js';
 import { initPush } from './services/push.js';
+import { apiLimiter } from './middleware/rateLimit.js';
+import mongoSanitize from 'express-mongo-sanitize';
 
 async function main() {
   await connectDB();
@@ -46,6 +48,18 @@ async function main() {
     credentials: true,
   }));
   app.use(express.json());
+  /*
+   * XAVFSIZLIK (2026-08 audit): NoSQL in'eksiyaga qarshi.
+   *
+   * MongoDB so'rovlariga to'g'ridan-to'g'ri yuborilgan
+   * ma'lumotlar ichida "$" bilan boshlanuvchi kalitlar (masalan
+   * { login: { "$ne": null } }) MongoDB operatoriga aylanib,
+   * autentifikatsiya tekshiruvini chetlab o'tishi mumkin edi.
+   * Bu middleware req.body/req.query/req.params ichidagi barcha
+   * shunday kalitlarni avtomatik olib tashlaydi — har bir
+   * kontrollerda alohida tekshirish shart emas.
+   */
+  app.use(mongoSanitize());
   app.use(morgan('dev'));
 
   // Ildiz — server ishlayotganini bildiradi (404 log to'ldirmasin)
@@ -279,7 +293,7 @@ async function main() {
     });
   });
 
-  app.use('/api', router);
+  app.use('/api', apiLimiter, router);
 
   // Taom ulashish sahifasi (Open Graph — Telegram/WhatsApp preview)
 

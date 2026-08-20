@@ -49,11 +49,20 @@ export function errorHandler(err, req, res, _next) {
     });
   }
 
-  // Noma'lum xato — so'rov konteksti bilan logga yoziladi
+  // Noma'lum xato — to'liq tafsilot FAQAT serverda logga yoziladi.
   console.error('[500]', req.method, req.originalUrl, '\n', err);
+
+  /*
+   * XAVFSIZLIK (2026-08 audit): production'da xom err.message
+   * mijozga QAYTARILMAYDI — ba'zi kutubxona xatolarida ichki
+   * yo'llar, ulanish satrlari yoki boshqa maxfiy tafsilotlar
+   * bo'lishi mumkin. Faqat lokal ishlab chiqishda (tezroq
+   * nosozliklarni topish uchun) ko'rsatiladi.
+   */
+  const isProd = process.env.NODE_ENV === 'production';
   res.status(500).json({
     error: 'Server xatosi',
-    message: err?.message || '',
+    message: isProd ? '' : (err?.message || ''),
   });
 }
 

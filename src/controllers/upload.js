@@ -19,8 +19,24 @@ export const uploadController = {
     const folder = req.query.folder === 'banners' ? 'lokmago/banners' : 'lokmago/dishes';
     const timestamp = Math.round(Date.now() / 1000);
 
+    /*
+     * XAVFSIZLIK (2026-08 audit): faqat rasm formatlariga ruxsat.
+     *
+     * Bu qiymat IMZOGA kiritiladi — Cloudinary signed so'rovda
+     * BARCHA imzolangan parametrlar aynan bir xil qiymat bilan
+     * qaytarilishini talab qiladi. Demak frontend buni chetlab
+     * o'ta olmaydi: agar boshqa formatni yuborsa yoki bu
+     * parametrni o'zgartirsa/olib tashlasa, Cloudinary imzoni
+     * "noto'g'ri" deb rad etadi.
+     *
+     * Fayl HAJMI chegarasi Cloudinary hisobingizning "Upload
+     * presets" sozlamalarida (dashboard) alohida o'rnatilishi
+     * kerak — signed so'rov parametrlari orqali bu cheklanmaydi.
+     */
+    const allowedFormats = 'jpg,jpeg,png,webp';
+
     // Cloudinary imzo qoidasi: parametrlarni alifbo tartibida, secret bilan SHA-1
-    const params = { folder, timestamp };
+    const params = { allowed_formats: allowedFormats, folder, timestamp };
     const toSign = Object.keys(params)
       .sort()
       .map((k) => `${k}=${params[k]}`)
@@ -36,6 +52,7 @@ export const uploadController = {
       apiKey,
       timestamp,
       folder,
+      allowedFormats,
       signature,
     });
   }),

@@ -29,6 +29,7 @@ import { dineInOrderController } from '../controllers/dineInOrder.js';
 import { waiterController } from '../controllers/waiter.js';
 import { dineInLiveController } from '../controllers/dineInLive.js';
 import { auth, requireRole, requirePage, waiterAuth } from '../middleware/auth.js';
+import { loginLimiter, writeLimiter } from '../middleware/rateLimit.js';
 
 export const router = Router();
 
@@ -47,8 +48,8 @@ const R = [auth, requireRole('restaurant')];   // Restoran paneli
 const AS = (page) => [auth, requireRole('admin', 'staff'), requirePage(page)];
 
 // ===== Autentifikatsiya =====
-router.post('/auth/telegram', authController.telegram);       // mijoz (webapp)
-router.post('/auth/login', panelAuthController.login);         // admin/restoran (panel)
+router.post('/auth/telegram', loginLimiter, authController.telegram);       // mijoz (webapp)
+router.post('/auth/login', loginLimiter, panelAuthController.login);         // admin/restoran (panel)
 router.get('/auth/me', auth, panelAuthController.me);
 
 // ===== Ochiq katalog (mijoz webapp) =====
@@ -71,7 +72,20 @@ router.get('/orders/:id', auth, orderController.getOne);
 router.patch('/orders/:id/confirm', auth, orderController.confirmDelivery);
 
 router.post('/payments/create', auth, paymentController.create);
-router.post('/payments/callback', paymentController.callback);
+/*
+ * XAVFSIZLIK (2026-08 audit): '/payments/callback' O'CHIRILDI.
+ *
+ * Bu — eski "demo" placeholder edi (imzo tekshiruvisiz,
+ * AUTENTIFIKATSIYASIZ): { orderId, success:true } yuborish
+ * KIFOYA edi — buyurtma HAQIQIY to'lovsiz "to'landi" deb
+ * belgilanardi. Hech qanday mijoz kodi bu endpointни
+ * chaqirmasdi (tekshirildi) — faqat xavf tug'dirardi.
+ *
+ * Haqiqiy, imzo bilan tekshiriladigan to'lov tasdiqlash — pastda
+ * /payments/click/*, /payments/paynet, /payments/payme orqali
+ * (services/providers/*.js — har biri o'z shlyuzining imzo
+ * tekshiruvini amalga oshiradi).
+ */
 
 router.get('/reservations/my', auth, reservationController.myReservations);
 router.patch('/reservations/:id/cancel', auth, reservationController.cancelMine);
@@ -127,7 +141,7 @@ router.get('/dine-in/requests/:sessionId', dineInLiveController.mySessionRequest
 router.get('/dine-in/receipt/:sessionId', dineInLiveController.receipt);
 
 // Ofitsiant — alohida autentifikatsiya
-router.post('/waiter/login', waiterController.login);
+router.post('/waiter/login', loginLimiter, waiterController.login);
 router.get('/waiter/me', waiterAuth, waiterController.me);
 router.get('/waiter/tables', waiterAuth, waiterController.myTables);
 router.post('/waiter/orders', waiterAuth, dineInOrderController.createFromWaiter);
