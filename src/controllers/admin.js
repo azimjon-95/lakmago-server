@@ -132,13 +132,25 @@ export const adminController = {
     if (req.query.status === 'inactive') filter.isActive = false;
     const list = await Restaurant.find(filter).sort({ createdAt: -1 }).lean();
 
-    // Har muassasaning egasi (login) ni qo'shib beramiz
-    const withOwner = await Promise.all(
-      list.map(async (r) => {
-        const owner = await User.findOne({ restaurantId: r._id, role: 'restaurant' }).lean();
-        return { ...r, ownerLogin: owner?.login ?? null };
-      }),
-    );
+    /*
+     * TEZLIK (2026-08 tuzatish): avval har bir restoran uchun
+     * ALOHIDA User.findOne() so'rovi yuborilardi (N+1 naqshi).
+     * 50 ta restoran bo'lsa — 51 ta so'rov (1 + 50), parallel
+     * yuborilsa ham har birining o'z tarmoq/bazaga borish
+     * xarajati bor. Ko'p restoranli hisoblarda bu "sahifa
+     * ochilishida qotib qolish" shikoyatining bir sababi
+     * bo'lishi mumkin edi.
+     *
+     * Endi BITTA so'rov: barcha restoranId'lar $in orqali,
+     * natija Map'ga joylanadi (O(1) qidiruv).
+     */
+    const owners = await User.find({
+      restaurantId: { $in: list.map((r) => r._id) },
+      role: 'restaurant',
+    }).select('restaurantId login').lean();
+    const ownerMap = new Map(owners.map((o) => [String(o.restaurantId), o.login]));
+
+    const withOwner = list.map((r) => ({ ...r, ownerLogin: ownerMap.get(String(r._id)) ?? null }));
     res.json(withOwner);
   }),
 
@@ -388,6 +400,14 @@ export const adminController = {
       .populate('restaurantId', 'name')
       .sort({ kind: 1, order: 1, createdAt: -1 })
       .lean();
+    /*
+     * TEZLIK (2026-08 tuzatish): pastda BUTUNLAY ORTIQCHA N+1
+     * so'rov bloki bor edi — populate() yuqorida restoran nomini
+     * ALLAQACHON olib kelgan, lekin keyin har bir banner uchun
+     * Restaurant.findById() bilan XUDDI SHU nom yana so'ralardi
+     * (ikki barobar ish, hech qanday foyda bermay). Butunlay
+     * olib tashlandi.
+     */
     // Restoran nomini qulay maydonga chiqaramiz
     list.forEach((b) => {
       if (b.restaurantId?.name) {
@@ -395,14 +415,7 @@ export const adminController = {
         b.restaurantId = b.restaurantId._id;
       }
     });
-    const withRest = await Promise.all(list.map(async (b) => {
-      if (b.restaurantId) {
-        const r = await Restaurant.findById(b.restaurantId).select('name').lean();
-        return { ...b, restaurantName: r?.name ?? null };
-      }
-      return b;
-    }));
-    res.json(withRest);
+    res.json(list);
   }),
 
   // POST /api/admin/banners — platforma banneri qo'shish
