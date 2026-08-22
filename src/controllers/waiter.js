@@ -315,12 +315,15 @@ export const waiterController = {
     });
     if (!table) return res.status(404).json({ error: 'Stol topilmadi' });
 
-    // Ofitsiantga biriktirilganmi
-    const waiter = await Waiter.findById(req.waiterId).select('tableIds').lean();
-    if (waiter?.tableIds?.length) {
-      const allowed = waiter.tableIds.some((id) => String(id) === String(table._id));
-      if (!allowed) {
-        return res.status(403).json({ error: 'Bu stol sizga biriktirilmagan' });
+    // Ofitsiantga biriktirilganmi (FAQAT ofitsiant kirganda —
+    // restoran admini istalgan stolni boshqaradi, cheklovsiz)
+    if (req.waiterId) {
+      const waiter = await Waiter.findById(req.waiterId).select('tableIds').lean();
+      if (waiter?.tableIds?.length) {
+        const allowed = waiter.tableIds.some((id) => String(id) === String(table._id));
+        if (!allowed) {
+          return res.status(403).json({ error: 'Bu stol sizga biriktirilmagan' });
+        }
       }
     }
 

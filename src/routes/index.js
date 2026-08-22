@@ -28,7 +28,7 @@ import { dineInController } from '../controllers/dineIn.js';
 import { dineInOrderController } from '../controllers/dineInOrder.js';
 import { waiterController } from '../controllers/waiter.js';
 import { dineInLiveController } from '../controllers/dineInLive.js';
-import { auth, requireRole, requirePage, waiterAuth } from '../middleware/auth.js';
+import { auth, requireRole, requirePage, waiterAuth, waiterOrRestaurantAuth } from '../middleware/auth.js';
 import { loginLimiter, writeLimiter } from '../middleware/rateLimit.js';
 
 export const router = Router();
@@ -153,6 +153,25 @@ router.post('/waiter/tables/:tableId/close', waiterAuth, dineInLiveController.cl
 router.get('/waiter/requests', waiterAuth, dineInLiveController.listRequests);
 router.patch('/waiter/requests/:id', waiterAuth, dineInLiveController.updateRequest);
 router.get('/waiter/menu/:restaurantId', waiterAuth, dineInOrderController.menu);
+
+/*
+ * RESTORAN ADMINI ham stol boshqaruviga TO'LIQ kirishi (2026-08).
+ *
+ * Avval bu amallar FAQAT ofitsiant orqali (waiterAuth) mumkin
+ * edi — restoran o'z admin akkaunti bilan kirsa ham stolga
+ * bosib mehmon qabul qila olmasdi, taom kirita olmasdi.
+ *
+ * Xuddi shu kontroller funksiyalari qayta ishlatiladi
+ * (waiterOrRestaurantAuth ikkalasini ham qabul qiladi) —
+ * kodni ikki marta yozmaslik uchun. Bitta joyda tuzatilsa
+ * ikkalasi ham to'g'ri ishlaydi.
+ */
+router.get('/panel/dinein/tables/:id', waiterOrRestaurantAuth, waiterController.tableDetail);
+router.patch('/panel/dinein/tables/:id/guests', waiterOrRestaurantAuth, waiterController.setGuests);
+router.post('/panel/dinein/orders', waiterOrRestaurantAuth, dineInOrderController.createFromWaiter);
+router.patch('/panel/dinein/orders/:id/status', waiterOrRestaurantAuth, dineInOrderController.updateStatus);
+router.post('/panel/dinein/tables/:tableId/close', waiterOrRestaurantAuth, dineInLiveController.closeTable);
+router.get('/panel/dinein/menu/:restaurantId', waiterOrRestaurantAuth, dineInOrderController.menu);
 
 // Komissiya shartnomalari (admin) va yetkazish ustamasi (restoran)
 router.get('/admin/agreements', ...A, agreementController.list);

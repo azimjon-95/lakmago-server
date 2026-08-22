@@ -117,14 +117,25 @@ export const dineInOrderController = {
     });
     if (!table) return res.status(404).json({ error: 'Stol topilmadi' });
 
-    const waiter = await Waiter.findById(req.waiterId).lean();
-    if (!waiter) return res.status(404).json({ error: 'Ofitsiant topilmadi' });
+    /*
+     * `waiter` bo'sh bo'lishi mumkin — restoran admini o'zi
+     * kiritganda haqiqiy Waiter yozuvi yo'q (2026-08). Pastdagi
+     * har bir joy shunga moslashtirilgan: xizmat haqi kimga ham
+     * tegishli bo'lmasa — hech kimga yozilmaydi, buyurtma esa
+     * "restaurant" manbasi bilan (createOrder allaqachon
+     * `waiter ? {...} : {}` bilan to'g'ri ishlaydi).
+     */
+    let waiter = null;
+    if (req.waiterId) {
+      waiter = await Waiter.findById(req.waiterId).lean();
+      if (!waiter) return res.status(404).json({ error: 'Ofitsiant topilmadi' });
 
-    // Stol biriktirilganmi
-    if (waiter.tableIds?.length) {
-      const allowed = waiter.tableIds.some((id) => String(id) === String(table._id));
-      if (!allowed) {
-        return res.status(403).json({ error: 'Bu stol sizga biriktirilmagan' });
+      // Stol biriktirilganmi (faqat ofitsiant uchun)
+      if (waiter.tableIds?.length) {
+        const allowed = waiter.tableIds.some((id) => String(id) === String(table._id));
+        if (!allowed) {
+          return res.status(403).json({ error: 'Bu stol sizga biriktirilmagan' });
+        }
       }
     }
 
@@ -138,7 +149,7 @@ export const dineInOrderController = {
         restaurantId: table.restaurantId,
         branchId: table.branchId || table.restaurantId,
         tableId: table._id,
-        deviceSessionId: `waiter_${waiter._id}`,
+        deviceSessionId: waiter ? `waiter_${waiter._id}` : `admin_${req.userId || table.restaurantId}`,
         status: 'active',
       });
       await Table.findByIdAndUpdate(table._id, {
@@ -148,6 +159,14 @@ export const dineInOrderController = {
       });
     }
 
+    /*
+     * Xizmat haqi joyida buyurtma olishning o'zi uchun (kim
+     * olayotganidan qat'i nazar — ofitsiant ham, admin ham).
+     * calcServiceFee faqat 'waiter' qiymatini tanib hisoblaydi
+     * (services/dineInPricing.js) — shuning uchun 'restaurant'
+     * emas, doim 'waiter' beriladi. Kimga TO'LANISHI (waiter
+     * hujjati bor-yo'qligi) esa pastda alohida hal qilinadi.
+     */
     const calc = await calcDineInOrder(req.body.items, req.restaurantId, 'waiter');
     if (!calc.ok) {
       return res.status(400).json({ error: calc.error, code: calc.code });
@@ -156,13 +175,20 @@ export const dineInOrderController = {
     const order = await createOrder({
       session,
       calc,
+      // Order.orderSource enum'i qat'iy: faqat 'qr' | 'waiter' | null.
+      // Admin joyida buyurtma olsa ham funksional jihatdan
+      // "xodim stolda buyurtma oldi" degani — 'waiter' bilan
+      // belgilanadi. Kimga tegishli ekani (haqiqiy Waiter
+      // hujjati bor-yo'qligi) `waiter` maydoni orqali alohida
+      // ko'rinadi (pastda, faqat mavjud bo'lsa qo'shiladi).
       orderSource: 'waiter',
       waiter,
       note: req.body.note,
     });
 
-    // Xizmat haqi — ofitsiant daromadi
-    if (calc.serviceFee > 0) {
+    // Xizmat haqi — ofitsiant daromadi. Admin o'zi kiritganda
+    // hech kimga yozilmaydi (waiter yo'q).
+    if (waiter && calc.serviceFee > 0) {
       await Waiter.findByIdAndUpdate(waiter._id, {
         $inc: {
           'earnings.total': calc.serviceFee,

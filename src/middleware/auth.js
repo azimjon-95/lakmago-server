@@ -145,3 +145,62 @@ export const waiterAuth = async (req, res, next) => {
     return res.status(401).json({ error: 'Sessiya tugagan' });
   }
 };
+
+/**
+ * Ofitsiant YOKI restoran admini — ikkalasi ham stol boshqaruvi
+ * (mehmon qabul qilish, taom kiritish, chek yopish) qila oladi.
+ *
+ * NEGA KERAK (2026-08): avval bu amallar FAQAT waiterAuth bilan
+ * himoyalangan edi — restoran o'z admin akkaunti bilan kirsa ham
+ * stolga bosib buyurtma ololmasdi, ofitsiant yollanishi SHART
+ * edi. Endi ikkalasi ham xuddi shu endpointlardan foydalanadi:
+ *
+ *   role==='waiter'     -> req.waiterId TO'LDIRILADI (avvalgidek,
+ *                          "faqat o'ziga biriktirilgan stollar"
+ *                          cheklovi ishlaydi)
+ *   role==='restaurant' -> req.waiterId NULL qoladi — kontroller
+ *                          buni "cheklovsiz, BARCHA stollarga
+ *                          ruxsat" deb talqin qiladi (mavjud
+ *                          kodda allaqachon shunday yozilgan:
+ *                          `if (req.waiterId) { ... tekshiruv }`)
+ *
+ * Boshqa rol (admin/staff/customer) — rad etiladi. Bu FAQAT
+ * restoranning o'zi va uning ofitsiantlari uchun.
+ */
+export const waiterOrRestaurantAuth = async (req, res, next) => {
+  const header = req.headers.authorization || '';
+  const token = header.startsWith('Bearer ') ? header.slice(7) : '';
+  if (!token) return res.status(401).json({ error: 'Kirish kerak' });
+
+  try {
+    const payload = jwt.verify(token, config.jwtSecret);
+
+    if (payload.role === 'restaurant') {
+      if (!payload.restaurantId) return res.status(403).json({ error: 'Ruxsat yo\u2018q' });
+      req.role = 'restaurant';
+      req.userId = payload.userId;
+      req.restaurantId = String(payload.restaurantId);
+      return next();
+    }
+
+    if (payload.role === 'waiter') {
+      const { Waiter } = await import('../models/Waiter.js');
+      const waiter = await Waiter.findById(payload.waiterId)
+        .select('deviceId isActive restaurantId').lean();
+      if (!waiter || !waiter.isActive) {
+        return res.status(403).json({ error: 'Akkaunt faol emas' });
+      }
+      if (waiter.deviceId && waiter.deviceId !== payload.deviceId) {
+        return res.status(403).json({ error: 'Qurilma o\u2018zgargan. Qayta kiring.', code: 'DEVICE_MISMATCH' });
+      }
+      req.role = 'waiter';
+      req.waiterId = payload.waiterId;
+      req.restaurantId = String(waiter.restaurantId);
+      return next();
+    }
+
+    return res.status(403).json({ error: 'Ruxsat yo\u2018q' });
+  } catch {
+    return res.status(401).json({ error: 'Sessiya tugagan' });
+  }
+};
