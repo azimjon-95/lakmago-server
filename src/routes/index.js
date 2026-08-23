@@ -18,7 +18,7 @@ import { settlementController } from '../controllers/settlement.js';
 import { expenseController } from '../controllers/expense.js';
 import { staffController } from '../controllers/staff.js';
 import { panelAdsController, adminAdsController, publicAdsController } from '../controllers/ads.js';
-import { courierAdminController, courierPortalController } from '../controllers/courier.js';
+import { courierAdminController, courierRegistryController, courierPortalController } from '../controllers/courier.js';
 import { mapsController } from '../controllers/maps.js';
 import { catalogProductController } from '../controllers/catalogProducts.js';
 import { menuTransferController } from '../controllers/menuTransfer.js';
@@ -181,27 +181,30 @@ router.get('/admin/agreements/:restaurantId/history', ...A, agreementController.
 router.get('/panel/agreement', ...R, agreementController.myAgreement);
 
 /*
- * KURYER TIZIMI (2026-08).
+ * KURYER TIZIMI (2026-08, BOSQICH 1) — ulashish orqali.
  *
- * Restoran/marketing admin kuryerlar ro'yxatini ko'radi va
- * buyurtmani ularga yuboradi. Kuryerlar ro'yxati HOZIRCHA umumiy
- * (LokmaGo darajasida) — kelajakda restoranga xos kuryerlar
- * ham qo'shilishi mumkin.
+ * Restoran BITTA havola oladi (createDeliveryLink) va uni
+ * o'zining Telegram/WhatsApp akkaunti orqali xohlagan
+ * odam(lar)ga ulashadi. Ro'yxatdan tanlash YO'Q — hali ro'yxatdan
+ * o'tgan ishchi kuryerlar mavjud emas.
  */
-router.get('/panel/couriers', ...R, courierAdminController.list);
-router.post('/panel/orders/:id/dispatch-courier', ...R, courierAdminController.dispatchOrder);
+router.post('/panel/orders/:id/create-delivery-link', ...R, courierAdminController.createDeliveryLink);
 router.get('/panel/orders/:id/dispatch-status', ...R, courierAdminController.dispatchStatus);
 
-// LokmaGo admin — kuryerlarni to'liq boshqarish (qo'shish/o'chirish)
-router.get('/admin/couriers', ...AS('couriers'), courierAdminController.list);
-router.post('/admin/couriers', ...AS('couriers'), courierAdminController.create);
-router.patch('/admin/couriers/:id', ...AS('couriers'), courierAdminController.update);
-router.delete('/admin/couriers/:id', ...AS('couriers'), courierAdminController.remove);
+/*
+ * Kuryerlar reyestri — BOSQICH 2 uchun tayyor turadi (hozircha
+ * admin panelidagi "Kuryerlar" sahifasi bu bilan ishlaydi, lekin
+ * yuqoridagi ulashish oqimi bilan bog'liq EMAS).
+ */
+router.get('/admin/couriers', ...AS('couriers'), courierRegistryController.list);
+router.post('/admin/couriers', ...AS('couriers'), courierRegistryController.create);
+router.patch('/admin/couriers/:id', ...AS('couriers'), courierRegistryController.update);
+router.delete('/admin/couriers/:id', ...AS('couriers'), courierRegistryController.remove);
 
 /*
- * OCHIQ — kuryer portali. Login YO'Q: token o'zi kredensial
- * (Telegram orqali faqat shu kuryerga yuborilgan). lokma-courier
- * (alohida frontend loyihasi) shu endpointlarni chaqiradi.
+ * OCHIQ — kuryer sahifasi. Login YO'Q: token o'zi kredensial.
+ * lokma-courier (alohida frontend loyihasi) shu endpointlarni
+ * chaqiradi (/k/:token yo'li orqali).
  */
 router.get('/courier-portal/:token', courierPortalController.view);
 router.post('/courier-portal/:token/accept', writeLimiter, courierPortalController.accept);

@@ -1,21 +1,40 @@
-import { DeliveryAssignment, CourierInvite, generateInviteToken } from '../models/DeliveryAssignment.js';
-import { Courier } from '../models/Courier.js';
+import crypto from 'crypto';
+import { DeliveryAssignment } from '../models/DeliveryAssignment.js';
 import { Order } from '../models/Order.js';
 import { config } from '../config/index.js';
 import { getIO } from '../sockets/io.js';
 
-const TG_API = `https://api.telegram.org/bot${config.telegramBotToken}`;
+/**
+ * Kuryer ulashish xizmati — BOSQICH 1 (2026-08).
+ *
+ * LokmaGo'da hali ro'yxatdan o'tgan ishchi kuryerlar yo'q.
+ * Shuning uchun bot orqali avtomatik yuborish o'rniga: restoran/
+ * admin BITTA havola oladi va uni o'zining shaxsiy Telegram/
+ * WhatsApp akkaunti orqali xohlagan odam(lar)ga yuboradi.
+ *
+ * Xavfsizlik modeli — LOGIN YO'Q, lekin XATOLARGA CHIDAMLI:
+ *   1) Havoladagi `token` — barcha oluvchilarda BIR XIL (forward
+ *      qilinishi mumkin). Bu orqali FAQAT umumiy/taxminiy
+ *      ma'lumot (restoran, mijoz mahallasi) ko'rinadi.
+ *   2) Kimdir "Qabul qilaman" bossa — server unga ALOHIDA,
+ *      TASODIFIY `acceptanceSecret` qaytaradi (javobda, URL'da
+ *      EMAS). Bu qurilma shu maxfiy qiymatni localStorage'da
+ *      saqlaydi va keyingi so'rovlarida yuboradi.
+ *   3) Shu maxfiy qiymatga ega qurilma GINA to'liq manzil/
+ *      telefon ko'radi va "Topshirdim" bosa oladi. Boshqa hech
+ *      kim (hatto asl havolani yana ochsa ham) bu qila olmaydi.
+ */
+
+function randomToken() {
+  return crypto.randomBytes(24).toString('base64url');
+}
 
 /**
- * Bir buyurtmani bir nechta kuryerga BIR VAQTDA yuboradi.
+ * Buyurtma uchun ulashish havolasini yaratadi.
  *
- * Har biriga ALOHIDA token (CourierInvite) yaratiladi — barchasi
- * BITTA DeliveryAssignment'ga ishora qiladi. Birinchi qabul
- * qilgan kuryer buyurtmani oladi (acceptInvite() da atomik
- * tekshiriladi), qolganlariga keyinroq ular o'z havolasini
- * ochganda "band qilindi" ko'rsatiladi.
+ * @returns {{ token, assignmentId }}
  */
-export async function dispatchToCouriers(orderId, courierIds) {
+export async function createShareLink(orderId) {
   const order = await Order.findById(orderId)
     .populate('restaurantId', 'name address lat lng')
     .lean();
@@ -30,6 +49,7 @@ export async function dispatchToCouriers(orderId, courierIds) {
     orderId: order._id,
     restaurantId: restaurant._id || order.restaurantId,
     status: 'searching',
+    token: randomToken(),
     deliverySnapshot: {
       addressLabel: order.address || '',
       lat: order.addressLat ?? null,
@@ -45,146 +65,77 @@ export async function dispatchToCouriers(orderId, courierIds) {
     },
   });
 
-  const couriers = await Courier.find({ _id: { $in: courierIds }, isActive: true }).lean();
-
-  const invites = await Promise.all(couriers.map(async (courier) => {
-    const token = generateInviteToken();
-    const invite = await CourierInvite.create({
-      assignmentId: assignment._id,
-      courierId: courier._id,
-      token,
-    });
-
-    await sendInviteMessage(courier, token, order.dineInNumber || String(order._id).slice(-6));
-    return invite;
-  }));
-
-  return { assignment, invites, sentTo: couriers.length };
+  return { token: assignment.token, assignmentId: assignment._id };
 }
 
 /**
- * Kuryerga Telegram orqali xabar + havola tugmasi yuboradi.
+ * TOKEN (+ ixtiyoriy `secret`) bo'yicha ko'rsatiladigan holatni
+ * aniqlaydi.
  *
- * `courierAppUrl` — kuryer sahifasi joylashgan domen
- * (config.courierAppUrl, .env dagi COURIER_APP_URL — masalan
- * https://kuryer.lokma.uz). Bu YANGI, ALOHIDA lokma-courier
- * loyihasining manzili.
+ * `secret` berilmagan yoki mos kelmagan bo'lsa, hatto shu
+ * qurilma AVVAL qabul qilgan bo'lsa ham, u "begona" deb
+ * hisoblanadi — bu ATAYLAB shunday: maxfiy kalitni yo'qotgan
+ * qurilma xavfsizlik nuqtai nazaridan oddiy yangi tashrifchidan
+ * farq qilmaydi.
  */
-async function sendInviteMessage(courier, token, orderLabel) {
-  if (!config.telegramBotToken || !courier.telegramChatId) return;
-
-  const url = `${config.courierAppUrl}/t/${token}`;
-  try {
-    await fetch(`${TG_API}/sendMessage`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        chat_id: courier.telegramChatId,
-        text: `\ud83d\udce6 Yangi buyurtma #${orderLabel}\n\nQabul qilish uchun quyidagi tugmani bosing. Birinchi bosgan kuryer buyurtmani oladi.`,
-        reply_markup: {
-          inline_keyboard: [[{ text: '\ud83d\udeb4 Buyurtmani ko\u2018rish', url }]],
-        },
-      }),
-    });
-  } catch (err) {
-    console.error('[courier] Telegram xabar xatosi:', err.message);
-  }
-}
-
-/**
- * TOKEN bo'yicha kuryerga ko'rsatiladigan holatni aniqlaydi.
- *
- * Qaytariladigan `view` qiymatlari:
- *   'offer'      — hali hech kim olmagan, qabul qilish mumkin
- *   'mine'       — SHU kuryer allaqachon qabul qilgan, yetkazish jarayonida
- *   'taken'      — BOSHQA kuryer olib ulgurgan
- *   'delivered'  — bu buyurtma allaqachon topshirilgan (shu kuryer tomonidan)
- *   'closed'     — buyurtma boshqa yo'l bilan yakunlangan/eskirgan
- *   'not_found'  — token noto'g'ri
- */
-export async function getInviteView(token) {
-  const invite = await CourierInvite.findOne({ token }).populate('courierId', 'name').lean();
-  if (!invite) return { view: 'not_found' };
-
-  const assignment = await DeliveryAssignment.findById(invite.assignmentId).lean();
+export async function getShareView(token, secret) {
+  const assignment = await DeliveryAssignment.findOne({ token }).lean();
   if (!assignment) return { view: 'not_found' };
 
+  const isOwner = !!secret && !!assignment.acceptanceSecret && secret === assignment.acceptanceSecret;
+
   if (assignment.status === 'delivered') {
-    return {
-      view: invite.courierId._id.toString() === String(assignment.assignedCourierId) ? 'delivered' : 'closed',
-      assignment,
-    };
+    return { view: isOwner ? 'delivered' : 'closed', assignment };
   }
-
   if (assignment.status === 'assigned') {
-    const isMine = String(assignment.assignedCourierId) === String(invite.courierId._id);
-    return { view: isMine ? 'mine' : 'taken', assignment, invite };
+    return { view: isOwner ? 'mine' : 'taken', assignment };
   }
-
-  // status === 'searching' — hali hech kim olmagan
-  return { view: 'offer', assignment, invite };
+  return { view: 'offer', assignment };
 }
 
 /**
- * Kuryer "Qabul qilaman" bosganda chaqiriladi.
+ * "Qabul qilaman" bosilganda.
  *
- * ATOMIK YOZUV — POYGA HOLATI (race condition) YECHIMI:
- * `findOneAndUpdate` bilan FILTR ichida `status: 'searching'`
- * shart qilib qo'yiladi. Agar ikkita kuryer AYNI BIR PAYTDA
- * "qabul qilaman" bossa, MongoDB ikkala so'rovni ham qabul
- * qiladi, lekin FAQAT BIRINCHISI filtrga mos keladi (chunki u
- * status'ni "searching"dan "assigned"ga o'zgartirgan payt
- * ikkinchisi endi "searching" holatini topa olmaydi — natija
- * null bo'ladi). Oddiy "avval o'qib, keyin yozish" (read-then-
- * write) usuli BU YERDA XAVFLI bo'lardi — ikkala so'rov ham
- * "hali bo'sh" deb o'qishi va ikkalasi ham o'ziga yozib qo'yishi
- * mumkin edi.
+ * ATOMIK YOZUV — POYGA HOLATI YECHIMI: bir nechta odam bir xil
+ * havolani (forward qilingan) AYNI PAYTDA ochib "qabul qilaman"
+ * bossa, MongoDB `findOneAndUpdate` FAQAT status:'searching'
+ * shartiga mos kelgan BIRINCHI so'rovni qabul qiladi — qolganlari
+ * uchun natija `null` bo'ladi (chunki ular so'rov yuborgan payt
+ * status allaqachon 'assigned'ga o'zgargan bo'ladi).
+ *
+ * @returns {{ ok, secret? , error? }}
  */
-export async function acceptInvite(token) {
-  const invite = await CourierInvite.findOne({ token }).lean();
-  if (!invite) return { ok: false, error: 'Havola topilmadi' };
+export async function acceptShare(token) {
+  const secret = randomToken();
 
   const won = await DeliveryAssignment.findOneAndUpdate(
-    { _id: invite.assignmentId, status: 'searching' },   // ATOMIK SHART
-    { status: 'assigned', assignedCourierId: invite.courierId, assignedAt: new Date() },
+    { token, status: 'searching' },   // ATOMIK SHART
+    { status: 'assigned', assignedAt: new Date(), acceptanceSecret: secret },
     { new: true },
   );
 
   if (!won) {
-    // Kimdir bizdan oldin oldi — bu taklifni "yutqazdi" deb belgilaymiz
-    await CourierInvite.updateOne({ token }, { status: 'lost', respondedAt: new Date() });
     return { ok: false, error: 'Bu buyurtmani boshqa kuryer allaqachon oldi' };
   }
 
-  await CourierInvite.updateOne({ token }, { status: 'accepted', respondedAt: new Date() });
-
-  // Boshqa takliflarni "lost" deb belgilaymiz (ular hali "pending" bo'lsa)
-  await CourierInvite.updateMany(
-    { assignmentId: invite.assignmentId, token: { $ne: token }, status: 'pending' },
-    { status: 'lost', respondedAt: new Date() },
-  );
-
-  // Buyurtmaning o'z holatini ham yangilaymiz — restoran/admin panelda ko'rinsin
   await Order.findByIdAndUpdate(won.orderId, { status: 'delivering' });
 
   getIO()?.to('admin').emit('order:update', { _id: won.orderId, status: 'delivering' });
   getIO()?.to(`restaurant:${won.restaurantId}`).emit('order:update', { _id: won.orderId, status: 'delivering' });
 
-  return { ok: true, assignment: won };
+  return { ok: true, secret };
 }
 
-/** Kuryer "Topshirdim" bosib, "Ha" bilan tasdiqlaganda. */
-export async function deliverInvite(token) {
-  const invite = await CourierInvite.findOne({ token }).lean();
-  if (!invite) return { ok: false, error: 'Havola topilmadi' };
+/** "Topshirdim" tasdiqlanganda — FAQAT to'g'ri `secret` bilan. */
+export async function deliverShare(token, secret) {
+  const assignment = await DeliveryAssignment.findOne({ token }).lean();
+  if (!assignment) return { ok: false, error: 'Havola topilmadi' };
 
-  const assignment = await DeliveryAssignment.findOne({ _id: invite.assignmentId }).lean();
-  if (!assignment) return { ok: false, error: 'Topshiriq topilmadi' };
-  if (String(assignment.assignedCourierId) !== String(invite.courierId)) {
-    return { ok: false, error: 'Bu buyurtma sizga tegishli emas' };
-  }
   if (assignment.status === 'delivered') {
-    return { ok: true, alreadyDelivered: true };
+    return { ok: secret === assignment.acceptanceSecret, alreadyDelivered: true };
+  }
+  if (assignment.status !== 'assigned' || secret !== assignment.acceptanceSecret) {
+    return { ok: false, error: 'Bu buyurtma sizga tegishli emas' };
   }
 
   const updated = await DeliveryAssignment.findOneAndUpdate(
@@ -195,10 +146,20 @@ export async function deliverInvite(token) {
   if (!updated) return { ok: false, error: 'Holat allaqachon o\u2018zgargan' };
 
   await Order.findByIdAndUpdate(assignment.orderId, { status: 'delivered', deliveredAt: new Date() });
-  await Courier.findByIdAndUpdate(invite.courierId, { $inc: { totalDeliveries: 1 } });
 
   getIO()?.to('admin').emit('order:update', { _id: assignment.orderId, status: 'delivered' });
   getIO()?.to(`restaurant:${assignment.restaurantId}`).emit('order:update', { _id: assignment.orderId, status: 'delivered' });
 
-  return { ok: true, assignment: updated };
+  return { ok: true };
+}
+
+/** Havola manzillari — ulashish tugmalari uchun. */
+export function buildShareUrls(token) {
+  const link = `${config.courierAppUrl}/k/${token}`;
+  const text = `\ud83d\udce6 Yangi yetkazish buyurtmasi. Qabul qilish uchun havolani oching:`;
+  return {
+    link,
+    telegram: `https://t.me/share/url?url=${encodeURIComponent(link)}&text=${encodeURIComponent(text)}`,
+    whatsapp: `https://wa.me/?text=${encodeURIComponent(`${text} ${link}`)}`,
+  };
 }

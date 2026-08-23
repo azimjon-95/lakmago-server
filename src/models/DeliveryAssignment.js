@@ -2,28 +2,26 @@ import { Schema, model } from 'mongoose';
 import crypto from 'crypto';
 
 /**
- * ME'MORIY QAROR — nega HAR KURYERGA ALOHIDA TOKEN.
+ * ME'MORIY QAROR — IKKI BOSQICHLI YONDASHUV.
  *
- * Bitta buyurtma 5 ta kuryerga yuborilganda, hammasiga BITTA
- * umumiy havola (bitta token) YUBORILMAYDI. Buning o'rniga har
- * bir kuryer o'zining SHAXSIY tokeniga ega (bir xil buyurtmaga
- * ishora qiladi).
+ * BOSQICH 1 (HOZIR, 2026-08): LokmaGo'da hali ro'yxatdan o'tgan
+ * ishchi kuryerlar yo'q. Shuning uchun restoran/admin har
+ * buyurtma uchun BITTA ulashiladigan havola oladi va uni O'ZINING
+ * shaxsiy Telegram/WhatsApp akkaunti orqali xohlagan odam(lar)ga
+ * yuboradi (bir nechtasiga forward qilishi ham mumkin — birinchi
+ * "Qabul qilaman" bosgan yutadi). Bu model shu bosqich uchun
+ * `token` + `acceptanceSecret` maydonlariga ega (pastda).
  *
- * NEGA MUHIM: kuryer o'z Telegram xabaridagi havolani QAYTA
- * ochsa (boshqa qurilma, boshqa brauzer — Chrome, Yandex,
- * Windows, iOS — farqi yo'q), token O'ZINING ekanligini SERVER
- * darhol biladi, chunki token boshidanoq shu KURYERGA
- * biriktirilgan edi. Qurilma identifikatori (device fingerprint,
- * cookie, localStorage) SAQLASH SHART EMAS — bu yondashuv ancha
- * ishonchli, chunki brauzer ma'lumotlari tozalanishi, boshqa
- * qurilmadan kirilishi mumkin, lekin Telegram xabaridagi havola
- * doim o'sha kuryerniki bo'lib qoladi.
+ * BOSQICH 2 (KEYINGI VERSIYA): kuryerlar kuryer.lokma.uz'da
+ * o'zlari ro'yxatdan o'tadi, LokmaGo admin ma'lumotlarini
+ * tekshirib ruxsat beradi, keyin login/parol bilan kiradi. O'sha
+ * paytda `assignedCourierId` (pastda, hozir ham bor, lekin
+ * hozircha bo'sh qoladi) haqiqiy foydalanishga kiradi, va
+ * `models/Courier.js` + `CourierInvite` (shu faylning davomida)
+ * to'liq ishga tushadi.
  *
- * "Birinchi qabul qilgan oladi" mantig'i esa ASSIGNMENT
- * darajasida (pastda) — barcha 5 ta taklif BITTA Assignment'ga
- * ishora qiladi, va faqat BITTASI "accepted" bo'la oladi (atomik
- * yozuv, controllers/courierPortal.js dagi acceptInvite()ga
- * qarang).
+ * "Birinchi qabul qilgan oladi" mantig'i — atomik yozuv,
+ * services/courierDispatch.js dagi acceptShare()ga qarang.
  */
 
 const deliveryAssignmentSchema = new Schema(
@@ -46,6 +44,29 @@ const deliveryAssignmentSchema = new Schema(
     assignedCourierId: { type: Schema.Types.ObjectId, ref: 'Courier', default: null },
     assignedAt: { type: Date, default: null },
     deliveredAt: { type: Date, default: null },
+
+    /*
+     * ULASHISH ORQALI YUBORISH (2026-08, hozirgi bosqich).
+     *
+     * Hozircha LokmaGo'da ro'yxatdan o'tgan ishchi kuryerlar
+     * yo'q — shuning uchun restoran/admin BITTA havolani o'zi
+     * xohlagan odam(lar)ga o'zining shaxsiy Telegram/WhatsApp
+     * akkaunti orqali ULASHADI (pastdagi `token`). Bir nechta
+     * odamga bir xil havola forward qilinishi mumkin — birinchi
+     * "Qabul qilaman" bosgan yutadi.
+     *
+     * `token` — havoladagi ochiq qism (hammada bir xil bo'lishi
+     * mumkin, chunki bir nechta odamga forward qilinadi).
+     * `acceptanceSecret` — FAQAT qabul qilgan qurilmaga qaytariladi
+     * (server javobida, URL'da EMAS). Shu qurilma keyingi
+     * so'rovlarida shu maxfiy qiymatni yuboradi — shu orqali
+     * server "bu haqiqatan o'sha qurilmami" deb tekshiradi,
+     * login/akkaunt shart bo'lmasdan. Kelajakda haqiqiy kuryer
+     * akkauntlari (ro'yxatdan o'tish + login) qo'shilganda bu
+     * mexanizm kerak bo'lmay qoladi.
+     */
+    token: { type: String, required: true, unique: true, index: true },
+    acceptanceSecret: { type: String, default: null },
 
     // Mijoz manzili — kuryer sahifasida xarita/koordinata uchun
     // (Order'dan nusxa — kuryer sahifasi Order'ga to'g'ridan-to'g'ri

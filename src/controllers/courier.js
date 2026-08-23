@@ -1,25 +1,28 @@
-import { z } from 'zod';
 import { asyncHandler } from '../middleware/error.js';
+import { z } from 'zod';
 import { Courier } from '../models/Courier.js';
-import { DeliveryAssignment, CourierInvite } from '../models/DeliveryAssignment.js';
-import { Order } from '../models/Order.js';
-import { dispatchToCouriers, getInviteView, acceptInvite, deliverInvite } from '../services/courierDispatch.js';
+import { createShareLink, getShareView, acceptShare, deliverShare, buildShareUrls } from '../services/courierDispatch.js';
 
 function rid(req) {
   return req.restaurantId;
 }
 
-/* ═══════════════════════════════════════════
-   ADMIN/RESTORAN — kuryerlar ro'yxati
-   ═══════════════════════════════════════════ */
-export const courierAdminController = {
-  // GET /panel/couriers yoki /admin/couriers
+/*
+ * KURYERLAR REYESTRI (BOSQICH 2 uchun tayyorlab qo'yilgan).
+ *
+ * Hozircha bu CRUD FAOL ISHLATILMAYDI — restoran/admin buyurtmani
+ * kuryerga yuborishda bu ro'yxatdan tanlamaydi (pastdagi
+ * createDeliveryLink orqali, ro'yxatsiz, ulashish havolasi
+ * bilan ishlaydi). Lekin admin panelidagi "Kuryerlar" sahifasi
+ * bu endpointlarga tayyor — kelajakda kuryerlar o'zlari
+ * ro'yxatdan o'tib, admin ularni shu yerda ko'rib "ruxsat"
+ * bergandan keyin, bu ro'yxat FAOL ishlatila boshlanadi.
+ */
+export const courierRegistryController = {
   list: asyncHandler(async (_req, res) => {
     const couriers = await Courier.find().sort({ isActive: -1, name: 1 }).lean();
     res.json(couriers);
   }),
-
-  // POST — yangi kuryer qo'shish
   create: asyncHandler(async (req, res) => {
     const schema = z.object({
       name: z.string().min(2).max(80),
@@ -34,7 +37,6 @@ export const courierAdminController = {
     const courier = await Courier.create(parsed.data);
     res.status(201).json(courier);
   }),
-
   update: asyncHandler(async (req, res) => {
     const allowed = ['name', 'phone', 'telegramChatId', 'telegramUsername', 'isActive'];
     const update = {};
@@ -43,77 +45,58 @@ export const courierAdminController = {
     if (!courier) return res.status(404).json({ error: 'Kuryer topilmadi' });
     res.json(courier);
   }),
-
   remove: asyncHandler(async (req, res) => {
     await Courier.findByIdAndDelete(req.params.id);
     res.json({ ok: true });
   }),
+};
 
+/* ═══════════════════════════════════════════
+   RESTORAN — havola yaratish (ulashish uchun)
+   ═══════════════════════════════════════════ */
+export const courierAdminController = {
   /*
-   * POST /panel/orders/:id/dispatch-courier
-   * { courierIds: [...] }  — bo'sh bo'lsa BARCHA faol kuryerlarga
+   * POST /panel/orders/:id/create-delivery-link
    *
-   * Buyurtmani bir yoki bir nechta kuryerga yuboradi. Talab
-   * bo'yicha: "hohlagan kuryerga, misol 5 tasiga yuborsin, kim
-   * birinchi qabul qilsa usha oladi".
+   * BOSQICH 1 (2026-08): ro'yxatdan tanlash YO'Q — bitta havola
+   * yaratiladi, restoran/admin uni o'zining Telegram/WhatsApp
+   * akkaunti orqali xohlagan odam(lar)ga ulashadi.
    */
-  dispatchOrder: asyncHandler(async (req, res) => {
+  createDeliveryLink: asyncHandler(async (req, res) => {
+    const { Order } = await import('../models/Order.js');
     const order = await Order.findOne({ _id: req.params.id, restaurantId: rid(req) }).lean();
     if (!order) return res.status(404).json({ error: 'Buyurtma topilmadi' });
 
-    let courierIds = req.body.courierIds;
-    if (!courierIds || !courierIds.length) {
-      const all = await Courier.find({ isActive: true }).select('_id').lean();
-      courierIds = all.map((c) => c._id);
-    }
-    if (!courierIds.length) {
-      return res.status(400).json({ error: 'Faol kuryer topilmadi. Avval kuryer qo\u2018shing.' });
-    }
+    const { token } = await createShareLink(order._id);
+    const urls = buildShareUrls(token);
 
-    const result = await dispatchToCouriers(order._id, courierIds);
-    res.status(201).json({
-      sentTo: result.sentTo,
-      assignmentId: result.assignment._id,
-    });
+    res.status(201).json(urls);
   }),
 
-  // GET /panel/orders/:id/dispatch-status — kim qabul qilganini kuzatish
+  // GET /panel/orders/:id/dispatch-status — kuzatish uchun (ixtiyoriy)
   dispatchStatus: asyncHandler(async (req, res) => {
+    const { DeliveryAssignment } = await import('../models/DeliveryAssignment.js');
     const assignment = await DeliveryAssignment.findOne({ orderId: req.params.id })
       .sort({ createdAt: -1 })
-      .populate('assignedCourierId', 'name phone')
       .lean();
     if (!assignment) return res.json({ status: 'none' });
-
-    const invites = await CourierInvite.find({ assignmentId: assignment._id })
-      .populate('courierId', 'name')
-      .lean();
-
-    res.json({
-      status: assignment.status,
-      assignedCourier: assignment.assignedCourierId,
-      invites: invites.map((i) => ({ courierName: i.courierId?.name, status: i.status })),
-    });
+    res.json({ status: assignment.status, assignedAt: assignment.assignedAt, deliveredAt: assignment.deliveredAt });
   }),
 };
 
 /* ═══════════════════════════════════════════
-   OCHIQ — kuryer portali (token asosida, login yo'q)
+   OCHIQ — kuryer sahifasi (token asosida, login yo'q)
    ═══════════════════════════════════════════ */
 export const courierPortalController = {
-  // GET /courier-portal/:token
+  // GET /courier-portal/:token?secret=...
   view: asyncHandler(async (req, res) => {
-    const result = await getInviteView(req.params.token);
+    const secret = req.query.secret || null;
+    const result = await getShareView(req.params.token, secret);
 
     if (result.view === 'not_found') {
       return res.status(404).json({ view: 'not_found' });
     }
 
-    /*
-     * Faqat KERAKLI ma'lumot chiqariladi — kuryer sahifasi
-     * Order hujjatining o'ziga emas, faqat deliverySnapshot'ga
-     * (xavfsiz, oldindan tayyorlangan qism) kira oladi.
-     */
     const snap = result.assignment?.deliverySnapshot || {};
     res.json({
       view: result.view,
@@ -124,10 +107,8 @@ export const courierPortalController = {
         restaurantAddress: snap.restaurantAddress,
         restaurantLat: snap.restaurantLat,
         restaurantLng: snap.restaurantLng,
-        // Mijoz manzili — FAQAT qabul qilingandan keyin (result.view==='mine')
-        // to'liq ko'rsatiladi. 'offer' holatida ham ko'rsatamiz —
-        // kuryer qabul qilishdan oldin masofani baholay olsin.
         addressLabel: snap.addressLabel,
+        // Aniq manzil/telefon — FAQAT to'g'ri secret bilan ('mine')
         addressNote: result.view === 'mine' ? snap.addressNote : undefined,
         customerPhone: result.view === 'mine' ? snap.customerPhone : undefined,
         lat: snap.lat,
@@ -138,15 +119,17 @@ export const courierPortalController = {
 
   // POST /courier-portal/:token/accept
   accept: asyncHandler(async (req, res) => {
-    const result = await acceptInvite(req.params.token);
+    const result = await acceptShare(req.params.token);
     if (!result.ok) return res.status(409).json({ error: result.error });
-    res.json({ ok: true });
+    // MUHIM: secret FAQAT shu javobda qaytariladi — URL'da EMAS,
+    // loglarda/tarixda qolib ketmasligi uchun
+    res.json({ ok: true, secret: result.secret });
   }),
 
-  // POST /courier-portal/:token/deliver
+  // POST /courier-portal/:token/deliver  { secret }
   deliver: asyncHandler(async (req, res) => {
-    const result = await deliverInvite(req.params.token);
-    if (!result.ok) return res.status(409).json({ error: result.error });
+    const result = await deliverShare(req.params.token, req.body.secret);
+    if (!result.ok) return res.status(409).json({ error: result.error || 'Ruxsat yo\u2018q' });
     res.json({ ok: true, alreadyDelivered: !!result.alreadyDelivered });
   }),
 };
