@@ -18,6 +18,7 @@ import { settlementController } from '../controllers/settlement.js';
 import { expenseController } from '../controllers/expense.js';
 import { staffController } from '../controllers/staff.js';
 import { panelAdsController, adminAdsController, publicAdsController } from '../controllers/ads.js';
+import { courierAdminController, courierPortalController } from '../controllers/courier.js';
 import { mapsController } from '../controllers/maps.js';
 import { catalogProductController } from '../controllers/catalogProducts.js';
 import { menuTransferController } from '../controllers/menuTransfer.js';
@@ -178,6 +179,33 @@ router.get('/admin/agreements', ...A, agreementController.list);
 router.put('/admin/agreements/:restaurantId', ...A, agreementController.upsert);
 router.get('/admin/agreements/:restaurantId/history', ...A, agreementController.history);
 router.get('/panel/agreement', ...R, agreementController.myAgreement);
+
+/*
+ * KURYER TIZIMI (2026-08).
+ *
+ * Restoran/marketing admin kuryerlar ro'yxatini ko'radi va
+ * buyurtmani ularga yuboradi. Kuryerlar ro'yxati HOZIRCHA umumiy
+ * (LokmaGo darajasida) — kelajakda restoranga xos kuryerlar
+ * ham qo'shilishi mumkin.
+ */
+router.get('/panel/couriers', ...R, courierAdminController.list);
+router.post('/panel/orders/:id/dispatch-courier', ...R, courierAdminController.dispatchOrder);
+router.get('/panel/orders/:id/dispatch-status', ...R, courierAdminController.dispatchStatus);
+
+// LokmaGo admin — kuryerlarni to'liq boshqarish (qo'shish/o'chirish)
+router.get('/admin/couriers', ...AS('couriers'), courierAdminController.list);
+router.post('/admin/couriers', ...AS('couriers'), courierAdminController.create);
+router.patch('/admin/couriers/:id', ...AS('couriers'), courierAdminController.update);
+router.delete('/admin/couriers/:id', ...AS('couriers'), courierAdminController.remove);
+
+/*
+ * OCHIQ — kuryer portali. Login YO'Q: token o'zi kredensial
+ * (Telegram orqali faqat shu kuryerga yuborilgan). lokma-courier
+ * (alohida frontend loyihasi) shu endpointlarni chaqiradi.
+ */
+router.get('/courier-portal/:token', courierPortalController.view);
+router.post('/courier-portal/:token/accept', writeLimiter, courierPortalController.accept);
+router.post('/courier-portal/:token/deliver', writeLimiter, courierPortalController.deliver);
 
 // Reklama (banner) so'rovlari — restoran paneli
 router.get('/panel/ads', ...R, panelAdsController.list);

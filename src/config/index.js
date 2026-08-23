@@ -88,6 +88,14 @@ export const config = {
   mongoUri: process.env.MONGO_URI ?? 'mongodb://localhost:27017/lokmago',
   jwtSecret,
   telegramBotToken: process.env.TELEGRAM_BOT_TOKEN ?? '',
+
+  /*
+   * Kuryer sahifasi manzili — YANGI, ALOHIDA lokma-courier
+   * loyihasi shu subdomenda joylashadi. Standart qiymat
+   * ishlab chiqish uchun (localhost) — production'da
+   * COURIER_APP_URL=https://kuryer.lokma.uz o'rnatiladi.
+   */
+  courierAppUrl: (process.env.COURIER_APP_URL || 'http://localhost:5175').replace(/\/$/, ''),
   // Frontend manzillari (aniq ajratilган)
   webappOrigin,            // mijoz webapp'и (WEBAPP_URL)
   adminOrigins,            // admin panellar (CORS_ORIGINS)

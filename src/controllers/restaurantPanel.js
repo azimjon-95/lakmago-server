@@ -259,13 +259,14 @@ export const restaurantPanelController = {
     // Telegram push
     const user = order.userId;
     const statusText = {
-      accepted: '✅ Buyurtmangiz qabul qilindi',
-      preparing: '👨‍🍳 Buyurtmangiz tayyorlanmoqda',
-      ready: '🍽 Buyurtmangiz tayyor',
-      delivering: '🚴 Kuryer buyurtmangizni olib ketdi',
+      accepted: '\u2705 Buyurtmangiz qabul qilindi',
+      preparing: '\ud83d\udc68\u200d\ud83c\udf73 Buyurtmangiz tayyorlanmoqda',
+      ready: '\ud83c\udf7d Buyurtmangiz tayyor',
+      // Talab bo'yicha aniq matn: "yo'lga chiqdi, tez orada yetib keladi"
+      delivering: '\ud83d\udeb4 Buyurtmangiz yo\u2018lga chiqdi, tez orada yetib keladi',
       // Yetkazildi xabari yo'q edi — mijoz oxirgi holatni bilmasdi
-      delivered: '✅ Buyurtmangiz yetkazildi. Yoqimli ishtaha!',
-      cancelled: '❌ Buyurtmangiz bekor qilindi',
+      delivered: '\u2705 Buyurtmangiz yetkazildi. Yoqimli ishtaha!',
+      cancelled: '\u274c Buyurtmangiz bekor qilindi',
     };
     // ===== HISOB-KITOB =====
     // Yetkazildi → restoran ulushi balansga qo'shiladi

@@ -32,6 +32,7 @@ export const ALL_PAGES = [
   'settings',          // Sozlamalar
   'staff',             // Xodimlar (yollash) — FAQAT admin
   'support',           // Yordam (chat)
+  'couriers',          // Kuryerlar ro'yxati (2026-08)
 ];
 
 /**
@@ -44,7 +45,7 @@ export const DEPARTMENT_PAGES = {
   accountant: ['dashboard', 'billing', 'revenue'],
   developer: ['dashboard', 'settings', 'staff_readonly'],
   restaurant_ops: ['dashboard', 'restaurants', 'catalog'],
-  order_control: ['dashboard', 'orders', 'revenue'],
+  order_control: ['dashboard', 'orders', 'revenue', 'couriers'],
   dinein_control: ['dashboard', 'dinein'],
   marketing: ['dashboard', 'banners', 'marketing', 'groups', 'notifications'],
   sysadmin: ['dashboard', 'settings', 'notifications'],
