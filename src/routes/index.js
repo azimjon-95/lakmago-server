@@ -29,7 +29,11 @@ import { dineInController } from '../controllers/dineIn.js';
 import { dineInOrderController } from '../controllers/dineInOrder.js';
 import { waiterController } from '../controllers/waiter.js';
 import { dineInLiveController } from '../controllers/dineInLive.js';
-import { auth, requireRole, requirePage, waiterAuth, waiterOrRestaurantAuth } from '../middleware/auth.js';
+import { kioskController } from '../controllers/kiosk.js';
+import {
+  auth, requireRole, requirePage, waiterAuth, waiterOrRestaurantAuth,
+  kioskAuth, requireKioskSection,
+} from '../middleware/auth.js';
 import { loginLimiter, writeLimiter } from '../middleware/rateLimit.js';
 
 export const router = Router();
@@ -173,6 +177,56 @@ router.post('/panel/dinein/orders', waiterOrRestaurantAuth, dineInOrderControlle
 router.patch('/panel/dinein/orders/:id/status', waiterOrRestaurantAuth, dineInOrderController.updateStatus);
 router.post('/panel/dinein/tables/:tableId/close', waiterOrRestaurantAuth, dineInLiveController.closeTable);
 router.get('/panel/dinein/menu/:restaurantId', waiterOrRestaurantAuth, dineInOrderController.menu);
+
+/*
+ * ═══════════════ KIOSK REJIMI ═══════════════
+ *
+ * waiter.lokma.uz/kio/{token} — zaldagi planshet.
+ *
+ * Kiosk SHAXS emas, QURILMA: login yo'q, buyurtma restoran
+ * nomidan yoziladi (req.waiterId bo'sh qoladi), xizmat haqi
+ * hech qaysi ofitsiantga biriktirilmaydi.
+ *
+ * Har bir yo'l requireKioskSection bilan yopilgan — admin
+ * tokenga "faqat stollar" desa, menyu va stop list ochilmaydi.
+ * Ruxsat BAZADAN o'qiladi, JWT ichidagi ro'yxatdan emas.
+ */
+
+// Panel: kiosk linklarni boshqarish
+router.get('/panel/kiosk', ...R, kioskController.list);
+router.post('/panel/kiosk', ...R, writeLimiter, kioskController.create);
+router.get('/panel/kiosk/:id/reveal', ...R, kioskController.reveal);
+router.patch('/panel/kiosk/:id', ...R, kioskController.update);
+router.post('/panel/kiosk/:id/rotate', ...R, writeLimiter, kioskController.rotate);
+router.post('/panel/kiosk/:id/reset-devices', ...R, kioskController.resetDevices);
+router.delete('/panel/kiosk/:id', ...R, kioskController.remove);
+
+// Kiosk sahifasi: ochiq yo'llar
+// loginLimiter — tokenni taxmin qilishga urinishni sekinlashtiradi
+router.get('/kiosk/validate/:token', loginLimiter, kioskController.validate);
+router.post('/kiosk/session', loginLimiter, kioskController.session);
+
+// Kiosk sahifasi: token bilan
+router.get('/kiosk/me', kioskAuth, kioskController.me);
+router.post('/kiosk/pin', kioskAuth, loginLimiter, kioskController.verifyPin);
+
+// Stollar
+router.get('/kiosk/tables', kioskAuth, requireKioskSection('tables'), waiterController.myTables);
+router.get('/kiosk/tables/:id', kioskAuth, requireKioskSection('tables'), waiterController.tableDetail);
+router.patch('/kiosk/tables/:id/guests', kioskAuth, requireKioskSection('tables'), waiterController.setGuests);
+router.post('/kiosk/tables/:tableId/close', kioskAuth, requireKioskSection('tables'), dineInLiveController.closeTable);
+router.get('/kiosk/requests', kioskAuth, requireKioskSection('tables'), dineInLiveController.listRequests);
+router.patch('/kiosk/requests/:id', kioskAuth, requireKioskSection('tables'), dineInLiveController.updateRequest);
+
+// Menyu va buyurtma
+router.get('/kiosk/menu/:restaurantId', kioskAuth, requireKioskSection('menu'), dineInOrderController.menu);
+router.post('/kiosk/orders', kioskAuth, requireKioskSection('menu'), dineInOrderController.createFromWaiter);
+router.patch('/kiosk/orders/:id/status', kioskAuth, requireKioskSection('menu'), dineInOrderController.updateStatus);
+
+// Stop list
+router.get('/kiosk/stoplist', kioskAuth, requireKioskSection('stoplist'), restaurantPanelController.stoppedDishes);
+router.get('/kiosk/dishes', kioskAuth, requireKioskSection('stoplist'), restaurantPanelController.dishes);
+router.patch('/kiosk/dishes/:id/stop', kioskAuth, requireKioskSection('stoplist'), restaurantPanelController.toggleStop);
 
 // Komissiya shartnomalari (admin) va yetkazish ustamasi (restoran)
 router.get('/admin/agreements', ...A, agreementController.list);

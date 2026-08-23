@@ -255,14 +255,24 @@ export const waiterController = {
   }),
 
   // GET /api/waiter/tables — biriktirilgan stollar
+  //
+  // Kiosk va restoran admini uchun ham ishlaydi: ular SHAXS emas,
+  // shuning uchun req.waiterId bo'lmaydi va cheklovsiz — restoranning
+  // barcha stollari ko'rinadi.
   myTables: asyncHandler(async (req, res) => {
-    const waiter = await Waiter.findById(req.waiterId).select('tableIds restaurantId').lean();
-    if (!waiter) return res.status(404).json({ error: 'Topilmadi' });
+    let filter;
 
-    // Stol biriktirilmagan bo'lsa — barcha stollar
-    const filter = waiter.tableIds?.length
-      ? { _id: { $in: waiter.tableIds } }
-      : { restaurantId: waiter.restaurantId, isActive: true };
+    if (req.waiterId) {
+      const waiter = await Waiter.findById(req.waiterId).select('tableIds restaurantId').lean();
+      if (!waiter) return res.status(404).json({ error: 'Topilmadi' });
+
+      // Stol biriktirilmagan bo'lsa — barcha stollar
+      filter = waiter.tableIds?.length
+        ? { _id: { $in: waiter.tableIds } }
+        : { restaurantId: waiter.restaurantId, isActive: true };
+    } else {
+      filter = { restaurantId: rid(req), isActive: true };
+    }
 
     const tables = await Table.find(filter).sort({ tableNumber: 1 }).lean();
 

@@ -147,6 +147,94 @@ export const waiterAuth = async (req, res, next) => {
 };
 
 /**
+ * Kiosk (zaldagi planshet) autentifikatsiyasi.
+ *
+ * NEGA ALOHIDA ROL, NEGA role:'restaurant' EMAS:
+ *   Kiosk tokeni URL'da ochiq ko'rinadi va planshet zalda
+ *   qo'riqlanmagan holda turadi. Unga restoran JWT'sini bersak,
+ *   o'g'irlangan link BUTUN panelni — daromad, to'lovlar,
+ *   sozlamalar, ofitsiant parollarini — ochib qo'yadi.
+ *   Shuning uchun kiosk o'z roli bilan yuradi va faqat
+ *   `sections` dagi bo'limlarga kiritiladi.
+ *
+ * req.waiterId ATAYLAB TO'LDIRILMAYDI — buyurtma restoran
+ * nomidan yoziladi, xizmat haqi hech kimga biriktirilmaydi.
+ * Mavjud kontrollerlar `if (req.waiterId)` shartini allaqachon
+ * "cheklovsiz" deb talqin qiladi, ya'ni qo'shimcha kod kerak emas.
+ */
+export const kioskAuth = async (req, res, next) => {
+  const header = req.headers.authorization || '';
+  const token = header.startsWith('Bearer ') ? header.slice(7) : '';
+  if (!token) return res.status(401).json({ error: 'Kirish kerak' });
+
+  try {
+    const payload = jwt.verify(token, config.jwtSecret);
+    if (payload.role !== 'kiosk') {
+      return res.status(403).json({ error: 'Ruxsat yo\u2018q' });
+    }
+
+    // Bazadan tekshiramiz — admin tokenni o'chirsa yoki muddatini
+    // qisqartirsa, allaqachon berilgan JWT DARHOL kuchini yo'qotsin.
+    // Faqat JWT imzosiga ishonsak, o'chirilgan link muddati
+    // tugagunicha ishlab turaverardi.
+    const { KioskToken } = await import('../models/KioskToken.js');
+    const kiosk = await KioskToken.findById(payload.kioskId)
+      .select('isActive expiresAt restaurantId sections devices deviceLimit').lean();
+
+    if (!kiosk) {
+      return res.status(403).json({ error: 'Link topilmadi', code: 'NOT_FOUND' });
+    }
+
+    const expired = new Date(kiosk.expiresAt).getTime() < Date.now();
+    if (!kiosk.isActive || expired) {
+      return res.status(403).json({
+        error: expired ? 'Link muddati tugagan' : 'Link o\u2018chirilgan',
+        code: expired ? 'EXPIRED' : 'DISABLED',
+      });
+    }
+
+    // Qurilma ro'yxatdan chiqarilgan bo'lsa (admin "qurilmalarni
+    // tozalash" bosgan) — eski JWT ham ishlamasin
+    if (kiosk.deviceLimit > 0) {
+      const known = (kiosk.devices || []).some((d) => d.deviceId === payload.deviceId);
+      if (!known) {
+        return res.status(403).json({
+          error: 'Qurilma uzilgan. Sahifani yangilang.',
+          code: 'DEVICE_REVOKED',
+        });
+      }
+    }
+
+    req.role = 'kiosk';
+    req.kioskId = String(kiosk._id);
+    req.restaurantId = String(kiosk.restaurantId);
+    // Bo'limlar bazadan olinadi — JWT ichidagisi eskirgan bo'lishi
+    // mumkin (admin ruxsatlarni o'zgartirgan bo'lsa)
+    req.kioskSections = kiosk.sections || [];
+    req.waiterId = null;
+    next();
+  } catch {
+    return res.status(401).json({ error: 'Sessiya tugagan' });
+  }
+};
+
+/**
+ * Kiosk uchun bo'lim ruxsati.
+ * Ishlatish: router.get('/kiosk/stoplist', kioskAuth, requireKioskSection('stoplist'), ctrl)
+ */
+export function requireKioskSection(section) {
+  return (req, res, next) => {
+    if (!req.kioskSections?.includes(section)) {
+      return res.status(403).json({
+        error: 'Bu bo\u2018lim ushbu kiosk uchun yopilgan',
+        code: 'SECTION_DENIED',
+      });
+    }
+    next();
+  };
+}
+
+/**
  * Ofitsiant YOKI restoran admini — ikkalasi ham stol boshqaruvi
  * (mehmon qabul qilish, taom kiritish, chek yopish) qila oladi.
  *
