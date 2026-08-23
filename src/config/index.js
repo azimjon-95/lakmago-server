@@ -219,6 +219,11 @@ export const config = {
   // Mijoz ilovasi manzili — QR havolalari uchun
   customerBaseUrl: process.env.CUSTOMER_BASE_URL || 'https://lokma.uz',
 
+  // Ofitsiant/kiosk manzili — zaldagi planshet shu yerdan ochiladi.
+  // Mijoz manzilidan ATAYLAB ajratilgan: ular alohida subdomen va
+  // kelajakda alohida deploy bo'lishi mumkin.
+  waiterBaseUrl: process.env.WAITER_BASE_URL || 'https://waiter.lokma.uz',
+
   // Web Push (VAPID). Kalitlar bo'lmasa push jim o'chadi —
   // qolgan tizim ishlayveradi.
   vapidPublicKey: process.env.VAPID_PUBLIC_KEY || '',

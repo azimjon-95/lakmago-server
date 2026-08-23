@@ -60,6 +60,35 @@ export async function generateQrSvg(qrToken) {
   });
 }
 
+/* ═══════════ Kiosk (zaldagi planshet) ═══════════ */
+
+/**
+ * Kiosk havolasi. Mijoz QR'idan farqli subdomen —
+ * stol QR'i mijozga, bu esa xodim planshetiga.
+ */
+export function buildKioskUrl(token) {
+  const base = config.waiterBaseUrl || 'https://waiter.lokma.uz';
+  return `${base}/kio/${token}`;
+}
+
+/** Kiosk havolasi uchun QR — planshetda tez ochish uchun. */
+export async function generateKioskQrPng(token, size = 640) {
+  return QRCode.toDataURL(buildKioskUrl(token), {
+    width: size,
+    margin: 1,
+    errorCorrectionLevel: 'M',
+    color: { dark: '#000000', light: '#FFFFFF' },
+  });
+}
+
+export async function generateKioskQrSvg(token) {
+  return QRCode.toString(buildKioskUrl(token), {
+    type: 'svg',
+    margin: 1,
+    errorCorrectionLevel: 'M',
+  });
+}
+
 /* ═══════════ Yordamchilar ═══════════ */
 
 const esc = (s) => String(s ?? '')

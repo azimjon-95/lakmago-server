@@ -196,6 +196,7 @@ router.get('/panel/dinein/menu/:restaurantId', waiterOrRestaurantAuth, dineInOrd
 router.get('/panel/kiosk', ...R, kioskController.list);
 router.post('/panel/kiosk', ...R, writeLimiter, kioskController.create);
 router.get('/panel/kiosk/:id/reveal', ...R, kioskController.reveal);
+router.get('/panel/kiosk/:id/qr', ...R, kioskController.qr);
 router.patch('/panel/kiosk/:id', ...R, kioskController.update);
 router.post('/panel/kiosk/:id/rotate', ...R, writeLimiter, kioskController.rotate);
 router.post('/panel/kiosk/:id/reset-devices', ...R, kioskController.resetDevices);

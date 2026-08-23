@@ -6,6 +6,7 @@ import { KioskToken } from '../models/KioskToken.js';
 import { DineInConfig } from '../models/DineIn.js';
 import { Restaurant } from '../models/Restaurant.js';
 import { config } from '../config/index.js';
+import { buildKioskUrl, generateKioskQrPng, generateKioskQrSvg } from '../services/qrDesign.js';
 
 const rid = (req) => req.restaurantId;
 
@@ -25,7 +26,9 @@ function toPanel(doc, { withToken = false } = {}) {
     _id: o._id,
     label: o.label,
     tokenShort: short(o.token),
-    ...(withToken && { token: o.token }),
+    // To'liq havola faqat so'ralganda — ro'yxatda ko'rinmaydi,
+    // ekran boshqalarga ochiq turgan bo'lishi mumkin
+    ...(withToken && { token: o.token, url: buildKioskUrl(o.token) }),
     expiresAt: o.expiresAt,
     isActive: o.isActive,
     status: !o.isActive ? 'disabled' : expired ? 'expired' : 'active',
@@ -195,6 +198,26 @@ export const kioskController = {
     });
     if (!doc) return res.status(404).json({ error: 'Link topilmadi' });
     res.json({ deleted: true });
+  }),
+
+  /**
+   * GET /api/panel/kiosk/:id/qr?format=png|svg
+   *
+   * Planshetda uzun havolani qo'lda terish o'rniga QR skanerlash.
+   */
+  qr: asyncHandler(async (req, res) => {
+    const doc = await KioskToken.findOne({ _id: req.params.id, restaurantId: rid(req) }).lean();
+    if (!doc) return res.status(404).json({ error: 'Link topilmadi' });
+
+    if (req.query.format === 'svg') {
+      const svg = await generateKioskQrSvg(doc.token);
+      res.type('image/svg+xml').send(svg);
+      return;
+    }
+
+    const dataUrl = await generateKioskQrPng(doc.token, 800);
+    const buf = Buffer.from(dataUrl.split(',')[1], 'base64');
+    res.type('image/png').send(buf);
   }),
 
   // ═══════════════ KIOSK SAHIFASI ═══════════════
