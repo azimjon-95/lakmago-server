@@ -61,8 +61,15 @@ const kioskTokenSchema = new Schema(
 
     autoFullscreen: { type: Boolean, default: true },
 
-    // Necha soniya tegilmasa qulf tushadi (TZ: 120)
-    inactivitySec: { type: Number, default: 120, min: 15, max: 3600 },
+    /*
+     * Necha soniya tegilmasa qulf tushadi.
+     *
+     * TZ bo'yicha 120 (2 daqiqa). HOZIR TEST UCHUN 15 —
+     * qulfni tekshirish uchun har safar 2 daqiqa kutmaslik kerak.
+     * QAYTARISH: shu qatordagi 15 → 120 va kiosk.js dagi
+     * `?? 15` → `?? 120`. Boshqa joyda o'zgartirish shart emas.
+     */
+    inactivitySec: { type: Number, default: 15, min: 5, max: 3600 },
 
     // ===== PIN brute-force himoyasi =====
     // Server tomonda hisoblanadi — brauzerdagi hisobni

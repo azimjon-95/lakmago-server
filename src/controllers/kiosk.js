@@ -56,7 +56,7 @@ const settingsSchema = z.object({
   deviceLimit: z.number().int().min(0).max(20).optional(),
   sections: z.array(z.enum(['tables', 'stoplist', 'menu'])).min(1).optional(),
   autoFullscreen: z.boolean().optional(),
-  inactivitySec: z.number().int().min(15).max(3600).optional(),
+  inactivitySec: z.number().int().min(5).max(3600).optional(),
 });
 
 export const kioskController = {
@@ -103,7 +103,7 @@ export const kioskController = {
       deviceLimit: parsed.data.deviceLimit ?? 0,
       sections: parsed.data.sections ?? ['tables', 'stoplist', 'menu'],
       autoFullscreen: parsed.data.autoFullscreen ?? true,
-      inactivitySec: parsed.data.inactivitySec ?? 120,
+      inactivitySec: parsed.data.inactivitySec ?? 15,   // TEST: keyin 120
       createdBy: req.userId || null,
     });
 
