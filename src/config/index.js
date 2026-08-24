@@ -90,12 +90,23 @@ export const config = {
   telegramBotToken: process.env.TELEGRAM_BOT_TOKEN ?? '',
 
   /*
-   * Kuryer sahifasi manzili — YANGI, ALOHIDA lokma-courier
-   * loyihasi shu subdomenda joylashadi. Standart qiymat
-   * ishlab chiqish uchun (localhost) — production'da
-   * COURIER_APP_URL=https://kuryer.lokma.uz o'rnatiladi.
+   * Kuryer sahifasi manzili — alohida lokma-courier loyihasi.
+   *
+   * NEGA DEFAULT MUHITGA QARAB TANLANADI:
+   *   Ilgari default har doim 'http://localhost:5175' edi.
+   *   Production'da COURIER_APP_URL o'rnatish unutilsa, xato
+   *   BILINMASDAN o'tib ketardi: server ishlayveradi, havola
+   *   ham yasaladi — faqat kuryerga localhost havolasi borib,
+   *   uning telefonida ochilmaydi. Aynan shu holat yuz berdi.
+   *
+   *   Endi production'da default — haqiqiy domen, lokalda esa
+   *   avvalgidek localhost. Noto'g'ri o'rnatilsa quyida
+   *   ogohlantirish chiqadi.
    */
-  courierAppUrl: (process.env.COURIER_APP_URL || 'http://localhost:5175').replace(/\/$/, ''),
+  courierAppUrl: (
+    process.env.COURIER_APP_URL
+    || (isProd ? 'https://kuryer.lokma.uz' : 'http://localhost:5175')
+  ).replace(/\/$/, ''),
   // Frontend manzillari (aniq ajratilган)
   webappOrigin,            // mijoz webapp'и (WEBAPP_URL)
   adminOrigins,            // admin panellar (CORS_ORIGINS)
@@ -222,7 +233,10 @@ export const config = {
   // Ofitsiant/kiosk manzili — zaldagi planshet shu yerdan ochiladi.
   // Mijoz manzilidan ATAYLAB ajratilgan: ular alohida subdomen va
   // kelajakda alohida deploy bo'lishi mumkin.
-  waiterBaseUrl: process.env.WAITER_BASE_URL || 'https://waiter.lokma.uz',
+  waiterBaseUrl: (
+    process.env.WAITER_BASE_URL
+    || (isProd ? 'https://waiter.lokma.uz' : 'http://localhost:3000')
+  ).replace(/\/$/, ''),
 
   // Web Push (VAPID). Kalitlar bo'lmasa push jim o'chadi —
   // qolgan tizim ishlayveradi.
@@ -230,6 +244,33 @@ export const config = {
   vapidPrivateKey: process.env.VAPID_PRIVATE_KEY || '',
   vapidSubject: process.env.VAPID_SUBJECT || 'mailto:support@lokma.uz',
 };
+
+/*
+ * Tashqi havolalar tekshiruvi.
+ *
+ * Bu manzillar mijoz va kuryerning TELEFONIDA ochiladi, ya'ni
+ * server o'zi hech qachon ularga murojaat qilmaydi — noto'g'ri
+ * bo'lsa hech qanday xato ko'rinmaydi, shunchaki odam havolani
+ * ocholmaydi. Shuning uchun ishga tushishda ovoz chiqaramiz.
+ */
+if (isProd) {
+  const publicUrls = [
+    ['COURIER_APP_URL', config.courierAppUrl],
+    ['WAITER_BASE_URL', config.waiterBaseUrl],
+    ['CUSTOMER_BASE_URL', config.customerBaseUrl],
+  ];
+
+  for (const [name, value] of publicUrls) {
+    if (/localhost|127\.0\.0\.1|0\.0\.0\.0/.test(value)) {
+      console.error(
+        `✗ ${name}=${value} — bu manzil boshqa qurilmada OCHILMAYDI. `
+        + 'Production uchun haqiqiy domen kiriting.',
+      );
+    } else if (!value.startsWith('https://')) {
+      console.warn(`⚠ ${name}=${value} — HTTPS emas.`);
+    }
+  }
+}
 
 export async function connectDB() {
   try {
