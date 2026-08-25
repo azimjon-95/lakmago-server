@@ -91,10 +91,29 @@ const tableSchema = new Schema(
     tableNumber: { type: String, required: true },  // "12", "A3"
     capacity: { type: Number, default: 4, min: 1, max: 50 },
 
+    /*
+     * STOL HOLATI — ATIGI 3 TA.
+     *
+     *   free      — bo'sh
+     *   reserved  — kutilmoqda (mijoz bron qilgan, hali kelmagan)
+     *   occupied  — band (mehmon o'tirgan, sessiya ochiq)
+     *
+     * ILGARI 5 TA EDI: available, occupied, ordering, waiting,
+     * closed. Muammo shundaki, 'ordering' va 'waiting' aslida
+     * holat emas — ular JARAYON belgisi:
+     *   ordering — buyurtma kiritilyapti (baribir band)
+     *   waiting  — hisob so'ralgan (baribir band)
+     * Natijada zal xaritasida bir xil "band" stol uch xil
+     * rangda ko'rinardi va ofitsiant ularni farqlay olmasdi.
+     *
+     * Hisob so'ralgani endi TableRequest (type: 'bill') orqali
+     * yuritiladi — bu holat emas, so'rov. 'closed' ham holat
+     * emas: sessiya yopilsa stol shunchaki 'free' bo'ladi.
+     */
     status: {
       type: String,
-      enum: ['available', 'occupied', 'ordering', 'waiting', 'closed'],
-      default: 'available',
+      enum: ['free', 'reserved', 'occupied'],
+      default: 'free',
       index: true,
     },
 

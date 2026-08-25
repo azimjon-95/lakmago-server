@@ -239,7 +239,7 @@ export const dineInController = {
       tableName: z.string().max(60).optional(),
       tableNumber: z.string().min(1).max(20).optional(),
       capacity: z.number().int().min(1).max(50).optional(),
-      status: z.enum(['available', 'occupied', 'ordering', 'waiting', 'closed']).optional(),
+      status: z.enum(['free', 'reserved', 'occupied']).optional(),
       isActive: z.boolean().optional(),
     });
 

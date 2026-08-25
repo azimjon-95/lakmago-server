@@ -61,10 +61,18 @@ export const dineInLiveController = {
       type,
     });
 
-    // Stol holatini yangilaymiz
-    if (type === 'bill') {
-      await Table.findByIdAndUpdate(session.tableId, { status: 'waiting' });
-    }
+    /*
+     * Hisob so'ralgani stol HOLATI emas.
+     *
+     * Ilgari bu yerda status 'waiting' qilinardi va band stol
+     * zal xaritasida boshqa rangga o'tardi — natijada "band"
+     * va "hisob kutmoqda" ikki xil holat kabi ko'rinardi,
+     * aslida esa mehmon hamon o'tiribdi.
+     *
+     * Endi bu TableRequest (yuqorida yaratildi) sifatida
+     * yuritiladi: stol band bo'lib qolaveradi, ustida esa
+     * "hisob so'raldi" belgisi chiqadi.
+     */
 
     const table = await Table.findById(session.tableId)
       .select('tableNumber tableName').lean();
@@ -201,7 +209,7 @@ export const dineInLiveController = {
     });
 
     if (!session) {
-      await Table.findByIdAndUpdate(table._id, { status: 'available' });
+      await Table.findByIdAndUpdate(table._id, { status: 'free' });
       return res.json({ closed: true, message: 'Stol bo\u2018shatildi' });
     }
 
@@ -230,7 +238,7 @@ export const dineInLiveController = {
     session.closeReason = String(req.body.reason || 'Admin yopdi').slice(0, 200);
     await session.save();
 
-    await Table.findByIdAndUpdate(table._id, { status: 'available' });
+    await Table.findByIdAndUpdate(table._id, { status: 'free' });
 
     // Ochiq so'rovlarni yopamiz
     await TableRequest.updateMany(
@@ -241,7 +249,7 @@ export const dineInLiveController = {
     const io = getIO();
     io?.to(`session:${session._id}`).emit('dinein:session-closed', {});
     io?.to(`restaurant:${req.restaurantId}`).emit('table:update', {
-      tableId: String(table._id), status: 'available',
+      tableId: String(table._id), status: 'free',
     });
 
     res.json({ closed: true, sessionId: String(session._id) });

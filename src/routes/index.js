@@ -178,6 +178,10 @@ router.patch('/panel/dinein/orders/:id/status', waiterOrRestaurantAuth, dineInOr
 router.post('/panel/dinein/tables/:tableId/close', waiterOrRestaurantAuth, dineInLiveController.closeTable);
 router.get('/panel/dinein/menu/:restaurantId', waiterOrRestaurantAuth, dineInOrderController.menu);
 
+// Kursni oshxonaga otish — ofitsiant, kiosk yoki restoran admini
+router.patch('/panel/dinein/orders/:id/fire', waiterOrRestaurantAuth, dineInOrderController.fireCourse);
+router.patch('/waiter/orders/:id/fire', waiterAuth, dineInOrderController.fireCourse);
+
 /*
  * ═══════════════ KIOSK REJIMI ═══════════════
  *
@@ -223,6 +227,7 @@ router.patch('/kiosk/requests/:id', kioskAuth, requireKioskSection('tables'), di
 router.get('/kiosk/menu/:restaurantId', kioskAuth, requireKioskSection('menu'), dineInOrderController.menu);
 router.post('/kiosk/orders', kioskAuth, requireKioskSection('menu'), dineInOrderController.createFromWaiter);
 router.patch('/kiosk/orders/:id/status', kioskAuth, requireKioskSection('menu'), dineInOrderController.updateStatus);
+router.patch('/kiosk/orders/:id/fire', kioskAuth, requireKioskSection('menu'), dineInOrderController.fireCourse);
 
 // Stop list
 router.get('/kiosk/stoplist', kioskAuth, requireKioskSection('stoplist'), restaurantPanelController.stoppedDishes);

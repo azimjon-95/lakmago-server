@@ -112,6 +112,16 @@ export async function calcDineInOrder(items, restaurantId, orderSource) {
       unitPrice,
       selectedOptions: options,
       note: String(item.note || '').slice(0, 200),
+
+      /*
+       * Kurs va olib ketish — MIJOZ tanlovi, narxga ta'sir
+       * qilmaydi, shuning uchun ular shu yerda shunchaki
+       * ko'chiriladi. Chegaradan tashqari qiymat kelsa
+       * 1-kursga tushadi: buyurtma yo'qolgandan ko'ra
+       * noto'g'ri kursda kelgani yaxshiroq.
+       */
+      course: Math.min(9, Math.max(1, Number(item.course) || 1)),
+      takeaway: Boolean(item.takeaway),
     });
   }
 

@@ -7,7 +7,33 @@ const orderItemSchema = new Schema(
     quantity: { type: Number, required: true },
     unitPrice: { type: Number, required: true },
     selectedOptions: [{ name: String, price: Number }],
+
+    // Taomga izoh: "avokadosiz", "achchiq qilmang"
     note: { type: String },
+
+    /*
+     * KURS (podacha) — taom qaysi navbatda kelishi.
+     *
+     * 1 = darhol, 2 = keyingi, 3 = keyinroq...
+     * Oshxonaga BARCHA kurslar ko'rinadi (ular nima kelishini
+     * oldindan bilishi kerak), lekin faqat "otilgan" kurs
+     * tayyorlanadi — qolganlari "keyinroq tayyorlash" deb
+     * turadi. Mijoz tayyor bo'lganda ofitsiant keyingi kursni
+     * otadi.
+     *
+     * _id: false bo'lgani uchun elementlar indeks bo'yicha
+     * ajratiladi — kurs shu yerda, elementning o'zida turadi.
+     */
+    course: { type: Number, default: 1, min: 1, max: 9 },
+
+    /*
+     * OLIB KETISH — shu TAOM uchun, butun buyurtma uchun emas.
+     *
+     * Sabab: bir mijoz bitta taomni shu yerda yeydi,
+     * ikkinchisini olib ketadi. Buyurtma darajasidagi bayroq
+     * bu holatni ifodalay olmaydi.
+     */
+    takeaway: { type: Boolean, default: false },
   },
   { _id: false },
 );
@@ -35,6 +61,20 @@ const orderSchema = new Schema(
     deliveryFee: { type: Number, default: 0 },
     serviceFee: { type: Number, default: 0 },
     bonusUsed: { type: Number, default: 0 }, // shu buyurtмада ishlatilган bonus (so'm)
+
+    /*
+     * OTILGAN KURSLAR — oshxonada tayyorlanishi boshlangan.
+     *
+     * Buyurtma yaratilganda faqat [1] bo'ladi. Ofitsiant
+     * "2-kursni yuborish" bosganda 2 qo'shiladi va oshxonaga
+     * "2-podachani tayyorlashni boshlang" signali ketadi.
+     *
+     * Nega alohida maydon, nega elementga 'fired' bayrog'i emas:
+     * kurs — TAOMLAR GURUHI. Guruhni bir butun sifatida otish
+     * kerak, aks holda bitta kursning yarmi tayyorlanib,
+     * yarmi kutib qolishi mumkin.
+     */
+    firedCourses: { type: [Number], default: [1] },
 
     // Qo'llanilgan aksiya
     promotionId: { type: Schema.Types.ObjectId, ref: 'Promotion', default: null },

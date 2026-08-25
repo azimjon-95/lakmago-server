@@ -338,7 +338,7 @@ export const waiterController = {
     }
 
     table.guestCount = count;
-    if (count > 0 && table.status === 'available') table.status = 'occupied';
+    if (count > 0 && table.status !== 'occupied') table.status = 'occupied';
     await table.save();
 
     // Faol sessiyaga ham yozamiz

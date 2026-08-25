@@ -260,6 +260,70 @@ export const dineInOrderController = {
   }),
 
   // PATCH /api/panel/dine-in/orders/:id/status
+  /**
+   * PATCH /api/panel/dinein/orders/:id/fire  { course }
+   *
+   * Kursni oshxonaga otish.
+   *
+   * Oshxona buyurtmaning BARCHA kurslarini ko'radi (nima
+   * kelishini bilishi kerak), lekin faqat otilganini
+   * tayyorlaydi. Mijoz birinchi kursni yeb bo'lgach ofitsiant
+   * keyingisini otadi — taom sovib qolmaydi va stolда
+   * navbatma-navbat keladi.
+   */
+  fireCourse: asyncHandler(async (req, res) => {
+    const course = Number(req.body?.course);
+    if (!Number.isInteger(course) || course < 1 || course > 9) {
+      return res.status(400).json({ error: 'Kurs raqami noto\u2018g\u2018ri' });
+    }
+
+    const order = await Order.findOne({
+      _id: req.params.id,
+      restaurantId: req.restaurantId,
+      fulfillment: 'dinein',
+    });
+    if (!order) return res.status(404).json({ error: 'Buyurtma topilmadi' });
+
+    if (['cancelled', 'completed'].includes(order.status)) {
+      return res.status(400).json({ error: 'Buyurtma yopilgan' });
+    }
+
+    // Bunday kurs umuman bormi
+    const exists = order.items.some((i) => (i.course || 1) === course);
+    if (!exists) {
+      return res.status(400).json({ error: `${course}-kursda taom yo\u2018q` });
+    }
+
+    // Ikki marta otishning zarari yo'q, lekin oshxonaga
+    // takroriy signal ketmasin
+    if (order.firedCourses.includes(course)) {
+      return res.json({ ok: true, firedCourses: order.firedCourses, already: true });
+    }
+
+    order.firedCourses.push(course);
+    order.firedCourses.sort((a, b) => a - b);
+    await order.save();
+
+    const io = getIO();
+    if (io) {
+      io.to(`restaurant:${order.restaurantId}`).emit('dinein:course-fired', {
+        orderId: String(order._id),
+        course,
+        // Oshxona ekranida faqat shu kursning taomlari yonsin
+        items: order.items
+          .filter((i) => (i.course || 1) === course)
+          .map((i) => ({
+            name: i.name,
+            quantity: i.quantity,
+            note: i.note || '',
+            takeaway: !!i.takeaway,
+          })),
+      });
+    }
+
+    res.json({ ok: true, firedCourses: order.firedCourses });
+  }),
+
   updateStatus: asyncHandler(async (req, res) => {
     const allowed = ['accepted', 'preparing', 'ready', 'served', 'completed', 'cancelled'];
     const status = req.body.status;
@@ -424,7 +488,20 @@ async function createOrder({ session, calc, orderSource, waiter, note, userId, b
 
     ...(userId ? { userId } : {}),
 
-    status: 'pending',
+    /*
+     * TASDIQLASH QOIDASI — manbaga qarab.
+     *
+     *   QR (mijoz o'zi)     -> 'pending'  : admin tasdiqlaydi
+     *   Ofitsiant / kiosk   -> 'accepted' : darhol oshxonaga
+     *
+     * Sabab: ofitsiant buyurtmani mijoz bilan yuzma-yuz turib
+     * kiritadi va u allaqachon tekshirilgan. Uni yana admin
+     * tasdig'iga qo'yish ortiqcha qadam — zalda har soniya
+     * qimmat. Mijoz QR orqali o'zi kiritganda esa tasdiqlash
+     * kerak: xato bosish, hazil buyurtma yoki stop-listdagi
+     * taom bo'lishi mumkin.
+     */
+    status: orderSource === 'waiter' ? 'accepted' : 'pending',
     note: String(note || '').slice(0, 300),
     paymentMethod: 'cash',
 
@@ -445,7 +522,10 @@ async function createOrder({ session, calc, orderSource, waiter, note, userId, b
     $push: { orderIds: order._id },
   });
 
-  await Table.findByIdAndUpdate(session.tableId, { status: 'ordering' });
+  // Buyurtma kiritilishi ALOHIDA holat emas — stol baribir band.
+  // Ilgari 'ordering' qo'yilardi va zal xaritasida band stol
+  // boshqa rangda ko'rinib, ofitsiantni chalg'itardi.
+  await Table.findByIdAndUpdate(session.tableId, { status: 'occupied' });
 
   return order;
 }
