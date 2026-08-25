@@ -194,7 +194,7 @@ export const orderController = {
 
     const restIds = orders.map((o) => o.restaurantId);
     const restDocs = await Restaurant.find({ _id: { $in: restIds } })
-      .select('name deliveryFee freeDeliveryThreshold minOrderAmount serviceFeePercent serviceFeeMin serviceFeeMax prepMinutes openTime closeTime timezone workingDays isActive isBlocked isApproved pickupEnabled deliveryEnabled lat lng delivery')
+      .select('name deliveryFee freeDeliveryThreshold minOrderAmount serviceFeePercent serviceFeeMin serviceFeeMax prepMinutes openTime closeTime timezone workingDays isActive isBlocked isApproved pickupEnabled deliveryEnabled pickupDiscountPercent lat lng delivery')
       .lean();
     const restMap = new Map(restDocs.map((r) => [String(r._id), r]));
 
@@ -308,6 +308,25 @@ export const orderController = {
       }
       o.serviceFee = calcServiceFee(o.subtotal, rest);
 
+      /*
+       * OLIB KETISH CHEGIRMASI.
+       *
+       * Ilgari `pickupDiscountPercent` restoran sozlamalarida
+       * saqlanardi-yu, HECH QAYERDA ishlatilmasdi — panelda
+       * "5%" yozib qo'yilgani bilan mijoz uni ko'rmasdi va
+       * to'lamasdi ham. Endi narxga qo'llanadi.
+       *
+       * Faqat TAOMLAR summasidan hisoblanadi: yetkazish haqi
+       * olib ketishda allaqachon nol, xizmat haqidan chegirma
+       * berish esa restoran nazarda tutgan narsa emas.
+       */
+      o._pickupPercent = 0;
+      o._pickupDiscount = 0;
+      if (isPickup && rest.pickupDiscountPercent > 0) {
+        o._pickupPercent = rest.pickupDiscountPercent;
+        o._pickupDiscount = Math.round(o.subtotal * rest.pickupDiscountPercent / 100);
+      }
+
       // Aksiya — SERVERDA hisoblanadi, client qiymatiga ishonilmaydi
       const promo = await applyPromotion(o.restaurantId, o.items || [], o.subtotal);
       o._promo = promo;
@@ -316,7 +335,8 @@ export const orderController = {
     // ===== BONUS BILAN TO'LASH =====
     // Butun buyurtма summasi (barcha restoranlar)
     const grandTotal = orders.reduce(
-      (s, o) => s + o.subtotal + (isPickup ? 0 : (o.deliveryFee || 0)) + (o.serviceFee || 0), 0,
+      (s, o) => s + o.subtotal - (o._pickupDiscount || 0)
+        + (isPickup ? 0 : (o.deliveryFee || 0)) + (o.serviceFee || 0), 0,
     );
     // Ishlatiladigan bonus: so'ralган, lekin balansдан va summадан oshмаsин
     let bonusToUse = 0;
@@ -344,7 +364,7 @@ export const orderController = {
       const promoDiscount = o._promo?.discount || 0;
       const orderTotal = Math.max(
         0,
-        o.subtotal - promoDiscount + fee + (o.serviceFee || 0),
+        o.subtotal - promoDiscount - (o._pickupDiscount || 0) + fee + (o.serviceFee || 0),
       );
       // Bonusni shu buyurtmaga qo'llaymiz (ketma-ket, oshib ketmasin)
       // Chegirma qo'shish qoidasi (discount stacking policy).
@@ -377,6 +397,8 @@ export const orderController = {
         promotionId: o._promo?.promotionId || null,
         promotionName: o._promo?.promotionName || '',
         promotionDiscount: o._promo?.discount || 0,
+        pickupDiscount: o._pickupDiscount || 0,
+        pickupDiscountPercent: o._pickupPercent || 0,
         total,
         // Karta to'lovi bo'lsa buyurtma TO'LOV KUTILMOQDA holatida
         // yaratiladi — restoranga faqat pul kelgach yuboriladi.

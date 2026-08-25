@@ -81,6 +81,17 @@ const orderSchema = new Schema(
     promotionName: { type: String, default: '' },
     promotionDiscount: { type: Number, default: 0 },
 
+    /*
+     * OLIB KETISH CHEGIRMASI.
+     *
+     * Restoran o'zi olib ketuvchilarga foiz beradi (kuryer
+     * xarajati yo'q, shuning uchun mijozga ham arzonroq).
+     * Aksiyadan alohida saqlanadi — ular boshqa sabab bilan
+     * beriladi va hisobotda ajratilishi kerak.
+     */
+    pickupDiscount: { type: Number, default: 0 },
+    pickupDiscountPercent: { type: Number, default: 0 },
+
     // Reklama orqali kelganmi
     adCampaignId: { type: Schema.Types.ObjectId, ref: 'AdCampaign', default: null },
     total: { type: Number, required: true },
