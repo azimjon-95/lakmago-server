@@ -92,21 +92,26 @@ export const config = {
   /*
    * Kuryer sahifasi manzili — alohida lokma-courier loyihasi.
    *
-   * NEGA DEFAULT MUHITGA QARAB TANLANADI:
-   *   Ilgari default har doim 'http://localhost:5175' edi.
-   *   Production'da COURIER_APP_URL o'rnatish unutilsa, xato
-   *   BILINMASDAN o'tib ketardi: server ishlayveradi, havola
-   *   ham yasaladi — faqat kuryerga localhost havolasi borib,
-   *   uning telefonida ochilmaydi. Aynan shu holat yuz berdi.
+   * DEFAULT — HAQIQIY DOMEN, MUHITGA BOG'LIQ EMAS.
    *
-   *   Endi production'da default — haqiqiy domen, lokalda esa
-   *   avvalgidek localhost. Noto'g'ri o'rnatilsa quyida
-   *   ogohlantirish chiqadi.
+   * Tarix: avval default har doim 'http://localhost:5175' edi va
+   * production'da COURIER_APP_URL o'rnatish unutilgani uchun
+   * kuryerlarga localhost havolasi ketdi — ularning telefonida
+   * bunday manzil yo'q, buyurtma qabul qilinmadi.
+   *
+   * Keyin default NODE_ENV ga bog'landi, lekin bu ham yetarli
+   * bo'lmadi: NODE_ENV=production o'rnatilmagan bo'lsa muammo
+   * qaytadi. Ikkita sozlamaga bog'liqlik bitta sozlamadan
+   * ko'ra ishonchsizroq.
+   *
+   * Endi bog'liqlik yo'q. Lokal ishlab chiqishда kerak bo'lsa
+   * COURIER_APP_URL=http://localhost:5175 deb ochiq yoziladi.
+   * Xato qilish narxi assimetrik: dev'da noto'g'ri manzil —
+   * darhol ko'rinadi va zarari yo'q; production'da esa buyurtma
+   * kuryerga yetib bormaydi va buni HECH KIM PAYQAMAYDI.
    */
-  courierAppUrl: (
-    process.env.COURIER_APP_URL
-    || (isProd ? 'https://kuryer.lokma.uz' : 'http://localhost:5175')
-  ).replace(/\/$/, ''),
+  courierAppUrl: (process.env.COURIER_APP_URL || 'https://kuryer.lokma.uz')
+    .replace(/\/$/, ''),
   // Frontend manzillari (aniq ajratilган)
   webappOrigin,            // mijoz webapp'и (WEBAPP_URL)
   adminOrigins,            // admin panellar (CORS_ORIGINS)
@@ -233,10 +238,9 @@ export const config = {
   // Ofitsiant/kiosk manzili — zaldagi planshet shu yerdan ochiladi.
   // Mijoz manzilidan ATAYLAB ajratilgan: ular alohida subdomen va
   // kelajakda alohida deploy bo'lishi mumkin.
-  waiterBaseUrl: (
-    process.env.WAITER_BASE_URL
-    || (isProd ? 'https://waiter.lokma.uz' : 'http://localhost:3000')
-  ).replace(/\/$/, ''),
+  // Default — yuqoridagi kabi, muhitga bog'liq emas.
+  waiterBaseUrl: (process.env.WAITER_BASE_URL || 'https://waiter.lokma.uz')
+    .replace(/\/$/, ''),
 
   // Web Push (VAPID). Kalitlar bo'lmasa push jim o'chadi —
   // qolgan tizim ishlayveradi.
@@ -253,22 +257,18 @@ export const config = {
  * bo'lsa hech qanday xato ko'rinmaydi, shunchaki odam havolani
  * ocholmaydi. Shuning uchun ishga tushishda ovoz chiqaramiz.
  */
-if (isProd) {
-  const publicUrls = [
-    ['COURIER_APP_URL', config.courierAppUrl],
-    ['WAITER_BASE_URL', config.waiterBaseUrl],
-    ['CUSTOMER_BASE_URL', config.customerBaseUrl],
-  ];
+const publicUrls = [
+  ['COURIER_APP_URL', config.courierAppUrl],
+  ['WAITER_BASE_URL', config.waiterBaseUrl],
+  ['CUSTOMER_BASE_URL', config.customerBaseUrl],
+];
 
-  for (const [name, value] of publicUrls) {
-    if (/localhost|127\.0\.0\.1|0\.0\.0\.0/.test(value)) {
-      console.error(
-        `✗ ${name}=${value} — bu manzil boshqa qurilmada OCHILMAYDI. `
-        + 'Production uchun haqiqiy domen kiriting.',
-      );
-    } else if (!value.startsWith('https://')) {
-      console.warn(`⚠ ${name}=${value} — HTTPS emas.`);
-    }
+for (const [name, value] of publicUrls) {
+  if (/localhost|127\.0\.0\.1|0\.0\.0\.0/.test(value)) {
+    console.warn(
+      `⚠ ${name}=${value} — bu manzil BOSHQA QURILMADA ochilmaydi. `
+      + 'Lokal ishlab chiqish uchun to\u2018g\u2018ri, jonli serverda emas.',
+    );
   }
 }
 
