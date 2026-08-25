@@ -120,7 +120,10 @@ export async function calcDineInOrder(items, restaurantId, orderSource) {
        * 1-kursga tushadi: buyurtma yo'qolgandan ko'ra
        * noto'g'ri kursda kelgani yaxshiroq.
        */
-      course: Math.min(9, Math.max(1, Number(item.course) || 1)),
+      // Math.round — kasr son ('2.5') kelsa butun kursga
+      // yaxlitlanadi. Aks holda modelga 2.5 yozilib, kurs
+      // bo'yicha guruhlashda alohida "2.5-kurs" paydo bo'lardi.
+      course: Math.min(9, Math.max(1, Math.round(Number(item.course)) || 1)),
       takeaway: Boolean(item.takeaway),
     });
   }
