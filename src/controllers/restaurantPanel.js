@@ -189,6 +189,23 @@ export const restaurantPanelController = {
       // To'lov kutilayotgan buyurtmalar restoranga KO'RINMAYDI —
       // pul kelgach avtomatik 'pending' bo'ladi va chiqadi
       status: { $ne: 'awaiting_payment' },
+
+      /*
+       * ZAL BUYURTMALARI BU YERGA TUSHMAYDI.
+       *
+       * Bu endpoint "Buyurtmalar" sahifasini to'ldiradi — u
+       * mijoz ilovasidan kelgan YETKAZIB BERISH va OLIB KETISH
+       * buyurtmalari uchun. Zal (dine-in) buyurtmalari esa
+       * "Zal buyurtmalari" sahifasida, boshqa oqim bilan
+       * yuritiladi: ular stolga bog'langan, kuryer kerak emas,
+       * manzil ham yo'q.
+       *
+       * Ilgari bu filtr YO'Q edi va zal buyurtmasi yetkazib
+       * berish ro'yxatida "YETKAZIB BERISH · Manzil
+       * ko'rsatilmagan" bo'lib chiqardi — restoran uni kuryerga
+       * bermoqchi bo'lib chalkashardi.
+       */
+      fulfillment: { $ne: 'dinein' },
     };
     if (req.query.status && req.query.status !== 'all') filter.status = req.query.status;
 
