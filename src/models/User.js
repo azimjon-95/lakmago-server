@@ -57,6 +57,26 @@ const userSchema = new Schema(
       expiry: { type: String, default: '' },        // MM/YY
       isDefault: { type: Boolean, default: false },
       addedAt: { type: Date, default: Date.now },
+
+      /*
+       * CLICK TOKENI — shu karta bilan pul yechish uchun.
+       *
+       * Karta RAQAMI hech qachon saqlanmaydi (faqat last4).
+       * Token esa raqamning o'rnini bosadi: u faqat BIZNING
+       * service_id bilan ishlaydi va o'g'irlansa ham boshqa
+       * joyda foydasi yo'q.
+       *
+       * verified: SMS bilan tasdiqlanganmi. Tasdiqlanmagan
+       * token bilan Click pul yechishga ruxsat bermaydi,
+       * shuning uchun bunday karta ro'yxatda "tasdiqlanmagan"
+       * bo'lib turadi va to'lovda tanlab bo'lmaydi.
+       */
+      clickToken: { type: String, default: '', select: false },
+      verified: { type: Boolean, default: false },
+
+      // Tokenni so'ragan vaqt — tasdiqlanmagan kartalarni
+      // tozalash uchun
+      tokenRequestedAt: { type: Date, default: null },
     }],
 
     // ===== REFERRAL TIZIMI =====

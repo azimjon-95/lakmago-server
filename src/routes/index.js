@@ -12,6 +12,7 @@ import { referralController } from '../controllers/referralController.js';
 import { addressController } from '../controllers/address.js';
 import { supportController } from '../controllers/support.js';
 import { cardController } from '../controllers/cards.js';
+import { cardPaymentController } from '../controllers/cardPayment.js';
 import { paymentController as gatewayController } from '../controllers/payments.js';
 import { billingController } from '../controllers/billing.js';
 import { settlementController } from '../controllers/settlement.js';
@@ -431,6 +432,17 @@ router.get('/cards', auth, cardController.list);
 router.post('/cards', auth, cardController.create);
 router.delete('/cards/:id', auth, cardController.remove);
 router.patch('/cards/:id/default', auth, cardController.setDefault);
+
+/*
+ * Click: kartani bog'lash va u bilan to'lash.
+ *
+ * loginLimiter — karta raqami va SMS kodni taxmin qilishga
+ * urinishni sekinlashtiradi.
+ */
+router.post('/cards/click/request', auth, loginLimiter, cardController.clickRequest);
+router.post('/cards/click/verify', auth, loginLimiter, cardController.clickVerify);
+router.post('/orders/:id/pay-card', auth, writeLimiter, cardPaymentController.payWithSavedCard);
+router.post('/orders/:id/payment-recheck', auth, cardPaymentController.recheck);
 
 // ===== Qo'llab-quvvatlash chati =====
 // Mijoz tomoni

@@ -156,6 +156,18 @@ const orderSchema = new Schema(
     cardBrand: { type: String, default: '' },
 
     // To'lov holati: naqd — yetkazilganda, karta — oldindan
+    /*
+     * TO'LOV QULFI — bir vaqtda ikki marta pul yechilmasin.
+     *
+     *   'paying'  — so'rov Click'ga ketgan, javob kutilmoqda
+     *   'unknown' — tarmoq uzildi, pul yechilgan bo'lishi mumkin;
+     *               qulf ATAYLAB ochilmaydi, avval holat
+     *               tekshirilishi kerak
+     *   null      — qulf yo'q
+     */
+    paymentLock: { type: String, default: null },
+    paymentLockAt: { type: Date, default: null },
+
     isPaid: { type: Boolean, default: false },
     paidAt: { type: Date, default: null },
 
