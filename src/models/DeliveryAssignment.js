@@ -72,18 +72,45 @@ const deliveryAssignmentSchema = new Schema(
     // (Order'dan nusxa — kuryer sahifasi Order'ga to'g'ridan-to'g'ri
     // kira olmasligi kerak, faqat shu yerga ko'chirilgan xavfsiz
     // qism)
+    /*
+     * NUSXA — buyurtma keyin o'zgarsa ham kuryer ko'rgan
+     * ma'lumot o'zgarmasin. Shuning uchun ref emas, qiymat.
+     */
     deliverySnapshot: {
+      // Mijoz
       addressLabel: String,
       lat: Number,
       lng: Number,
       addressNote: String,
       customerPhone: String,
+      customerName: String,
+      customerUsername: String,      // Telegram @nomi
+      customerTelegramId: String,
+
+      // Restoran
       restaurantName: String,
       restaurantAddress: String,
       restaurantLat: Number,
       restaurantLng: Number,
-      itemsSummary: String,   // "2x Lag'moni, 1x Osh"
+      restaurantPhone: String,
+
+      // Buyurtma
+      items: [{ name: String, quantity: Number, total: Number }],
+      itemsSummary: String,          // "2x Lag'moni, 1x Osh"
+      subtotal: Number,
+      deliveryFee: Number,
       total: Number,
+      orderCode: String,
+      note: String,
+
+      /*
+       * Pul yig'ish — kuryerning eng muhim savoli.
+       * collectAmount: mijozdan olinadigan summa (to'langan
+       * bo'lsa 0). Kuryer hisoblab o'tirmasin.
+       */
+      paymentMethod: String,
+      isPaid: Boolean,
+      collectAmount: Number,
     },
   },
   { timestamps: true },

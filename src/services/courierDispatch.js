@@ -36,14 +36,32 @@ function randomToken() {
  */
 export async function createShareLink(orderId) {
   const order = await Order.findById(orderId)
-    .populate('restaurantId', 'name address lat lng')
+    .populate('restaurantId', 'name address lat lng phone')
+    .populate('userId', 'firstName lastName username telegramId phone')
     .lean();
   if (!order) throw new Error('Buyurtma topilmadi');
 
   const restaurant = order.restaurantId || {};
-  const itemsSummary = (order.items || [])
-    .map((i) => `${i.quantity}x ${i.name}`)
-    .join(', ');
+  const user = order.userId || {};
+
+  /*
+   * Taomlar IKKI shaklda saqlanadi:
+   *   items       — ro'yxat sifatida chizish uchun
+   *   itemsSummary — Telegram matni va eski ekranlar uchun
+   *
+   * Ilgari faqat qo'shib yuborilgan satr bor edi va kuryer
+   * sahifasida taomlar bir uzun qator bo'lib chiqardi — nechta
+   * nima kelayotganini ajratib bo'lmasdi.
+   */
+  const items = (order.items || []).map((i) => ({
+    name: i.name,
+    quantity: i.quantity,
+    total: (i.unitPrice || 0) * (i.quantity || 1),
+  }));
+  const itemsSummary = items.map((i) => `${i.quantity}x ${i.name}`).join(', ');
+
+  const customerName = [user.firstName, user.lastName].filter(Boolean).join(' ')
+    || order.customerName || '';
 
   const assignment = await DeliveryAssignment.create({
     orderId: order._id,
@@ -55,17 +73,47 @@ export async function createShareLink(orderId) {
       lat: order.addressLat ?? null,
       lng: order.addressLng ?? null,
       addressNote: order.addressNote || '',
-      customerPhone: order.phone || '',
+      customerPhone: order.phone || user.phone || '',
+
+      // Mijoz — kuryer kim bilan uchrashishini bilishi kerak
+      customerName,
+      customerUsername: user.username || '',
+      customerTelegramId: user.telegramId ? String(user.telegramId) : '',
+
       restaurantName: restaurant.name || '',
       restaurantAddress: restaurant.address || '',
       restaurantLat: restaurant.lat ?? null,
       restaurantLng: restaurant.lng ?? null,
+      restaurantPhone: restaurant.phone || '',
+
+      items,
       itemsSummary,
+      subtotal: order.subtotal || 0,
+      deliveryFee: order.deliveryFee || 0,
       total: order.total || 0,
+
+      /*
+       * PUL YIG'ISH — kuryer uchun eng muhim ma'lumot.
+       *
+       * Ilgari bu UMUMAN yo'q edi: kuryer mijozdan pul olish
+       * kerakmi yoki buyurtma allaqachon to'langanmi bilmasdi.
+       * Xato ikki tomonga ham qimmat — pulsiz ketish yoki
+       * to'langan buyurtma uchun ikkinchi marta so'rash.
+       */
+      paymentMethod: order.paymentMethod || 'cash',
+      isPaid: !!order.isPaid,
+      collectAmount: order.isPaid ? 0 : (order.total || 0),
+
+      orderCode: String(order._id).slice(-6),
+      note: order.note || '',
     },
   });
 
-  return { token: assignment.token, assignmentId: assignment._id };
+  return {
+    token: assignment.token,
+    assignmentId: assignment._id,
+    snapshot: assignment.deliverySnapshot,
+  };
 }
 
 /**
@@ -153,13 +201,85 @@ export async function deliverShare(token, secret) {
   return { ok: true };
 }
 
+const money = (n) => Number(n || 0).toLocaleString('ru-RU').replace(/\u00a0/g, ' ');
+
+/**
+ * Kuryerga yuboriladigan e'lon matni.
+ *
+ * ILGARI bitta quruq qator edi: "Yangi yetkazish buyurtmasi".
+ * Kuryer havolani ochmasdan turib qabul qilish-qilmaslikni
+ * hal qila olmasdi — qayerdan, qayerga, qancha pul, hammasi
+ * noma'lum. Bir nechta kuryerga yuborilganda esa har biri
+ * havolani ochib ko'rishga majbur bo'lardi va birinchi bo'lib
+ * ochgan olib ketardi, eng yaqini emas.
+ *
+ * Endi asosiy narsa MATNDA: masofa haqida qaror qabul qilish
+ * uchun yetarli, lekin MIJOZNING ANIQ MANZILI VA TELEFONI
+ * YO'Q — ular faqat qabul qilgandan keyin, sahifada ko'rinadi.
+ * Sabab: bu xabar cheksiz forward qilinishi mumkin.
+ *
+ * Telegram share havolasida markdown ISHLAMAYDI — matn oddiy
+ * holda ketadi, shuning uchun tuzilma emoji va bo'sh qatorlar
+ * bilan beriladi.
+ */
+function buildShareText(snap = {}) {
+  const lines = [];
+
+  lines.push('\ud83d\udef5 YANGI BUYURTMA');
+  if (snap.orderCode) lines.push(`#${snap.orderCode}`);
+  lines.push('');
+
+  // Qayerdan
+  if (snap.restaurantName) {
+    lines.push(`\ud83c\udfea ${snap.restaurantName}`);
+    if (snap.restaurantAddress) lines.push(`   ${snap.restaurantAddress}`);
+  }
+
+  // Qayerga — faqat tuman/mo'ljal darajasida
+  if (snap.addressLabel) {
+    lines.push(`\ud83d\udccd ${snap.addressLabel}`);
+  }
+  lines.push('');
+
+  // Taomlar — ko'pi bilan 4 ta, qolgani "+N"
+  const items = snap.items || [];
+  if (items.length) {
+    items.slice(0, 4).forEach((i) => lines.push(`\u2022 ${i.quantity}x ${i.name}`));
+    if (items.length > 4) lines.push(`\u2022 +${items.length - 4} ta boshqa`);
+    lines.push('');
+  }
+
+  // Pul — kuryer uchun hal qiluvchi
+  if (snap.deliveryFee) lines.push(`\ud83d\udcb0 Yetkazish haqi: ${money(snap.deliveryFee)} so'm`);
+
+  if (snap.isPaid) {
+    lines.push(`\u2705 To'langan \u2014 mijozdan pul olinmaydi`);
+  } else if (snap.collectAmount) {
+    lines.push(`\ud83d\udcb5 Mijozdan olinadi: ${money(snap.collectAmount)} so'm (naqd)`);
+  }
+
+  lines.push('');
+  lines.push('\ud83d\udc47 Qabul qilish uchun havolani oching');
+  lines.push('Birinchi qabul qilgan kuryer oladi');
+
+  return lines.join('\n');
+}
+
 /** Havola manzillari — ulashish tugmalari uchun. */
-export function buildShareUrls(token) {
+export function buildShareUrls(token, snapshot) {
   const link = `${config.courierAppUrl}/k/${token}`;
-  const text = `\ud83d\udce6 Yangi yetkazish buyurtmasi. Qabul qilish uchun havolani oching:`;
+  const text = buildShareText(snapshot);
+
   return {
     link,
+    text,
+    /*
+     * Telegram `text` ni havoladan ALOHIDA oladi va havola
+     * oldindan ko'rinish (preview) bilan chiqadi.
+     * WhatsApp'da esa hammasi bitta matn — havola oxiriga
+     * qo'shiladi.
+     */
     telegram: `https://t.me/share/url?url=${encodeURIComponent(link)}&text=${encodeURIComponent(text)}`,
-    whatsapp: `https://wa.me/?text=${encodeURIComponent(`${text} ${link}`)}`,
+    whatsapp: `https://wa.me/?text=${encodeURIComponent(`${text}\n\n${link}`)}`,
   };
 }

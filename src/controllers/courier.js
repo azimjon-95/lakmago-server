@@ -67,8 +67,8 @@ export const courierAdminController = {
     const order = await Order.findOne({ _id: req.params.id, restaurantId: rid(req) }).lean();
     if (!order) return res.status(404).json({ error: 'Buyurtma topilmadi' });
 
-    const { token } = await createShareLink(order._id);
-    const urls = buildShareUrls(token);
+    const { token, snapshot } = await createShareLink(order._id);
+    const urls = buildShareUrls(token, snapshot);
 
     res.status(201).json(urls);
   }),
@@ -98,21 +98,58 @@ export const courierPortalController = {
     }
 
     const snap = result.assignment?.deliverySnapshot || {};
+    const mine = result.view === 'mine' || result.view === 'delivered';
+
+    /*
+     * MA'LUMOT IKKI DARAJADA.
+     *
+     * 'offer' (hali qabul qilinmagan) — qaror qabul qilish
+     *   uchun yetarlisi: qayerdan, taxminiy yo'nalish, pul.
+     *
+     * 'mine' (qabul qilingan) — hammasi: aniq manzil,
+     *   koordinatalar, telefon, Telegram akkaunti.
+     *
+     * Nega shunday: havola cheksiz forward qilinishi mumkin va
+     * uni ochgan har kim mijozning uy manzili bilan telefonini
+     * ko'rib qolmasligi kerak. Buyurtmani olgan kuryergina
+     * bu ma'lumotga haqli.
+     */
     res.json({
       view: result.view,
-      order: ['offer', 'mine'].includes(result.view) ? {
+      order: ['offer', 'mine', 'delivered'].includes(result.view) ? {
+        orderCode: snap.orderCode,
+
+        // Taomlar — ro'yxat va zaxira satr
+        items: snap.items || [],
         itemsSummary: snap.itemsSummary,
+        note: snap.note || '',
+
+        // Pul
+        subtotal: snap.subtotal,
+        deliveryFee: snap.deliveryFee,
         total: snap.total,
+        paymentMethod: snap.paymentMethod,
+        isPaid: snap.isPaid,
+        collectAmount: snap.collectAmount,
+
+        // Restoran — olib ketish nuqtasi, hamma ko'radi
         restaurantName: snap.restaurantName,
         restaurantAddress: snap.restaurantAddress,
         restaurantLat: snap.restaurantLat,
         restaurantLng: snap.restaurantLng,
+        restaurantPhone: mine ? snap.restaurantPhone : undefined,
+
+        // Mijoz — yo'nalish hammaga, aniqligi faqat egasiga
         addressLabel: snap.addressLabel,
-        // Aniq manzil/telefon — FAQAT to'g'ri secret bilan ('mine')
-        addressNote: result.view === 'mine' ? snap.addressNote : undefined,
-        customerPhone: result.view === 'mine' ? snap.customerPhone : undefined,
-        lat: snap.lat,
-        lng: snap.lng,
+        addressNote: mine ? snap.addressNote : undefined,
+        customerPhone: mine ? snap.customerPhone : undefined,
+        customerName: mine ? snap.customerName : undefined,
+        customerUsername: mine ? snap.customerUsername : undefined,
+
+        // Koordinatalar ham faqat qabul qilgandan keyin —
+        // ular aslida aniq manzilning o'zi
+        lat: mine ? snap.lat : undefined,
+        lng: mine ? snap.lng : undefined,
       } : null,
     });
   }),
