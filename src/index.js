@@ -56,6 +56,24 @@ async function main() {
     credentials: true,
   }));
   app.use(express.json());
+
+  /*
+   * FORM-ENCODED — TO'LOV SHLYUZLARI UCHUN SHART.
+   *
+   * Click Prepare/Complete callback'larini
+   * `application/x-www-form-urlencoded` bilan yuboradi, JSON
+   * bilan EMAS. Faqat express.json() bo'lganda req.body BO'SH
+   * qolardi, imzo esa bo'sh maydonlardan hisoblanib har doim
+   * mos kelmasdi — natijada HAR BIR to'lov "SIGN CHECK FAILED"
+   * (-1) bilan rad etilardi.
+   *
+   * Xato tashqaridan "imzo noto'g'ri" bo'lib ko'rinadi va
+   * kalitlarni qayta-qayta tekshirishga olib boradi, aslida
+   * sabab esa butunlay boshqa joyda.
+   *
+   * Paynet ham shu formatni ishlatadi.
+   */
+  app.use(express.urlencoded({ extended: false }));
   /*
    * XAVFSIZLIK (2026-08 audit): NoSQL in'eksiyaga qarshi.
    *

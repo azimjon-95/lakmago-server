@@ -39,12 +39,36 @@ export const loginLimiter = rateLimit({
 });
 
 /** Umumiy API — daqiqada IP boshiga 300 so'rov (keng, oddiy foydalanish uchun sezilmaydi). */
+/*
+ * TO'LOV CALLBACK'LARI cheklovdan CHIQARILADI.
+ *
+ * Click/Payme/Paynet so'rovlari bitta IP to'plamidan keladi va
+ * band paytda ular ko'p bo'lishi mumkin. Cheklovga yetsa server
+ * 429 qaytaradi — shlyuz esa buni "server ishlamayapti" deb
+ * qabul qiladi.
+ *
+ * Oqibati og'ir: mijoz puli yechilgan, lekin Complete
+ * yetib bormagani uchun buyurtma restoranga CHIQMAYDI va
+ * hech kim buni payqamaydi.
+ *
+ * Bu yo'llar imzo bilan himoyalangan (md5 + maxfiy kalit),
+ * ya'ni cheklovsiz ham suiiste'mol qilib bo'lmaydi — imzosiz
+ * so'rov baribir rad etiladi.
+ */
+const WEBHOOK_PATHS = [
+  '/payments/click/prepare',
+  '/payments/click/complete',
+  '/payments/payme',
+  '/payments/paynet',
+];
+
 export const apiLimiter = rateLimit({
   windowMs: 60 * 1000,
   max: 300,
   standardHeaders: true,
   legacyHeaders: false,
   handler: limitHandler,
+  skip: (req) => WEBHOOK_PATHS.some((p) => req.path.startsWith(p)),
 });
 
 /** Yozuv amallari (buyurtma, to'lov va h.k.) — daqiqada 60. */
