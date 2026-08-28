@@ -204,7 +204,7 @@ export const restaurantController = {
       restaurantId: req.params.id,
       isAvailable: true
     })
-      .select('restaurantId name description section category prepMinutes price oldPrice weight weightGram calories protein fat carbs ingredients optionGroups isHit isTrending isDiscounted tint icon images imageUrl isAvailable')
+      .select('restaurantId name description section category prepMinutes price oldPrice weight weightGram volume drinkType calories protein fat carbs ingredients optionGroups isHit isTrending isDiscounted tint icon images imageUrl isAvailable')
       .lean();
 
     // Mijozga yetkazish narxi ko'rsatiladi: baza + ustama + xizmat haqi.

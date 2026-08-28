@@ -64,8 +64,25 @@ const dishSchema = new Schema(
     priceMode: { type: String, enum: ['sync', 'custom'], default: 'sync' },
     dineInPrice: { type: Number, default: null },
 
+    /*
+     * ICHIMLIK TURI — faqat category === 'salqin' bo'lganda.
+     *
+     * Nega alohida maydon, nega asosiy kategoriyaga qo'shilmadi:
+     * mijoz bosh sahifada "Ichimlik" ni tanlaydi va HAMMA
+     * ichimlikni ko'rishi kerak. Agar "Choy", "Sok", "Gazli"
+     * alohida asosiy kategoriya bo'lsa, bosh sahifa 20 ta
+     * kategoriyadan 30 taga chiqib ketardi va mijoz sokni
+     * qidirib topa olmasdi.
+     *
+     * Shuning uchun ichimlik ICHIDA guruhlash — menyuda
+     * sarlavha bo'lib chiqadi, bosh sahifada esa bittaligicha
+     * qoladi.
+     */
+    drinkType: { type: String, default: '' },
+
     // ===== QO'SHIMCHA MA'LUMOT (barchasi ixtiyoriy) =====
     // Hajm: "0.5 l", "1 l", "330 ml"
+    // Ichimlik uchun og'irlik o'rniga SHU ishlatiladi
     volume: { type: String, default: '' },
 
     // Og'irlik matn sifatida — "150 г" yoki "150/30/30/20 г"

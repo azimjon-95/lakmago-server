@@ -188,7 +188,7 @@ export async function getDineInMenu(restaurantId) {
   if (useStopList) filter.isAvailable = { $ne: false };
 
   const dishes = await Dish.find(filter)
-    .select('name description category section imageUrl images price oldPrice priceMode dineInPrice optionGroups weight volume calories prepMinutes isAvailable tint icon')
+    .select('name description category section imageUrl images price oldPrice priceMode dineInPrice optionGroups weight volume drinkType calories prepMinutes isAvailable tint icon')
     .sort({ section: 1, name: 1 })
     .lean();
 
