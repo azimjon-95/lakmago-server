@@ -32,7 +32,7 @@ export const courierRegistryController = {
     });
     const parsed = schema.safeParse(req.body);
     if (!parsed.success) {
-      return res.status(400).json({ error: 'Noto\u2018g\u2018ri ma\u2018lumot', details: parsed.error.flatten() });
+      return res.status(400).json({ error: 'Noto‘g‘ri ma‘lumot', details: parsed.error.flatten() });
     }
     const courier = await Courier.create(parsed.data);
     res.status(201).json(courier);
@@ -166,7 +166,7 @@ export const courierPortalController = {
   // POST /courier-portal/:token/deliver  { secret }
   deliver: asyncHandler(async (req, res) => {
     const result = await deliverShare(req.params.token, req.body.secret);
-    if (!result.ok) return res.status(409).json({ error: result.error || 'Ruxsat yo\u2018q' });
+    if (!result.ok) return res.status(409).json({ error: result.error || 'Ruxsat yo‘q' });
     res.json({ ok: true, alreadyDelivered: !!result.alreadyDelivered });
   }),
 };

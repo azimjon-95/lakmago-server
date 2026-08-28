@@ -58,14 +58,14 @@ export async function handleStartCommand(telegramId, startParam, from) {
       await tg('sendMessage', {
         chat_id: telegramId,
         text:
-          '👋 <b>LokmaGo\u2019ga xush kelibsiz!</b>\n\n' +
-          '🍽 Mazali taomlarni buyurtma qilishдан oldin asosiy kanalimizga obuna bo\u2018ling.\n\n' +
-          '1️⃣ Kanalga obuna bo\u2018ling\n' +
+          '👋 <b>LokmaGo’ga xush kelibsiz!</b>\n\n' +
+          '🍽 Mazali taomlarni buyurtma qilishдан oldin asosiy kanalimizga obuna bo‘ling.\n\n' +
+          '1️⃣ Kanalga obuna bo‘ling\n' +
           '2️⃣ «Tekshirish» tugmasini bosing',
         parse_mode: 'HTML',
         reply_markup: {
           inline_keyboard: [
-            [{ text: '📢 Kanalga obuna bo\u2018lish', url: channelUrl }],
+            [{ text: '📢 Kanalga obuna bo‘lish', url: channelUrl }],
             [{ text: '✅ Tekshirish', callback_data: 'check_sub' }],
           ],
         },
@@ -82,7 +82,7 @@ export async function handleStartCommand(telegramId, startParam, from) {
 export async function sendWebAppEntry(telegramId, user) {
   const name = user?.firstName ? `, ${user.firstName}` : '';
   const bonusLine = (user?.bonusBalance > 0)
-    ? `\n💰 Bonus hisobingiz: <b>${user.bonusBalance.toLocaleString('ru-RU')} so\u2018m</b>`
+    ? `\n💰 Bonus hisobingiz: <b>${user.bonusBalance.toLocaleString('ru-RU')} so‘m</b>`
     : '';
 
   const text =
@@ -97,7 +97,7 @@ export async function sendWebAppEntry(telegramId, user) {
       { text: '📅 Bronlarim', callback_data: 'menu_reservations' },
     ],
     [
-      { text: '💰 Bonus va do\u2018stlar', callback_data: 'menu_bonus' },
+      { text: '💰 Bonus va do‘stlar', callback_data: 'menu_bonus' },
       { text: '📍 Manzillarim', callback_data: 'menu_addresses' },
     ],
     [{ text: '☎️ Yordam', callback_data: 'menu_help' }],
@@ -156,7 +156,7 @@ export async function handleCheckSubscription(callbackQuery) {
     // Hali obuna emas — ogohlantirish (popup)
     await tg('answerCallbackQuery', {
       callback_query_id: callbackId,
-      text: '❌ Siz hali kanalga obuna bo\u2018lmadingiz. Obuna bo\u2018lib, qayta bosing.',
+      text: '❌ Siz hali kanalga obuna bo‘lmadingiz. Obuna bo‘lib, qayta bosing.',
       show_alert: true,
     });
     return;

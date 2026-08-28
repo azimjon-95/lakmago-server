@@ -23,7 +23,7 @@ let ready = false;
 export function initCache() {
   const url = process.env.REDIS_URL;
   if (!url) {
-    console.log('[cache] REDIS_URL berilmagan — kesh o\u2018chirilgan (dastur keshsiz ishlaydi)');
+    console.log('[cache] REDIS_URL berilmagan — kesh o‘chirilgan (dastur keshsiz ishlaydi)');
     return null;
   }
 

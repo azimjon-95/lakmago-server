@@ -22,7 +22,7 @@ export function errorHandler(err, req, res, _next) {
     const first = Object.values(err.errors || {})[0];
     console.error('[validation]', req.method, req.originalUrl, err.message);
     return res.status(400).json({
-      error: first?.message || 'Ma\u2018lumot noto\u2018g\u2018ri',
+      error: first?.message || 'Ma‘lumot noto‘g‘ri',
       code: 'VALIDATION',
       field: first?.path,
     });
@@ -32,7 +32,7 @@ export function errorHandler(err, req, res, _next) {
   if (err?.name === 'CastError') {
     console.error('[cast]', req.method, req.originalUrl, err.message);
     return res.status(400).json({
-      error: 'Ma\u2018lumot formati noto\u2018g\u2018ri',
+      error: 'Ma‘lumot formati noto‘g‘ri',
       code: 'CAST',
       field: err.path,
     });

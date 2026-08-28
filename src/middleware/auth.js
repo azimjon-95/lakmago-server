@@ -97,7 +97,7 @@ export function requirePage(pageKey) {
     if (req.role !== 'staff') return next();   // faqat staff uchun qo'shimcha tekshiruv
     const { canAccessPage } = await import('../config/permissions.js');
     if (!canAccessPage('staff', req.department, pageKey)) {
-      return res.status(403).json({ error: 'Bu bo\u2018limga ruxsatingiz yo\u2018q' });
+      return res.status(403).json({ error: 'Bu bo‘limga ruxsatingiz yo‘q' });
     }
     next();
   };
@@ -119,7 +119,7 @@ export const waiterAuth = async (req, res, next) => {
   try {
     const payload = jwt.verify(token, config.jwtSecret);
     if (payload.role !== 'waiter') {
-      return res.status(403).json({ error: 'Ruxsat yo\u2018q' });
+      return res.status(403).json({ error: 'Ruxsat yo‘q' });
     }
 
     const { Waiter } = await import('../models/Waiter.js');
@@ -133,7 +133,7 @@ export const waiterAuth = async (req, res, next) => {
     // Qurilma almashtirilgan bo'lsa eski token ishlamaydi
     if (waiter.deviceId && waiter.deviceId !== payload.deviceId) {
       return res.status(403).json({
-        error: 'Qurilma o\u2018zgargan. Qayta kiring.',
+        error: 'Qurilma o‘zgargan. Qayta kiring.',
         code: 'DEVICE_MISMATCH',
       });
     }
@@ -170,7 +170,7 @@ export const kioskAuth = async (req, res, next) => {
   try {
     const payload = jwt.verify(token, config.jwtSecret);
     if (payload.role !== 'kiosk') {
-      return res.status(403).json({ error: 'Ruxsat yo\u2018q' });
+      return res.status(403).json({ error: 'Ruxsat yo‘q' });
     }
 
     // Bazadan tekshiramiz — admin tokenni o'chirsa yoki muddatini
@@ -188,7 +188,7 @@ export const kioskAuth = async (req, res, next) => {
     const expired = new Date(kiosk.expiresAt).getTime() < Date.now();
     if (!kiosk.isActive || expired) {
       return res.status(403).json({
-        error: expired ? 'Link muddati tugagan' : 'Link o\u2018chirilgan',
+        error: expired ? 'Link muddati tugagan' : 'Link o‘chirilgan',
         code: expired ? 'EXPIRED' : 'DISABLED',
       });
     }
@@ -226,7 +226,7 @@ export function requireKioskSection(section) {
   return (req, res, next) => {
     if (!req.kioskSections?.includes(section)) {
       return res.status(403).json({
-        error: 'Bu bo\u2018lim ushbu kiosk uchun yopilgan',
+        error: 'Bu bo‘lim ushbu kiosk uchun yopilgan',
         code: 'SECTION_DENIED',
       });
     }
@@ -264,7 +264,7 @@ export const waiterOrRestaurantAuth = async (req, res, next) => {
     const payload = jwt.verify(token, config.jwtSecret);
 
     if (payload.role === 'restaurant') {
-      if (!payload.restaurantId) return res.status(403).json({ error: 'Ruxsat yo\u2018q' });
+      if (!payload.restaurantId) return res.status(403).json({ error: 'Ruxsat yo‘q' });
       req.role = 'restaurant';
       req.userId = payload.userId;
       req.restaurantId = String(payload.restaurantId);
@@ -279,7 +279,7 @@ export const waiterOrRestaurantAuth = async (req, res, next) => {
         return res.status(403).json({ error: 'Akkaunt faol emas' });
       }
       if (waiter.deviceId && waiter.deviceId !== payload.deviceId) {
-        return res.status(403).json({ error: 'Qurilma o\u2018zgargan. Qayta kiring.', code: 'DEVICE_MISMATCH' });
+        return res.status(403).json({ error: 'Qurilma o‘zgargan. Qayta kiring.', code: 'DEVICE_MISMATCH' });
       }
       req.role = 'waiter';
       req.waiterId = payload.waiterId;
@@ -287,7 +287,7 @@ export const waiterOrRestaurantAuth = async (req, res, next) => {
       return next();
     }
 
-    return res.status(403).json({ error: 'Ruxsat yo\u2018q' });
+    return res.status(403).json({ error: 'Ruxsat yo‘q' });
   } catch {
     return res.status(401).json({ error: 'Sessiya tugagan' });
   }

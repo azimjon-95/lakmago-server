@@ -86,21 +86,21 @@ export const cardPaymentController = {
         .select('isPaid status paymentLock').lean();
 
       if (!existing) return res.status(404).json({ error: 'Buyurtma topilmadi' });
-      if (existing.isPaid) return res.status(400).json({ error: 'Bu buyurtma allaqachon to\u2018langan' });
+      if (existing.isPaid) return res.status(400).json({ error: 'Bu buyurtma allaqachon to‘langan' });
       if (existing.paymentLock === 'paying') {
         return res.status(409).json({
-          error: 'To\u2018lov amalga oshirilmoqda, kuting',
+          error: 'To‘lov amalga oshirilmoqda, kuting',
           code: 'IN_PROGRESS',
         });
       }
       if (existing.paymentLock === 'unknown') {
         return res.status(409).json({
-          error: 'Oldingi to\u2018lov holati aniqlanmagan. Tekshirilmoqda \u2014 '
-            + 'pul ikki marta yechilmasligi uchun qayta urinish to\u2018xtatildi.',
+          error: 'Oldingi to‘lov holati aniqlanmagan. Tekshirilmoqda — '
+            + 'pul ikki marta yechilmasligi uchun qayta urinish to‘xtatildi.',
           code: 'UNKNOWN_PENDING',
         });
       }
-      return res.status(400).json({ error: 'Bu buyurtmani to\u2018lab bo\u2018lmaydi' });
+      return res.status(400).json({ error: 'Bu buyurtmani to‘lab bo‘lmaydi' });
     }
 
     // Har urinish OLDINDAN yoziladi — javob kelmasa ham iz qoladi
@@ -134,8 +134,8 @@ export const cardPaymentController = {
         await Order.findByIdAndUpdate(order._id, { paymentLock: 'unknown' });
 
         return res.status(502).json({
-          error: 'To\u2018lov holati noaniq. Pul yechilgan bo\u2018lishi mumkin — '
-            + 'buyurtmalar bo\u2018limini tekshiring yoki qo\u2018llab-quvvatlashga murojaat qiling.',
+          error: 'To‘lov holati noaniq. Pul yechilgan bo‘lishi mumkin — '
+            + 'buyurtmalar bo‘limini tekshiring yoki qo‘llab-quvvatlashga murojaat qiling.',
           code: 'UNKNOWN',
         });
       }
@@ -148,7 +148,7 @@ export const cardPaymentController = {
       await Order.findByIdAndUpdate(order._id, { paymentLock: null });
 
       return res.status(400).json({
-        error: err?.message || 'To\u2018lov amalga oshmadi',
+        error: err?.message || 'To‘lov amalga oshmadi',
         code: err?.code,
       });
     }

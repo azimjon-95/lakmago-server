@@ -51,7 +51,7 @@ export async function startDineInSubscription(restaurantId) {
       periodEnd: now,
       amount: activationFee,
       status: 'unpaid',
-      note: 'Ulanish to\u2018lovi',
+      note: 'Ulanish to‘lovi',
     });
   }
 

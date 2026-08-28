@@ -55,7 +55,7 @@ export const agreementController = {
   upsert: asyncHandler(async (req, res) => {
     const parsed = agreementSchema.safeParse(req.body);
     if (!parsed.success) {
-      return res.status(400).json({ error: 'Foizlar 0 dan 100 gacha bo\u2018lishi kerak' });
+      return res.status(400).json({ error: 'Foizlar 0 dan 100 gacha bo‘lishi kerak' });
     }
     const { restaurantId } = req.params;
 
@@ -102,7 +102,7 @@ export const agreementController = {
   setDeliveryMarkup: asyncHandler(async (req, res) => {
     const percent = Number(req.body?.deliveryMarkupPercent);
     if (!Number.isFinite(percent) || percent < 0 || percent > 100) {
-      return res.status(400).json({ error: 'Ustama 0 dan 100 gacha bo\u2018lishi kerak' });
+      return res.status(400).json({ error: 'Ustama 0 dan 100 gacha bo‘lishi kerak' });
     }
 
     const updated = await Restaurant.findByIdAndUpdate(

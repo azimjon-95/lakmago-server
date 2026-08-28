@@ -64,7 +64,7 @@ export class PaynetProvider extends PaymentProvider {
   async createCheckout(order) {
     throw new Error(
       'Paynet integratsiyasi tugallanmagan: rasmiy API hujjati kerak. '
-      + 'Hujjat kelgach services/providers/paynetProvider.js dagi TODO joylar to\u2018ldiriladi.',
+      + 'Hujjat kelgach services/providers/paynetProvider.js dagi TODO joylar to‘ldiriladi.',
     );
   }
 

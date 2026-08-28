@@ -131,13 +131,13 @@ export const menuTransferController = {
 
     const parsed = schema.safeParse(req.body);
     if (!parsed.success) {
-      return res.status(400).json({ error: 'Ma\u2018lumot noto\u2018g\u2018ri' });
+      return res.status(400).json({ error: 'Ma‘lumot noto‘g‘ri' });
     }
 
     const { toRestaurantId, mode } = parsed.data;
 
     if (String(toRestaurantId) === String(rid(req))) {
-      return res.status(400).json({ error: 'O\u2018ziga ko\u2018chirib bo\u2018lmaydi' });
+      return res.status(400).json({ error: 'O‘ziga ko‘chirib bo‘lmaydi' });
     }
 
     const target = await Restaurant.findById(toRestaurantId).select('name isActive isBlocked');
@@ -171,7 +171,7 @@ export const menuTransferController = {
     });
     if (pending) {
       return res.status(400).json({
-        error: 'Bu filialga yuborilgan so\u2018rov hali javobsiz',
+        error: 'Bu filialga yuborilgan so‘rov hali javobsiz',
       });
     }
 
@@ -219,7 +219,7 @@ export const menuTransferController = {
       $or: [{ fromRestaurantId: rid(req) }, { toRestaurantId: rid(req) }],
     }).lean();
 
-    if (!transfer) return res.status(404).json({ error: 'So\u2018rov topilmadi' });
+    if (!transfer) return res.status(404).json({ error: 'So‘rov topilmadi' });
 
     const dishes = await Dish.find({ _id: { $in: transfer.dishIds } })
       .select('name price category imageUrl volume')
@@ -232,7 +232,7 @@ export const menuTransferController = {
   respond: asyncHandler(async (req, res) => {
     const action = req.body.action;
     if (!['approve', 'reject'].includes(action)) {
-      return res.status(400).json({ error: 'Noto\u2018g\u2018ri amal' });
+      return res.status(400).json({ error: 'Noto‘g‘ri amal' });
     }
 
     // Faqat QABUL QILUVCHI javob bera oladi
@@ -241,9 +241,9 @@ export const menuTransferController = {
       toRestaurantId: rid(req),
     });
 
-    if (!transfer) return res.status(404).json({ error: 'So\u2018rov topilmadi' });
+    if (!transfer) return res.status(404).json({ error: 'So‘rov topilmadi' });
     if (transfer.status !== 'pending') {
-      return res.status(400).json({ error: 'So\u2018rovga allaqachon javob berilgan' });
+      return res.status(400).json({ error: 'So‘rovga allaqachon javob berilgan' });
     }
 
     if (action === 'reject') {
@@ -264,7 +264,7 @@ export const menuTransferController = {
     await transfer.save();
 
     // Javobni kutmasdan qaytaramiz, nusxalash fonda ketadi
-    res.json({ ...transfer.toObject(), message: 'Ko\u2018chirilmoqda...' });
+    res.json({ ...transfer.toObject(), message: 'Ko‘chirilmoqda...' });
 
     // Fon jarayoni
     (async () => {

@@ -51,18 +51,18 @@ export class ClickApiError extends Error {
  * xabar beriladi, lekin kod logda qoladi.
  */
 const MESSAGES = {
-  '-1': 'So\u2018rovda xatolik',
-  '-2': 'Noto\u2018g\u2018ri summa',
-  '-3': 'Bunday amal yo\u2018q',
-  '-4': 'Bu to\u2018lov allaqachon amalga oshirilgan',
+  '-1': 'So‘rovda xatolik',
+  '-2': 'Noto‘g‘ri summa',
+  '-3': 'Bunday amal yo‘q',
+  '-4': 'Bu to‘lov allaqachon amalga oshirilgan',
   '-5': 'Karta topilmadi',
   '-6': 'Tranzaksiya topilmadi',
-  '-7': 'Ma\u2018lumotni yangilab bo\u2018lmadi',
-  '-8': 'So\u2018rovda xatolik',
+  '-7': 'Ma‘lumotni yangilab bo‘lmadi',
+  '-8': 'So‘rovda xatolik',
   '-9': 'Tranzaksiya bekor qilingan',
-  '-16': 'Kartada mablag\u2018 yetarli emas',
-  '-31': 'SMS kod noto\u2018g\u2018ri yoki muddati tugagan',
-  '-32': 'Karta bloklangan yoki muddati o\u2018tgan',
+  '-16': 'Kartada mablag‘ yetarli emas',
+  '-31': 'SMS kod noto‘g‘ri yoki muddati tugagan',
+  '-32': 'Karta bloklangan yoki muddati o‘tgan',
 };
 
 async function call(path, { method = 'POST', body, auth = true } = {}) {
@@ -89,8 +89,8 @@ async function call(path, { method = 'POST', body, auth = true } = {}) {
   } catch (e) {
     throw new ClickApiError(
       e.name === 'AbortError'
-        ? 'Click javob bermadi, qayta urinib ko\u2018ring'
-        : 'Click bilan aloqa yo\u2018q',
+        ? 'Click javob bermadi, qayta urinib ko‘ring'
+        : 'Click bilan aloqa yo‘q',
       'NETWORK',
     );
   } finally {
@@ -111,7 +111,7 @@ async function call(path, { method = 'POST', body, auth = true } = {}) {
    */
   const code = Number(data.error_code ?? 0);
   if (code !== 0) {
-    const msg = MESSAGES[String(code)] || data.error_note || 'To\u2018lov amalga oshmadi';
+    const msg = MESSAGES[String(code)] || data.error_note || 'To‘lov amalga oshmadi';
     console.error('[click:api]', path, code, data.error_note);
     throw new ClickApiError(msg, code);
   }

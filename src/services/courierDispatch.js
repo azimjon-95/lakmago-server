@@ -191,7 +191,7 @@ export async function deliverShare(token, secret) {
     { status: 'delivered', deliveredAt: new Date() },
     { new: true },
   );
-  if (!updated) return { ok: false, error: 'Holat allaqachon o\u2018zgargan' };
+  if (!updated) return { ok: false, error: 'Holat allaqachon o‘zgargan' };
 
   await Order.findByIdAndUpdate(assignment.orderId, { status: 'delivered', deliveredAt: new Date() });
 
@@ -253,7 +253,7 @@ function buildShareText(snap = {}) {
   if (snap.deliveryFee) lines.push(`\ud83d\udcb0 Yetkazish haqi: ${money(snap.deliveryFee)} so'm`);
 
   if (snap.isPaid) {
-    lines.push(`\u2705 To'langan \u2014 mijozdan pul olinmaydi`);
+    lines.push(`✅ To'langan — mijozdan pul olinmaydi`);
   } else if (snap.collectAmount) {
     lines.push(`\ud83d\udcb5 Mijozdan olinadi: ${money(snap.collectAmount)} so'm (naqd)`);
   }

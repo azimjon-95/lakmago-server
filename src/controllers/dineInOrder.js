@@ -274,7 +274,7 @@ export const dineInOrderController = {
   fireCourse: asyncHandler(async (req, res) => {
     const course = Number(req.body?.course);
     if (!Number.isInteger(course) || course < 1 || course > 9) {
-      return res.status(400).json({ error: 'Kurs raqami noto\u2018g\u2018ri' });
+      return res.status(400).json({ error: 'Kurs raqami noto‘g‘ri' });
     }
 
     const order = await Order.findOne({
@@ -291,7 +291,7 @@ export const dineInOrderController = {
     // Bunday kurs umuman bormi
     const exists = order.items.some((i) => (i.course || 1) === course);
     if (!exists) {
-      return res.status(400).json({ error: `${course}-kursda taom yo\u2018q` });
+      return res.status(400).json({ error: `${course}-kursda taom yo‘q` });
     }
 
     // Ikki marta otishning zarari yo'q, lekin oshxonaga
@@ -329,7 +329,7 @@ export const dineInOrderController = {
     const status = req.body.status;
 
     if (!allowed.includes(status)) {
-      return res.status(400).json({ error: 'Noto\u2018g\u2018ri holat' });
+      return res.status(400).json({ error: 'Noto‘g‘ri holat' });
     }
 
     // Buyurtma O'CHIRILMAYDI — faqat holat o'zgaradi.

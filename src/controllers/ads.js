@@ -53,7 +53,7 @@ export const panelAdsController = {
   create: asyncHandler(async (req, res) => {
     const parsed = createSchema.safeParse(req.body);
     if (!parsed.success) {
-      return res.status(400).json({ error: 'Noto\u2018g\u2018ri ma\u2018lumot', details: parsed.error.flatten() });
+      return res.status(400).json({ error: 'Noto‘g‘ri ma‘lumot', details: parsed.error.flatten() });
     }
     const { targetType, dishId, imageUrl, days, customTitle, customDescription } = parsed.data;
 
@@ -97,7 +97,7 @@ export const panelAdsController = {
     const ad = await Ad.findOne({ _id: req.params.id, restaurantId: req.restaurantId });
     if (!ad) return res.status(404).json({ error: 'Topilmadi' });
     if (ad.status !== 'pending') {
-      return res.status(400).json({ error: 'Faqat kutilayotgan so\u2018rovni bekor qilish mumkin' });
+      return res.status(400).json({ error: 'Faqat kutilayotgan so‘rovni bekor qilish mumkin' });
     }
     ad.status = 'cancelled';
     await ad.save();
@@ -127,7 +127,7 @@ export const adminAdsController = {
     const ad = await Ad.findById(req.params.id);
     if (!ad) return res.status(404).json({ error: 'Topilmadi' });
     if (ad.status !== 'pending') {
-      return res.status(400).json({ error: 'Bu so\u2018rov allaqachon ko\u2018rib chiqilgan' });
+      return res.status(400).json({ error: 'Bu so‘rov allaqachon ko‘rib chiqilgan' });
     }
 
     const now = new Date();
@@ -150,7 +150,7 @@ export const adminAdsController = {
     const ad = await Ad.findById(req.params.id);
     if (!ad) return res.status(404).json({ error: 'Topilmadi' });
     if (ad.status !== 'pending') {
-      return res.status(400).json({ error: 'Bu so\u2018rov allaqachon ko\u2018rib chiqilgan' });
+      return res.status(400).json({ error: 'Bu so‘rov allaqachon ko‘rib chiqilgan' });
     }
 
     ad.status = 'rejected';

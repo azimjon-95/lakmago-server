@@ -78,7 +78,7 @@ export async function recordPayment(order, provider, transactionId = null) {
     userId: order.userId,
     provider,
     transactionId,
-    meta: { orderTotal: order.total, note: 'To\u2018lov qabul qilindi' },
+    meta: { orderTotal: order.total, note: 'To‘lov qabul qilindi' },
   });
 
   getIO()?.to('admin').emit('billing:update', { orderId: String(order._id) });
@@ -139,7 +139,7 @@ export async function settleOrder(orderId) {
         amount: -commission,
         orderId: order._id,
         restaurantId: restaurant._id,
-        meta: { ...meta, note: 'Naqd to\u2018lov — komissiya qarzi' },
+        meta: { ...meta, note: 'Naqd to‘lov — komissiya qarzi' },
       });
       restaurant.balance = (restaurant.balance || 0) - commission;
     } else {
@@ -149,7 +149,7 @@ export async function settleOrder(orderId) {
         amount: 0,
         orderId: order._id,
         restaurantId: restaurant._id,
-        meta: { ...meta, note: 'Naqd to\u2018lov — komissiyasiz' },
+        meta: { ...meta, note: 'Naqd to‘lov — komissiyasiz' },
       });
     }
   } else {
@@ -232,10 +232,10 @@ export async function recordRefund(order, provider, transactionId = null) {
 export async function recordPayout(restaurantId, amount, adminId, note = '') {
   const restaurant = await Restaurant.findById(restaurantId);
   if (!restaurant) throw new Error('Restoran topilmadi');
-  if (amount <= 0) throw new Error('Summa musbat bo\u2018lishi kerak');
+  if (amount <= 0) throw new Error('Summa musbat bo‘lishi kerak');
   if (amount > restaurant.balance) {
     throw new Error(
-      `Balansda yetarli emas. Hozir: ${restaurant.balance} so\u2018m`,
+      `Balansda yetarli emas. Hozir: ${restaurant.balance} so‘m`,
     );
   }
 
@@ -253,7 +253,7 @@ export async function recordPayout(restaurantId, amount, adminId, note = '') {
       restaurantId,
       createdBy: adminId,
       meta: {
-        note: note || 'Bank hisobiga o\u2018tkazildi',
+        note: note || 'Bank hisobiga o‘tkazildi',
         ...(deducted > 0 ? { promoDebtDeducted: deducted } : {}),
       },
     });

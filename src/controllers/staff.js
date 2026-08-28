@@ -37,7 +37,7 @@ export const staffController = {
   create: asyncHandler(async (req, res) => {
     const parsed = createSchema.safeParse(req.body);
     if (!parsed.success) {
-      return res.status(400).json({ error: 'Noto\u2018g\u2018ri ma\u2018lumot', details: parsed.error.flatten() });
+      return res.status(400).json({ error: 'Noto‘g‘ri ma‘lumot', details: parsed.error.flatten() });
     }
     const { login, password, ...rest } = parsed.data;
     const normalizedLogin = login.toLowerCase().trim();
@@ -66,7 +66,7 @@ export const staffController = {
   update: asyncHandler(async (req, res) => {
     const parsed = updateSchema.safeParse(req.body);
     if (!parsed.success) {
-      return res.status(400).json({ error: 'Noto\u2018g\u2018ri ma\u2018lumot' });
+      return res.status(400).json({ error: 'Noto‘g‘ri ma‘lumot' });
     }
     const { password, ...rest } = parsed.data;
     const update = { ...rest };

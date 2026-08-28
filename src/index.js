@@ -256,7 +256,7 @@ async function main() {
       res.json({
         bot: { username: me.username, id: me.id },
         webhook: {
-          url: info.url || '(o\u2018rnatilmagan)',
+          url: info.url || '(o‘rnatilmagan)',
           ok: Boolean(info.url),
           pendingUpdates: info.pending_update_count,
           lastError: info.last_error_message || null,
@@ -276,7 +276,7 @@ async function main() {
           pinned: g.isPinned,
         })),
         muammo: !info.url
-          ? 'Webhook o\u2018rnatilmagan — bot hech narsa qabul qilmaydi'
+          ? 'Webhook o‘rnatilmagan — bot hech narsa qabul qilmaydi'
           : missing.length
             ? `Webhook'da yetishmayapti: ${missing.join(', ')}`
             : info.last_error_message
@@ -291,7 +291,7 @@ async function main() {
   app.get('/diag', (req, res) => {
     res.json({
       status: 'ok',
-      origin: req.headers.origin || '(yo\u2018q)',
+      origin: req.headers.origin || '(yo‘q)',
       originAllowed: isAllowedOrigin(req.headers.origin),
       protocol: req.protocol,              // https bo'lishi kerak (Vercel uchun)
       behindProxy: Boolean(req.headers['x-forwarded-proto']), // Nginx sozlanganmi

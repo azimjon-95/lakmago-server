@@ -66,7 +66,7 @@ export const settlementController = {
       if (!byRest.has(rid)) {
         byRest.set(rid, {
           restaurantId: rid,
-          restaurantName: restMap.get(rid)?.name || 'Noma\u2018lum',
+          restaurantName: restMap.get(rid)?.name || 'Noma‘lum',
           click: { count: 0, total: 0, fee: 0 },
           paynet: { count: 0, total: 0, fee: 0 },
           payme: { count: 0, total: 0, fee: 0 },
@@ -146,7 +146,7 @@ export const settlementController = {
     });
     const parsed = schema.safeParse(req.body);
     if (!parsed.success) {
-      return res.status(400).json({ error: 'Noto\u2018g\u2018ri ma\u2018lumot' });
+      return res.status(400).json({ error: 'Noto‘g‘ri ma‘lumot' });
     }
     const { restaurantId, paymentIds, amount, bankReference, note } = parsed.data;
 
@@ -155,7 +155,7 @@ export const settlementController = {
       _id: { $in: paymentIds }, restaurantId, status: 'SUCCESS',
     }).select('_id').lean();
     if (found.length !== paymentIds.length) {
-      return res.status(400).json({ error: 'Ba\u2018zi to\u2018lovlar topilmadi yoki noto\u2018g\u2018ri restoranga tegishli' });
+      return res.status(400).json({ error: 'Ba‘zi to‘lovlar topilmadi yoki noto‘g‘ri restoranga tegishli' });
     }
 
     // Idempotentlik — bir xil to'lovlar to'plami ikki marta

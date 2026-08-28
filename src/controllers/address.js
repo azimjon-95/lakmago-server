@@ -31,7 +31,7 @@ export const addressController = {
   create: asyncHandler(async (req, res) => {
     const parsed = addressSchema.safeParse(req.body);
     if (!parsed.success) {
-      return res.status(400).json({ error: 'Manzil ma\u2018lumoti noto\u2018g\u2018ri', details: parsed.error.issues });
+      return res.status(400).json({ error: 'Manzil ma‘lumoti noto‘g‘ri', details: parsed.error.issues });
     }
     const user = await User.findById(req.userId);
     if (!user) return res.status(404).json({ error: 'Foydalanuvchi topilmadi' });
@@ -51,7 +51,7 @@ export const addressController = {
   // PATCH /api/addresses/:id — tahrirlash
   update: asyncHandler(async (req, res) => {
     const parsed = addressSchema.partial().safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ error: 'Ma\u2018lumot noto\u2018g\u2018ri' });
+    if (!parsed.success) return res.status(400).json({ error: 'Ma‘lumot noto‘g‘ri' });
 
     const user = await User.findById(req.userId);
     if (!user) return res.status(404).json({ error: 'Foydalanuvchi topilmadi' });

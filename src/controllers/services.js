@@ -121,7 +121,7 @@ export const reservationController = {
     });
     if (!reservation) return res.status(404).json({ error: 'Bron topilmadi' });
     if (['completed', 'cancelled', 'rejected'].includes(reservation.status)) {
-      return res.status(400).json({ error: 'Bu bronni bekor qilib bo\u2018lmaydi' });
+      return res.status(400).json({ error: 'Bu bronni bekor qilib bo‘lmaydi' });
     }
     reservation.status = 'cancelled';
     await reservation.save();
@@ -140,7 +140,7 @@ export const reservationController = {
     const { status, reason } = req.body;
     const ALLOWED = ['confirmed', 'rejected', 'cancelled', 'completed'];
     if (!ALLOWED.includes(status)) {
-      return res.status(400).json({ error: 'Holat noto\u2018g\u2018ri' });
+      return res.status(400).json({ error: 'Holat noto‘g‘ri' });
     }
 
     const update = { status };

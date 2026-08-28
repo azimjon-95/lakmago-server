@@ -176,7 +176,7 @@ export async function quoteDelivery(restaurant, customer) {
       available: true,
       price: Number(restaurant?.deliveryFee) || 0,
       distanceKm: null,
-      reason: 'Manzil koordinatasi yo\u2018q',
+      reason: 'Manzil koordinatasi yo‘q',
     };
   }
 

@@ -31,7 +31,7 @@ export class PaymeProvider extends PaymentProvider {
 
   async createCheckout(order) {
     if (!this.acceptsNewPayments()) {
-      throw new Error('Payme o\u2018chirilgan — Paynet ishlating');
+      throw new Error('Payme o‘chirilgan — Paynet ishlating');
     }
     return { url: buildPaymeCheckoutUrl(order._id, order.total) };
   }

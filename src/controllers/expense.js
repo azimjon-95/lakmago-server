@@ -5,10 +5,10 @@ import { Expense } from '../models/Expense.js';
 const CATEGORY_LABELS = {
   server: 'Server xarajati',
   tax: 'Soliq',
-  income_tax: 'Daromad solig\u2018i',
+  income_tax: 'Daromad solig‘i',
   domain: 'Domen',
   bank_fee: 'Bank komissiyasi',
-  fuel: 'Yo\u2018lkira',
+  fuel: 'Yo‘lkira',
   salary: 'Ish haqi',
   marketing: 'Reklama',
   other: 'Boshqa',
@@ -62,7 +62,7 @@ export const expenseController = {
   create: asyncHandler(async (req, res) => {
     const parsed = expenseSchema.safeParse(req.body);
     if (!parsed.success) {
-      return res.status(400).json({ error: 'Noto\u2018g\u2018ri ma\u2018lumot', details: parsed.error.flatten() });
+      return res.status(400).json({ error: 'Noto‘g‘ri ma‘lumot', details: parsed.error.flatten() });
     }
     const expense = await Expense.create({
       ...parsed.data,

@@ -51,7 +51,7 @@ export function calcServiceFee(subtotal, config, orderSource) {
  */
 export async function calcDineInOrder(items, restaurantId, orderSource) {
   if (!Array.isArray(items) || items.length === 0) {
-    return { ok: false, error: 'Savat bo\u2018sh' };
+    return { ok: false, error: 'Savat bo‘sh' };
   }
 
   const dishIds = items.map((i) => i.dishId).filter(Boolean);

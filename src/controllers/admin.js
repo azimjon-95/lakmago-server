@@ -341,7 +341,7 @@ export const adminController = {
       referralEnabled: z.boolean().optional(),
     });
     const parsed = schema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ error: 'Noto\u2018g\u2018ri qiymat' });
+    if (!parsed.success) return res.status(400).json({ error: 'Noto‘g‘ri qiymat' });
 
     const s = await getSettings();
     if ('commissionPercent' in parsed.data) s.commissionPercent = parsed.data.commissionPercent;
@@ -484,7 +484,7 @@ export const adminController = {
       if (!chat.ok) {
         return res.status(400).json({
           error: chat.description?.includes('not found')
-            ? 'Guruh topilmadi. Bot guruhga qo\u2018shilganmi?'
+            ? 'Guruh topilmadi. Bot guruhga qo‘shilganmi?'
             : chat.description,
         });
       }
@@ -535,9 +535,9 @@ export const adminController = {
       pin: z.boolean().optional().default(false),
     });
     const parsed = schema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ error: 'Ma\u2018lumot noto\u2018g\u2018ri' });
+    if (!parsed.success) return res.status(400).json({ error: 'Ma‘lumot noto‘g‘ri' });
     if (!parsed.data.text && !parsed.data.imageUrl) {
-      return res.status(400).json({ error: 'Matn yoki rasm bo\u2018lishi shart' });
+      return res.status(400).json({ error: 'Matn yoki rasm bo‘lishi shart' });
     }
 
     const { sendCustomBroadcast } = await import('../services/telegramGroup.js');
@@ -559,9 +559,9 @@ export const adminController = {
       pin: z.boolean().optional().default(false),
     });
     const parsed = schema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ error: 'Ma\u2018lumot noto\u2018g\u2018ri' });
+    if (!parsed.success) return res.status(400).json({ error: 'Ma‘lumot noto‘g‘ri' });
     if (!parsed.data.text && !parsed.data.imageUrl) {
-      return res.status(400).json({ error: 'Matn yoki rasm bo\u2018lishi shart' });
+      return res.status(400).json({ error: 'Matn yoki rasm bo‘lishi shart' });
     }
 
     const { sendCustomBroadcast } = await import('../services/telegramGroup.js');

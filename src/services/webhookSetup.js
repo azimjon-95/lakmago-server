@@ -40,7 +40,7 @@ export async function ensureWebhook() {
 
     // Hammasi joyida — tegmaymiz
     if (w.url && missing.length === 0) {
-      console.log('✓ Telegram webhook to\u2018g\u2018ri sozlangan');
+      console.log('✓ Telegram webhook to‘g‘ri sozlangan');
       return;
     }
 
@@ -50,9 +50,9 @@ export async function ensureWebhook() {
 
     if (!url) {
       console.warn(
-        '⚠ Telegram webhook o\u2018rnatilmagan va WEBHOOK_BASE .env da yo\u2018q.\n' +
+        '⚠ Telegram webhook o‘rnatilmagan va WEBHOOK_BASE .env da yo‘q.\n' +
         '  Tugmalar va guruh aniqlash ISHLAMAYDI.\n' +
-        '  Yechim: .env ga qo\u2018shing → WEBHOOK_BASE=https://api.domeningiz.uz\n' +
+        '  Yechim: .env ga qo‘shing → WEBHOOK_BASE=https://api.domeningiz.uz\n' +
         '  yoki bir marta: npm run webhook https://api.domeningiz.uz',
       );
       return;
@@ -69,9 +69,9 @@ export async function ensureWebhook() {
     });
 
     if (set.ok) {
-      console.log(`✓ Telegram webhook avtomatik to\u2018g\u2018rilandi: ${url}`);
+      console.log(`✓ Telegram webhook avtomatik to‘g‘rilandi: ${url}`);
     } else {
-      console.error(`✗ Webhook o\u2018rnatilmadi: ${set.description}`);
+      console.error(`✗ Webhook o‘rnatilmadi: ${set.description}`);
     }
   } catch (e) {
     console.error('✗ Webhook tekshiruvi xatosi:', e.message);

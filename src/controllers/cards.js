@@ -34,12 +34,12 @@ export const cardController = {
   create: asyncHandler(async (req, res) => {
     const parsed = cardSchema.safeParse(req.body);
     if (!parsed.success) {
-      return res.status(400).json({ error: 'Karta raqami noto\u2018g\u2018ri' });
+      return res.status(400).json({ error: 'Karta raqami noto‘g‘ri' });
     }
 
     const digits = parsed.data.number.replace(/\D/g, '');
     if (digits.length < 12) {
-      return res.status(400).json({ error: 'Karta raqami to\u2018liq emas' });
+      return res.status(400).json({ error: 'Karta raqami to‘liq emas' });
     }
 
     const user = await User.findById(req.userId);
@@ -48,7 +48,7 @@ export const cardController = {
     const last4 = digits.slice(-4);
     // Bir xil karta ikki marta qo'shilmasin
     if (user.cards.some((c) => c.last4 === last4)) {
-      return res.status(400).json({ error: 'Bu karta allaqachon qo\u2018shilgan' });
+      return res.status(400).json({ error: 'Bu karta allaqachon qo‘shilgan' });
     }
 
     // Faqat oxirgi 4 raqam saqlanadi — to'liq raqam hech qayerga yozilmaydi
@@ -129,13 +129,13 @@ export const cardController = {
     }).safeParse(req.body);
 
     if (!parsed.success) {
-      return res.status(400).json({ error: 'Karta ma\u2018lumotlari to\u2018liq emas' });
+      return res.status(400).json({ error: 'Karta ma‘lumotlari to‘liq emas' });
     }
 
     const digits = parsed.data.number.replace(/\D/g, '');
     const expiry = parsed.data.expiry.replace(/\D/g, '');
     if (digits.length < 12 || expiry.length !== 4) {
-      return res.status(400).json({ error: 'Karta raqami yoki muddati noto\u2018g\u2018ri' });
+      return res.status(400).json({ error: 'Karta raqami yoki muddati noto‘g‘ri' });
     }
 
     const user = await User.findById(req.userId).select('+cards.clickToken');
@@ -144,7 +144,7 @@ export const cardController = {
     const last4 = digits.slice(-4);
     const existing = user.cards.find((c) => c.last4 === last4 && c.verified);
     if (existing) {
-      return res.status(400).json({ error: 'Bu karta allaqachon qo\u2018shilgan' });
+      return res.status(400).json({ error: 'Bu karta allaqachon qo‘shilgan' });
     }
 
     let result;
@@ -153,7 +153,7 @@ export const cardController = {
     } catch (e) {
       const err = e instanceof ClickApiError ? e : null;
       return res.status(400).json({
-        error: err?.message || 'Kartani bog\u2018lab bo\u2018lmadi',
+        error: err?.message || 'Kartani bog‘lab bo‘lmadi',
         code: err?.code,
       });
     }
@@ -192,7 +192,7 @@ export const cardController = {
     }).safeParse(req.body);
 
     if (!parsed.success) {
-      return res.status(400).json({ error: 'Kod noto\u2018g\u2018ri' });
+      return res.status(400).json({ error: 'Kod noto‘g‘ri' });
     }
 
     const user = await User.findById(req.userId).select('+cards.clickToken');
@@ -207,7 +207,7 @@ export const cardController = {
     } catch (e) {
       const err = e instanceof ClickApiError ? e : null;
       return res.status(400).json({
-        error: err?.message || 'Kodni tasdiqlab bo\u2018lmadi',
+        error: err?.message || 'Kodni tasdiqlab bo‘lmadi',
         code: err?.code,
       });
     }

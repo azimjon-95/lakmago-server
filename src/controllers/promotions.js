@@ -36,7 +36,7 @@ function validatePromo(data) {
     return 'Foiz 100 dan oshmasligi kerak';
   }
   if (new Date(data.startsAt) >= new Date(data.endsAt)) {
-    return 'Tugash sanasi boshlanishdan keyin bo\u2018lishi kerak';
+    return 'Tugash sanasi boshlanishdan keyin bo‘lishi kerak';
   }
   if (data.scope === 'category' && !data.categories?.length) {
     return 'Kategoriya tanlang';
@@ -68,7 +68,7 @@ export const promotionController = {
     const parsed = promoSchema.safeParse(req.body);
     if (!parsed.success) {
       return res.status(400).json({
-        error: parsed.error.issues[0]?.message || 'Ma\u2018lumot noto\u2018g\u2018ri',
+        error: parsed.error.issues[0]?.message || 'Ma‘lumot noto‘g‘ri',
       });
     }
 
@@ -92,7 +92,7 @@ export const promotionController = {
   updatePromotion: asyncHandler(async (req, res) => {
     const parsed = promoSchema.partial().safeParse(req.body);
     if (!parsed.success) {
-      return res.status(400).json({ error: 'Ma\u2018lumot noto\u2018g\u2018ri' });
+      return res.status(400).json({ error: 'Ma‘lumot noto‘g‘ri' });
     }
 
     if (parsed.data.startsAt && parsed.data.endsAt) {
@@ -144,7 +144,7 @@ export const promotionController = {
 
     const parsed = schema.safeParse(req.body);
     if (!parsed.success) {
-      return res.status(400).json({ error: 'Ma\u2018lumot noto\u2018g\u2018ri' });
+      return res.status(400).json({ error: 'Ma‘lumot noto‘g‘ri' });
     }
     if (parsed.data.bonusType === 'percent' && parsed.data.bonusValue > 50) {
       return res.status(400).json({ error: 'Bonus 50% dan oshmasligi kerak' });
@@ -212,11 +212,11 @@ export const promotionController = {
     const parsed = schema.safeParse(req.body);
     if (!parsed.success) {
       return res.status(400).json({
-        error: parsed.error.issues[0]?.message || 'Ma\u2018lumot noto\u2018g\u2018ri',
+        error: parsed.error.issues[0]?.message || 'Ma‘lumot noto‘g‘ri',
       });
     }
     if (new Date(parsed.data.startsAt) >= new Date(parsed.data.endsAt)) {
-      return res.status(400).json({ error: 'Sanalar noto\u2018g\u2018ri' });
+      return res.status(400).json({ error: 'Sanalar noto‘g‘ri' });
     }
     if (parsed.data.targetType === 'dish' && !parsed.data.dishId) {
       return res.status(400).json({ error: 'Taom tanlang' });

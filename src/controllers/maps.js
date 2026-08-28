@@ -22,7 +22,7 @@ export const mapsController = {
   // GET /api/maps/geocode?q=... — manzil bo'yicha qidirish
   geocode: asyncHandler(async (req, res) => {
     const q = String(req.query.q || '').trim();
-    if (!q) return res.status(400).json({ error: 'So\u2018rov bo\u2018sh' });
+    if (!q) return res.status(400).json({ error: 'So‘rov bo‘sh' });
 
     const key = config.yandex.geocoderKey;
     if (!key) return res.status(503).json({ error: 'Xarita sozlanmagan' });
@@ -71,7 +71,7 @@ export const mapsController = {
     const lng = Number(req.query.lng);
 
     if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
-      return res.status(400).json({ error: 'Koordinata noto\u2018g\u2018ri' });
+      return res.status(400).json({ error: 'Koordinata noto‘g‘ri' });
     }
 
     const restaurant = await Restaurant.findById(req.query.restaurantId)
@@ -100,7 +100,7 @@ export const mapsController = {
     const lat = Number(req.query.lat);
     const lng = Number(req.query.lng);
     if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
-      return res.status(400).json({ error: 'Koordinata noto\u2018g\u2018ri' });
+      return res.status(400).json({ error: 'Koordinata noto‘g‘ri' });
     }
 
     const key = config.yandex.geocoderKey;

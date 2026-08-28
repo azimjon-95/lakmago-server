@@ -19,7 +19,7 @@ let ready = false;
 export function initPush() {
   const { vapidPublicKey, vapidPrivateKey, vapidSubject } = config;
   if (!vapidPublicKey || !vapidPrivateKey) {
-    console.warn('[push] VAPID kalitlari yo\u2018q — push o\u2018chirilgan');
+    console.warn('[push] VAPID kalitlari yo‘q — push o‘chirilgan');
     return false;
   }
   webpush.setVapidDetails(vapidSubject || 'mailto:support@lokma.uz', vapidPublicKey, vapidPrivateKey);
@@ -39,7 +39,7 @@ const PUSHABLE = new Set(['order', 'hall_order', 'reservation', 'waiter_call', '
  * qurilmalariga boradi. Boshqa restoran hech qachon ko'rmaydi.
  */
 export async function sendPush(notification) {
-  if (!ready) return { sent: 0, skipped: 'push o\u2018chirilgan' };
+  if (!ready) return { sent: 0, skipped: 'push o‘chirilgan' };
   if (!PUSHABLE.has(notification.type)) return { sent: 0, skipped: 'push kerak emas' };
 
   const filter = notification.audience === 'admin'

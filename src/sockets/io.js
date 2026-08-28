@@ -41,7 +41,7 @@ async function setupRedisAdapter() {
     const pubClient = base.duplicate();
     const subClient = base.duplicate();
     io.adapter(createAdapter(pubClient, subClient));
-    console.log('[socket] Redis adapter yoqildi (ko\u2018p nusxa rejimi)');
+    console.log('[socket] Redis adapter yoqildi (ko‘p nusxa rejimi)');
   } catch (e) {
     console.warn('[socket] Redis adapter ulanmadi, bitta nusxa rejimi:', e.message);
   }

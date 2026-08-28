@@ -79,11 +79,11 @@ export async function rewardReferralIfSubscribed(user) {
 
     // Xabar beramiz
     if (referrer.telegramId) {
-      const name = user.firstName || 'Do\u2018stingiz';
+      const name = user.firstName || 'Do‘stingiz';
       notifyUser(
         referrer.telegramId,
-        `🎉 <b>${name}</b> sizning taklifingiz bilan qo\u2018shildi!\n\n` +
-        `💰 +${config.referralReward.toLocaleString('ru-RU')} so\u2018m bonus hisobingizga qo\u2018shildi.\n` +
+        `🎉 <b>${name}</b> sizning taklifingiz bilan qo‘shildi!\n\n` +
+        `💰 +${config.referralReward.toLocaleString('ru-RU')} so‘m bonus hisobingizga qo‘shildi.\n` +
         `👥 Jami takliflaringiz: ${referrer.referralCount}`,
       );
     }

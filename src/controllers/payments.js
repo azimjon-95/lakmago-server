@@ -41,11 +41,11 @@ export const paymentController = {
       userId: req.userId,
     }).lean();
     if (!order) return res.status(404).json({ error: 'Buyurtma topilmadi' });
-    if (order.isPaid) return res.status(400).json({ error: 'Allaqachon to\u2018langan' });
+    if (order.isPaid) return res.status(400).json({ error: 'Allaqachon to‘langan' });
 
     const name = String(req.query.provider || '').toLowerCase();
     const provider = getProvider(name);
-    if (!provider) return res.status(400).json({ error: 'Noma\u2018lum to\u2018lov tizimi' });
+    if (!provider) return res.status(400).json({ error: 'Noma‘lum to‘lov tizimi' });
     if (!provider.isConfigured()) {
       return res.status(503).json({ error: `${provider.name} hali ulanmagan` });
     }

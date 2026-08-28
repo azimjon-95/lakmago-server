@@ -58,7 +58,7 @@ export const supportController = {
   // POST /api/support/message — mijoz xabar yuboradi
   sendMessage: asyncHandler(async (req, res) => {
     const parsed = messageSchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ error: 'Xabar bo\u2018sh' });
+    if (!parsed.success) return res.status(400).json({ error: 'Xabar bo‘sh' });
 
     const chat = await ensureChat(req.userId);
     const text = parsed.data.text.trim();
@@ -78,7 +78,7 @@ export const supportController = {
       notificationId: `support:${chat._id}:${chat.messages.length}`,
       audience: 'admin',
       type: 'support',
-      title: 'Yordam so\u2018rovi',
+      title: 'Yordam so‘rovi',
       body: `${chat.firstName || 'Mijoz'}: ${text.slice(0, 60)}`,
       refType: 'support',
       refId: chat._id,
@@ -142,7 +142,7 @@ export const supportController = {
   // POST /api/admin/support/:id/reply — admin javob beradi
   reply: asyncHandler(async (req, res) => {
     const parsed = messageSchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ error: 'Xabar bo\u2018sh' });
+    if (!parsed.success) return res.status(400).json({ error: 'Xabar bo‘sh' });
 
     const chat = await SupportChat.findById(req.params.id);
     if (!chat) return res.status(404).json({ error: 'Suhbat topilmadi' });

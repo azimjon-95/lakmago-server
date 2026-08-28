@@ -27,7 +27,7 @@ const ORDER_STATUS = {
   accepted: '✅ Qabul qilindi',
   preparing: '👨‍🍳 Tayyorlanmoqda',
   ready: '📦 Tayyor',
-  delivering: '🚗 Yo\u2018lda',
+  delivering: '🚗 Yo‘lda',
   delivered: '✅ Yetkazildi',
   cancelled: '❌ Bekor qilindi',
 };
@@ -39,7 +39,7 @@ const RESV_STATUS = {
   cancelled: '❌ Bekor qilindi',
   coming: '✅ Boramiz',
   not_coming: '❌ Bora olmaymiz',
-  on_way: '🚗 Yo\u2018ldamiz',
+  on_way: '🚗 Yo‘ldamiz',
   arrived: '🎉 Keldik',
   completed: '✅ Yakunlandi',
 };
@@ -131,7 +131,7 @@ async function showBonus(chatId, user) {
   return tg('sendMessage', {
     chat_id: chatId,
     text:
-      '💰 <b>Bonus va do\u2018stlar</b>\n\n' +
+      '💰 <b>Bonus va do‘stlar</b>\n\n' +
       `Hisobingiz: <b>${som(balance)} so'm</b>\n` +
       `Taklif qilganlar: <b>${count} ta</b>\n\n` +
       `Do'stingiz sizning havolangiz orqali qo'shilса:\n` +
@@ -142,7 +142,7 @@ async function showBonus(chatId, user) {
     parse_mode: 'HTML',
     reply_markup: {
       inline_keyboard: [
-        [{ text: '📤 Do\u2018stlarga yuborish', url: `https://t.me/share/url?url=${encodeURIComponent(link)}&text=${encodeURIComponent('🍽 LokmaGo — mazali taomlar tez yetkaziladi! Havolam orqali qo\u2018shiling va bonus oling 👇')}` }],
+        [{ text: '📤 Do‘stlarga yuborish', url: `https://t.me/share/url?url=${encodeURIComponent(link)}&text=${encodeURIComponent('🍽 LokmaGo — mazali taomlar tez yetkaziladi! Havolam orqali qo‘shiling va bonus oling 👇')}` }],
         ...backButton(),
       ],
     },
@@ -156,11 +156,11 @@ async function showAddresses(chatId, user) {
   if (!list.length) {
     return tg('sendMessage', {
       chat_id: chatId,
-      text: '📍 <b>Manzillarim</b>\n\nHozircha manzil qo\u2018shmagansiz.\n\nIlovada manzil qo\u2018shsangiz — keyingi buyurtmalarda avtomatik ishlatiladi.',
+      text: '📍 <b>Manzillarim</b>\n\nHozircha manzil qo‘shmagansiz.\n\nIlovada manzil qo‘shsangiz — keyingi buyurtmalarda avtomatik ishlatiladi.',
       parse_mode: 'HTML',
       reply_markup: {
         inline_keyboard: [
-          [{ text: '📍 Manzil qo\u2018shish', web_app: { url: config.webappUrl } }],
+          [{ text: '📍 Manzil qo‘shish', web_app: { url: config.webappUrl } }],
           ...backButton(),
         ],
       },
@@ -197,19 +197,19 @@ async function showHelp(chatId) {
       '<b>Qanday buyurtma beraman?</b>\n' +
       '1. "Taom buyurtma qilish" tugmasini bosing\n' +
       '2. Restoran va taomlarni tanlang\n' +
-      '3. Manzil va to\u2018lov usulini kiriting\n' +
+      '3. Manzil va to‘lov usulini kiriting\n' +
       '4. Buyurtmani kuzatib boring\n\n' +
       '<b>Stol bron qilish</b>\n' +
       'Restoran sahifasida "Stol bron qilish" tugmasi bor. ' +
       'Bron vaqtidan oldin bot sizga eslatma yuboradi.\n\n' +
       '<b>Bonus</b>\n' +
-      'Do\u2018stlaringizni taklif qiling — ikkalangiz ham bonus olasiz.\n\n' +
+      'Do‘stlaringizni taklif qiling — ikkalangiz ham bonus olasiz.\n\n' +
       '<b>Muammo bormi?</b>\n' +
-      'Ilova ichidagi qo\u2018llab-quvvatlash tugmasi orqali yozing.',
+      'Ilova ichidagi qo‘llab-quvvatlash tugmasi orqali yozing.',
     parse_mode: 'HTML',
     reply_markup: {
       inline_keyboard: [
-        [{ text: '💬 Qo\u2018llab-quvvatlash', web_app: { url: config.webappUrl } }],
+        [{ text: '💬 Qo‘llab-quvvatlash', web_app: { url: config.webappUrl } }],
         ...backButton(),
       ],
     },
@@ -230,7 +230,7 @@ export async function handleMenuCallback(callbackQuery) {
   if (!user) {
     await tg('sendMessage', {
       chat_id: chatId,
-      text: 'Iltimos, avval /start buyrug\u2018ini bosing.',
+      text: 'Iltimos, avval /start buyrug‘ini bosing.',
     });
     return true;
   }

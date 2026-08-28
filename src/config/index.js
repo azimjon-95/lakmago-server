@@ -267,7 +267,7 @@ for (const [name, value] of publicUrls) {
   if (/localhost|127\.0\.0\.1|0\.0\.0\.0/.test(value)) {
     console.warn(
       `⚠ ${name}=${value} — bu manzil BOSHQA QURILMADA ochilmaydi. `
-      + 'Lokal ishlab chiqish uchun to\u2018g\u2018ri, jonli serverda emas.',
+      + 'Lokal ishlab chiqish uchun to‘g‘ri, jonli serverda emas.',
     );
   }
 }

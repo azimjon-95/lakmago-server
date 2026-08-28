@@ -28,7 +28,7 @@ export const dineInLiveController = {
   createRequest: asyncHandler(async (req, res) => {
     const type = req.body.type;
     if (!['waiter', 'bill'].includes(type)) {
-      return res.status(400).json({ error: 'Noto\u2018g\u2018ri so\u2018rov turi' });
+      return res.status(400).json({ error: 'Noto‘g‘ri so‘rov turi' });
     }
 
     const session = await DineInSession.findById(req.body.sessionId);
@@ -48,7 +48,7 @@ export const dineInLiveController = {
       return res.status(429).json({
         error: recent.status === 'accepted'
           ? 'Ofitsiant xabardor qilindi'
-          : 'So\u2018rovingiz yuborilgan, biroz kuting',
+          : 'So‘rovingiz yuborilgan, biroz kuting',
         code: 'COOLDOWN',
         request: recent,
       });
@@ -96,7 +96,7 @@ export const dineInLiveController = {
       audience: 'restaurant',
       restaurantId: session.restaurantId,
       type: type === 'bill' ? 'bill_request' : 'waiter_call',
-      title: type === 'bill' ? 'Hisob so\u2018raldi' : 'Ofitsiant chaqirilmoqda',
+      title: type === 'bill' ? 'Hisob so‘raldi' : 'Ofitsiant chaqirilmoqda',
       body: tableLabel,
       refType: 'table',
       refId: session.tableId,
@@ -146,7 +146,7 @@ export const dineInLiveController = {
   updateRequest: asyncHandler(async (req, res) => {
     const status = req.body.status;
     if (!['accepted', 'done'].includes(status)) {
-      return res.status(400).json({ error: 'Noto\u2018g\u2018ri holat' });
+      return res.status(400).json({ error: 'Noto‘g‘ri holat' });
     }
 
     const update = { status };
@@ -174,7 +174,7 @@ export const dineInLiveController = {
     const request = await TableRequest.findOneAndUpdate(query, update, { new: true });
 
     if (!request) {
-      return res.status(404).json({ error: 'So\u2018rov topilmadi yoki sizga tegishli emas' });
+      return res.status(404).json({ error: 'So‘rov topilmadi yoki sizga tegishli emas' });
     }
 
     const io = getIO();
@@ -210,7 +210,7 @@ export const dineInLiveController = {
 
     if (!session) {
       await Table.findByIdAndUpdate(table._id, { status: 'free' });
-      return res.json({ closed: true, message: 'Stol bo\u2018shatildi' });
+      return res.json({ closed: true, message: 'Stol bo‘shatildi' });
     }
 
     // Tugallanmagan buyurtmalar bormi
@@ -463,7 +463,7 @@ export const dineInLiveController = {
 
     const amount = Number(req.body.amount);
     if (!Number.isFinite(amount) || amount <= 0) {
-      return res.status(400).json({ error: 'Summa noto\u2018g\u2018ri' });
+      return res.status(400).json({ error: 'Summa noto‘g‘ri' });
     }
 
     // Qoldiqni hisoblaymiz
@@ -478,8 +478,8 @@ export const dineInLiveController = {
 
     if (amount > remaining) {
       return res.status(400).json({
-        error: `Qoldiq ${remaining.toLocaleString('ru-RU')} so\u2018m. `
-          + 'Bundan ko\u2018p to\u2018lab bo\u2018lmaydi.',
+        error: `Qoldiq ${remaining.toLocaleString('ru-RU')} so‘m. `
+          + 'Bundan ko‘p to‘lab bo‘lmaydi.',
         code: 'EXCEEDS_BALANCE',
         remaining,
       });
@@ -493,7 +493,7 @@ export const dineInLiveController = {
       createdBy: req.userId || null,
       meta: {
         note: String(req.body.note || '').slice(0, 200)
-          || `${waiter.firstName} — xizmat haqi to\u2018landi`,
+          || `${waiter.firstName} — xizmat haqi to‘landi`,
         period: req.body.period || '',
       },
     });

@@ -43,7 +43,7 @@ function percentOf(amountTiyin, percent) {
  */
 export function splitPaynet(totalTiyin, lokmaPercent = config.split.defaultLokmaPercent) {
   const total = Math.round(Number(totalTiyin) || 0);
-  if (total <= 0) throw new Error('Summa musbat bo\u2018lishi kerak');
+  if (total <= 0) throw new Error('Summa musbat bo‘lishi kerak');
 
   const lokmaGross = percentOf(total, lokmaPercent);
   // Ayirma — tiyin yo'qolmasligi uchun
@@ -83,7 +83,7 @@ export function splitPaynet(totalTiyin, lokmaPercent = config.split.defaultLokma
  */
 export function splitClick(totalTiyin, lokmaPercent = config.split.defaultLokmaPercent) {
   const total = Math.round(Number(totalTiyin) || 0);
-  if (total <= 0) throw new Error('Summa musbat bo\u2018lishi kerak');
+  if (total <= 0) throw new Error('Summa musbat bo‘lishi kerak');
 
   const lokmaGross = percentOf(total, lokmaPercent);
   const restaurantAmount = total - lokmaGross;

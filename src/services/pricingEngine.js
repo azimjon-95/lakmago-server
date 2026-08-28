@@ -65,7 +65,7 @@ export function priceDineIn(basePriceTiyin) {
  */
 export function priceDelivery(basePriceTiyin, agreement, deliveryMarkupPercent = 0) {
   const base = Math.round(Number(basePriceTiyin) || 0);
-  if (base < 0) throw new Error('Narx manfiy bo\u2018lishi mumkin emas');
+  if (base < 0) throw new Error('Narx manfiy bo‘lishi mumkin emas');
 
   const markup = Number(deliveryMarkupPercent || 0);
   const restCom = Number(agreement?.restaurantCommissionPercent || 0);

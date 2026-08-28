@@ -35,7 +35,7 @@ export function decryptSecret(stored) {
   if (!stored) return '';
   const parts = String(stored).split(':');
   if (parts.length !== 4 || parts[0] !== 'v1') {
-    throw new Error('Shifrlangan qiymat formati noto\u2018g\u2018ri');
+    throw new Error('Shifrlangan qiymat formati noto‘g‘ri');
   }
   const [, ivB64, tagB64, dataB64] = parts;
   const decipher = crypto.createDecipheriv('aes-256-gcm', key(), Buffer.from(ivB64, 'base64'));

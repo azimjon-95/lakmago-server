@@ -106,7 +106,7 @@ export const authController = {
 };
 
 // MongoDB ObjectId formatи (24 belgili hex)
-const objectIdSchema = z.string().regex(/^[a-f\d]{24}$/i, 'ID formatи noto\u2018g\u2018ri (ObjectId kutiladi)');
+const objectIdSchema = z.string().regex(/^[a-f\d]{24}$/i, 'ID formatи noto‘g‘ri (ObjectId kutiladi)');
 
 // Bitta restoran buyurtmasi sxemasi
 const singleOrderSchema = z.object({
@@ -157,7 +157,7 @@ export const orderController = {
   create: asyncHandler(async (req, res) => {
     const parsed = batchOrderSchema.safeParse(req.body);
     if (!parsed.success) {
-      return res.status(400).json({ error: 'Ma\u2018lumot noto\u2018g\u2018ri', details: parsed.error.issues });
+      return res.status(400).json({ error: 'Ma‘lumot noto‘g‘ri', details: parsed.error.issues });
     }
     const { orders, address, phone, paymentMethod, paymentLabel, useBonus,
             fulfillment, timingMode, scheduledFor, cardLast4, cardBrand,
@@ -171,10 +171,10 @@ export const orderController = {
     const scheduledDate = scheduledFor ? new Date(scheduledFor) : null;
     if (timingMode === 'scheduled') {
       if (!scheduledDate || isNaN(scheduledDate.getTime())) {
-        return res.status(400).json({ error: 'Vaqt noto\u2018g\u2018ri' });
+        return res.status(400).json({ error: 'Vaqt noto‘g‘ri' });
       }
       if (scheduledDate.getTime() < Date.now() - 60_000) {
-        return res.status(400).json({ error: 'Tanlangan vaqt o\u2018tib ketgan' });
+        return res.status(400).json({ error: 'Tanlangan vaqt o‘tib ketgan' });
       }
     }
 
@@ -238,7 +238,7 @@ export const orderController = {
        */
       if (!isPickup && rest.deliveryEnabled === false) {
         return res.status(400).json({
-          error: `${rest.name} yetkazib berish xizmatini ko'rsatmaydi \u2014 o'zingiz olib ketishingiz mumkin`,
+          error: `${rest.name} yetkazib berish xizmatini ko'rsatmaydi — o'zingiz olib ketishingiz mumkin`,
           code: 'DELIVERY_DISABLED',
           restaurantId: String(o.restaurantId),
         });
@@ -247,7 +247,7 @@ export const orderController = {
       // Olib ketish yoqilganmi
       if (isPickup && !rest.pickupEnabled) {
         return res.status(400).json({
-          error: `${rest.name} olib ketishni qo\u2018llab-quvvatlamaydi`,
+          error: `${rest.name} olib ketishni qo‘llab-quvvatlamaydi`,
           code: 'PICKUP_DISABLED',
           restaurantId: String(o.restaurantId),
         });
@@ -275,8 +275,8 @@ export const orderController = {
       const minCheck = checkMinOrder(o.subtotal, rest, isPickup);
       if (!minCheck.ok) {
         return res.status(400).json({
-          error: `${rest.name}: minimal buyurtma ${minCheck.min.toLocaleString('ru-RU')} so\u2018m. `
-            + `Yana ${minCheck.missing.toLocaleString('ru-RU')} so\u2018mlik mahsulot qo\u2018shing.`,
+          error: `${rest.name}: minimal buyurtma ${minCheck.min.toLocaleString('ru-RU')} so‘m. `
+            + `Yana ${minCheck.missing.toLocaleString('ru-RU')} so‘mlik mahsulot qo‘shing.`,
           code: 'MIN_ORDER',
           restaurantId: String(o.restaurantId),
           missing: minCheck.missing,
@@ -473,8 +473,8 @@ export const orderController = {
     // Restoran ishni boshlagan bo'lsa bekor qilib bo'lmaydi
     if (order.status !== 'pending' && order.status !== 'awaiting_payment') {
       return res.status(400).json({
-        error: 'Restoran buyurtmani qabul qildi — bekor qilib bo\u2018lmaydi. '
-          + 'Restoranga qo\u2018ng\u2018iroq qiling.',
+        error: 'Restoran buyurtmani qabul qildi — bekor qilib bo‘lmaydi. '
+          + 'Restoranga qo‘ng‘iroq qiling.',
         code: 'ALREADY_ACCEPTED',
       });
     }
@@ -482,8 +482,8 @@ export const orderController = {
     // Karta to'lovi va pul o'tgan bo'lsa — o'zi bekor qilolmaydi
     if (order.isPaid) {
       return res.status(400).json({
-        error: 'To\u2018lov amalga oshirilgan. Bekor qilish uchun '
-          + 'qo\u2018llab-quvvatlashga murojaat qiling.',
+        error: 'To‘lov amalga oshirilgan. Bekor qilish uchun '
+          + 'qo‘llab-quvvatlashga murojaat qiling.',
         code: 'ALREADY_PAID',
       });
     }
@@ -566,8 +566,8 @@ export const orderController = {
     const user = order.userId;
     const statusText = {
       preparing: '\ud83d\udc68\u200d\ud83c\udf73 Buyurtmangiz tayyorlanmoqda',
-      delivering: '\ud83d\udeb4 Buyurtmangiz yo\u2018lda',
-      delivered: '\u2705 Buyurtmangiz yetkazildi. Yoqimli ishtaha!',
+      delivering: '\ud83d\udeb4 Buyurtmangiz yo‘lda',
+      delivered: '✅ Buyurtmangiz yetkazildi. Yoqimli ishtaha!',
     };
     if (user?.telegramId && statusText[status]) {
       notifyUser(user.telegramId, statusText[status]);

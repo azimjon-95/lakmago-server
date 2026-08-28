@@ -21,7 +21,7 @@ import rateLimit from 'express-rate-limit';
 // Standart javob — front-end tushunadigan, oddiy JSON
 function limitHandler(req, res) {
   res.status(429).json({
-    error: 'Juda ko\u2018p urinish. Birozdan keyin qayta urinib ko\u2018ring.',
+    error: 'Juda ko‘p urinish. Birozdan keyin qayta urinib ko‘ring.',
   });
 }
 

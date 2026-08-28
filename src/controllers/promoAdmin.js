@@ -148,18 +148,18 @@ export const promoAdminController = {
   markPaid: asyncHandler(async (req, res) => {
     const { debt } = await getDebt(req.params.restaurantId);
     if (debt <= 0) {
-      return res.status(400).json({ error: 'Qarz yo\u2018q' });
+      return res.status(400).json({ error: 'Qarz yo‘q' });
     }
 
     const result = await markDebtPaid(req.params.restaurantId, req.userId, 'manual');
-    res.json({ ...result, message: `${result.paid.toLocaleString('ru-RU')} so\u2018m to\u2018landi deb belgilandi` });
+    res.json({ ...result, message: `${result.paid.toLocaleString('ru-RU')} so‘m to‘landi deb belgilandi` });
   }),
 
   // PATCH /api/admin/promo/subscription/:restaurantId  { status }
   setStatus: asyncHandler(async (req, res) => {
     const status = req.body.status;
     if (!['active', 'suspended', 'expired'].includes(status)) {
-      return res.status(400).json({ error: 'Noto\u2018g\u2018ri holat' });
+      return res.status(400).json({ error: 'Noto‘g‘ri holat' });
     }
 
     const sub = await PromoSubscription.findOne({ restaurantId: req.params.restaurantId });
@@ -204,7 +204,7 @@ export const promoAdminController = {
 
     const parsed = schema.safeParse(req.body);
     if (!parsed.success) {
-      return res.status(400).json({ error: 'Noto\u2018g\u2018ri qiymat' });
+      return res.status(400).json({ error: 'Noto‘g‘ri qiymat' });
     }
 
     const settings = await getSettings();

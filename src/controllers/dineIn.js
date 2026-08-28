@@ -13,10 +13,10 @@ async function requireActive(restaurantId) {
   if (!cfg) return { ok: false, error: 'Dine-in yoqilmagan' };
   if (cfg.status !== 'active') {
     const msgs = {
-      pending: 'So\u2018rov ko\u2018rib chiqilmoqda',
-      approved: 'Tasdiqlangan, to\u2018lov kutilmoqda',
-      payment_required: 'To\u2018lov talab qilinadi',
-      suspended: 'Xizmat to\u2018xtatilgan',
+      pending: 'So‘rov ko‘rib chiqilmoqda',
+      approved: 'Tasdiqlangan, to‘lov kutilmoqda',
+      payment_required: 'To‘lov talab qilinadi',
+      suspended: 'Xizmat to‘xtatilgan',
     };
     return { ok: false, error: msgs[cfg.status] || 'Dine-in faol emas', status: cfg.status };
   }
@@ -66,7 +66,7 @@ export const dineInController = {
   requestActivation: asyncHandler(async (req, res) => {
     const existing = await DineInConfig.findOne({ restaurantId: rid(req) });
     if (existing) {
-      return res.status(400).json({ error: 'So\u2018rov allaqachon yuborilgan' });
+      return res.status(400).json({ error: 'So‘rov allaqachon yuborilgan' });
     }
 
     const cfg = await DineInConfig.create({
@@ -92,7 +92,7 @@ export const dineInController = {
 
     const parsed = schema.safeParse(req.body);
     if (!parsed.success) {
-      return res.status(400).json({ error: 'Noto\u2018g\u2018ri qiymat' });
+      return res.status(400).json({ error: 'Noto‘g‘ri qiymat' });
     }
 
     // Foiz 100 dan oshmasin
@@ -125,7 +125,7 @@ export const dineInController = {
 
     const parsed = schema.safeParse(req.body);
     if (!parsed.success) {
-      return res.status(400).json({ error: 'Noto\u2018g\u2018ri qiymat' });
+      return res.status(400).json({ error: 'Noto‘g‘ri qiymat' });
     }
 
     const cfg = await DineInConfig.findOneAndUpdate(
@@ -245,7 +245,7 @@ export const dineInController = {
 
     const parsed = schema.safeParse(req.body);
     if (!parsed.success) {
-      return res.status(400).json({ error: 'Noto\u2018g\u2018ri qiymat' });
+      return res.status(400).json({ error: 'Noto‘g‘ri qiymat' });
     }
 
     const table = await Table.findOneAndUpdate(
@@ -332,7 +332,7 @@ export const dineInController = {
       .lean();
 
     if (tables.length === 0) {
-      return res.status(400).json({ error: 'Stol yo\u2018q' });
+      return res.status(400).json({ error: 'Stol yo‘q' });
     }
 
     const [restaurant, cfg] = await Promise.all([
@@ -358,7 +358,7 @@ export const dineInController = {
   scan: asyncHandler(async (req, res) => {
     const token = String(req.body.token || '').trim();
     if (!token || token.length < 16) {
-      return res.status(400).json({ error: 'QR kod noto\u2018g\u2018ri' });
+      return res.status(400).json({ error: 'QR kod noto‘g‘ri' });
     }
 
     const table = await Table.findOne({ qrToken: token }).lean();
@@ -506,7 +506,7 @@ export const dineInController = {
 
     const parsed = schema.safeParse(req.body);
     if (!parsed.success) {
-      return res.status(400).json({ error: 'Noto\u2018g\u2018ri qiymat' });
+      return res.status(400).json({ error: 'Noto‘g‘ri qiymat' });
     }
 
     const { getSettings } = await import('../models/Settings.js');
@@ -538,14 +538,14 @@ export const dineInController = {
     const { getDineInDebt } = await import('../services/dineInBilling.js');
 
     const { debt } = await getDineInDebt(req.params.restaurantId);
-    if (debt <= 0) return res.status(400).json({ error: 'Qarz yo\u2018q' });
+    if (debt <= 0) return res.status(400).json({ error: 'Qarz yo‘q' });
 
     const result = await markDebtPaid(
       req.params.restaurantId, req.userId, 'manual', null, 'dinein',
     );
     res.json({
       ...result,
-      message: `${result.paid.toLocaleString('ru-RU')} so\u2018m to\u2018landi deb belgilandi`,
+      message: `${result.paid.toLocaleString('ru-RU')} so‘m to‘landi deb belgilandi`,
     });
   }),
 
@@ -554,11 +554,11 @@ export const dineInController = {
     const status = req.body.status;
     const allowed = ['pending', 'approved', 'payment_required', 'active', 'suspended'];
     if (!allowed.includes(status)) {
-      return res.status(400).json({ error: 'Noto\u2018g\u2018ri holat' });
+      return res.status(400).json({ error: 'Noto‘g‘ri holat' });
     }
 
     const cfg = await DineInConfig.findOne({ restaurantId: req.params.restaurantId });
-    if (!cfg) return res.status(404).json({ error: 'So\u2018rov topilmadi' });
+    if (!cfg) return res.status(404).json({ error: 'So‘rov topilmadi' });
 
     cfg.status = status;
     if (status === 'approved') cfg.approvedAt = new Date();

@@ -202,7 +202,7 @@ export async function markDebtPaid(restaurantId, adminId, via = 'manual', maxAmo
     meta: {
       note: via === 'settlement'
         ? 'Mijozlarni jalb qilish qarzi — delivery tushumidan'
-        : 'Mijozlarni jalb qilish qarzi — qo\u2018lda to\u2018landi',
+        : 'Mijozlarni jalb qilish qarzi — qo‘lda to‘landi',
     },
   });
 

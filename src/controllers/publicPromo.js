@@ -161,7 +161,7 @@ export const publicPromoController = {
   trackEvent: asyncHandler(async (req, res) => {
     const type = req.body.type;
     if (!['impression', 'click'].includes(type)) {
-      return res.status(400).json({ error: 'Noto\u2018g\u2018ri hodisa' });
+      return res.status(400).json({ error: 'Noto‘g‘ri hodisa' });
     }
 
     const ad = await AdCampaign.findById(req.params.id);

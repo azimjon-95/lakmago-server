@@ -52,6 +52,6 @@ export class PaymentProvider {
   /** Pulni qaytarish. Qo'llamasa xato beradi. */
   // eslint-disable-next-line no-unused-vars
   async refund(payment, reason) {
-    throw new Error(`${this.name}: qaytarish qo\u2018llanmaydi`);
+    throw new Error(`${this.name}: qaytarish qo‘llanmaydi`);
   }
 }

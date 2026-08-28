@@ -219,7 +219,7 @@ export async function sendCustomBroadcast(opts) {
     return { ok: true, demo: true };
   }
   if (!chatId) throw new Error('chatId kerak');
-  if (!text && !imageUrl) throw new Error('Matn yoki rasm bo\u2018lishi shart');
+  if (!text && !imageUrl) throw new Error('Matn yoki rasm bo‘lishi shart');
 
   // Tugma (agar berilgan bo'lsa)
   const keyboard = (buttonText && buttonUrl)

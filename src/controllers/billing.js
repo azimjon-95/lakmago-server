@@ -117,7 +117,7 @@ export const billingController = {
     });
     const parsed = schema.safeParse(req.body);
     if (!parsed.success) {
-      return res.status(400).json({ error: 'Noto\u2018g\u2018ri ma\u2018lumot' });
+      return res.status(400).json({ error: 'Noto‘g‘ri ma‘lumot' });
     }
 
     try {
@@ -143,7 +143,7 @@ export const billingController = {
     });
     const parsed = schema.safeParse(req.body);
     if (!parsed.success) {
-      return res.status(400).json({ error: 'Noto\u2018g\u2018ri qiymat' });
+      return res.status(400).json({ error: 'Noto‘g‘ri qiymat' });
     }
 
     const update = { ...parsed.data };

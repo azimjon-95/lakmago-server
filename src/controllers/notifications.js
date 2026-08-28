@@ -59,7 +59,7 @@ export const notificationController = {
     const allowed = scope.audience === 'admin'
       ? true
       : own.audience === 'restaurant' && String(own.restaurantId) === String(scope.restaurantId);
-    if (!allowed) return res.status(403).json({ error: 'Ruxsat yo\u2018q' });
+    if (!allowed) return res.status(403).json({ error: 'Ruxsat yo‘q' });
 
     const updated = await setStatus(req.params.id, req.body?.status);
     if (!updated) return res.status(404).json({ error: 'Bildirishnoma topilmadi' });
@@ -84,7 +84,7 @@ export const notificationController = {
       deviceId: z.string().max(80).optional(),
     });
     const parsed = schema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ error: 'Obuna ma\u2018lumoti noto\u2018g\u2018ri' });
+    if (!parsed.success) return res.status(400).json({ error: 'Obuna ma‘lumoti noto‘g‘ri' });
 
     const { endpoint, keys, deviceId } = parsed.data;
 

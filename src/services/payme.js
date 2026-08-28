@@ -41,7 +41,7 @@ const MSG = {
     uz: 'Tranzaksiya topilmadi', ru: 'Транзакция не найдена', en: 'Transaction not found',
   },
   [PaymeError.CantDoOperation]: {
-    uz: 'Operatsiyani bajarib bo\u2018lmaydi', ru: 'Невозможно выполнить операцию', en: 'Cannot perform operation',
+    uz: 'Operatsiyani bajarib bo‘lmaydi', ru: 'Невозможно выполнить операцию', en: 'Cannot perform operation',
   },
   [PaymeError.OrderNotFound]: {
     uz: 'Buyurtma topilmadi', ru: 'Заказ не найден', en: 'Order not found',

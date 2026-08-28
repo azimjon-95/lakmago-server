@@ -276,13 +276,13 @@ export const restaurantPanelController = {
     // Telegram push
     const user = order.userId;
     const statusText = {
-      accepted: '\u2705 Buyurtmangiz qabul qilindi',
+      accepted: '✅ Buyurtmangiz qabul qilindi',
       preparing: '\ud83d\udc68\u200d\ud83c\udf73 Buyurtmangiz tayyorlanmoqda',
       ready: '\ud83c\udf7d Buyurtmangiz tayyor',
       // Talab bo'yicha aniq matn: "yo'lga chiqdi, tez orada yetib keladi"
-      delivering: '\ud83d\udeb4 Buyurtmangiz yo\u2018lga chiqdi, tez orada yetib keladi',
+      delivering: '\ud83d\udeb4 Buyurtmangiz yo‘lga chiqdi, tez orada yetib keladi',
       // Yetkazildi xabari yo'q edi — mijoz oxirgi holatni bilmasdi
-      delivered: '\u2705 Buyurtmangiz yetkazildi. Yoqimli ishtaha!',
+      delivered: '✅ Buyurtmangiz yetkazildi. Yoqimli ishtaha!',
       cancelled: '\u274c Buyurtmangiz bekor qilindi',
     };
     // ===== HISOB-KITOB =====
@@ -395,7 +395,7 @@ export const restaurantPanelController = {
     const parsed = schema.safeParse(req.body);
     if (!parsed.success) {
       return res.status(400).json({
-        error: 'Ma\u2018lumot noto\u2018g\u2018ri',
+        error: 'Ma‘lumot noto‘g‘ri',
         details: parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`),
       });
     }
@@ -406,7 +406,7 @@ export const restaurantPanelController = {
     if (data.deliveryMin != null && data.deliveryMax != null
         && data.deliveryMin > data.deliveryMax) {
       return res.status(400).json({
-        error: 'Eng kam yetkazish vaqti eng ko\u2018pdan katta bo\u2018lmasligi kerak',
+        error: 'Eng kam yetkazish vaqti eng ko‘pdan katta bo‘lmasligi kerak',
       });
     }
 

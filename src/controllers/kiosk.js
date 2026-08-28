@@ -47,7 +47,7 @@ function toPanel(doc, { withToken = false } = {}) {
   };
 }
 
-const pinSchema = z.string().regex(/^\d{4}$/, 'PIN 4 ta raqamdan iborat bo\u2018lishi kerak');
+const pinSchema = z.string().regex(/^\d{4}$/, 'PIN 4 ta raqamdan iborat bo‘lishi kerak');
 
 const settingsSchema = z.object({
   label: z.string().max(60).optional(),
@@ -74,7 +74,7 @@ export const kioskController = {
     const parsed = settingsSchema.safeParse(req.body);
     if (!parsed.success) {
       return res.status(400).json({
-        error: parsed.error.issues[0]?.message || 'Ma\u2018lumot noto\u2018g\u2018ri',
+        error: parsed.error.issues[0]?.message || 'Ma‘lumot noto‘g‘ri',
       });
     }
 
@@ -88,7 +88,7 @@ export const kioskController = {
     // bu — tasodifan yuzlab token yaratib qo'yishdan himoya
     const count = await KioskToken.countDocuments({ restaurantId: rid(req) });
     if (count >= 20) {
-      return res.status(400).json({ error: 'Kiosk linklar soni chegarasi (20) to\u2018ldi' });
+      return res.status(400).json({ error: 'Kiosk linklar soni chegarasi (20) to‘ldi' });
     }
 
     const days = parsed.data.expiresInDays ?? 30;
@@ -125,7 +125,7 @@ export const kioskController = {
     const parsed = schema.safeParse(req.body);
     if (!parsed.success) {
       return res.status(400).json({
-        error: parsed.error.issues[0]?.message || 'Ma\u2018lumot noto\u2018g\u2018ri',
+        error: parsed.error.issues[0]?.message || 'Ma‘lumot noto‘g‘ri',
       });
     }
 
@@ -239,7 +239,7 @@ export const kioskController = {
       return res.status(403).json({
         error: reason === 'expired'
           ? 'Link muddati tugagan'
-          : 'Link o\u2018chirilgan',
+          : 'Link o‘chirilgan',
         code: reason.toUpperCase(),
       });
     }
@@ -274,7 +274,7 @@ export const kioskController = {
   session: asyncHandler(async (req, res) => {
     const { token, deviceId, deviceLabel } = req.body || {};
     if (!token || !deviceId) {
-      return res.status(400).json({ error: 'Ma\u2018lumot yetarli emas' });
+      return res.status(400).json({ error: 'Ma‘lumot yetarli emas' });
     }
 
     const doc = await KioskToken.findOne({ token: String(token) });
@@ -283,7 +283,7 @@ export const kioskController = {
     const reason = doc.usableReason();
     if (reason) {
       return res.status(403).json({
-        error: reason === 'expired' ? 'Link muddati tugagan' : 'Link o\u2018chirilgan',
+        error: reason === 'expired' ? 'Link muddati tugagan' : 'Link o‘chirilgan',
         code: reason.toUpperCase(),
       });
     }
@@ -299,7 +299,7 @@ export const kioskController = {
     // ===== QURILMA CHEKLOVI =====
     if (!existing && doc.deviceLimit > 0 && doc.devices.length >= doc.deviceLimit) {
       return res.status(403).json({
-        error: `Bu link ${doc.deviceLimit} ta qurilmaga bog\u2018langan. `
+        error: `Bu link ${doc.deviceLimit} ta qurilmaga bog‘langan. `
           + 'Administrator qurilmalarni tozalashi kerak.',
         code: 'DEVICE_LIMIT',
       });
@@ -364,7 +364,7 @@ export const kioskController = {
     const reason = doc.usableReason();
     if (reason) {
       return res.status(403).json({
-        error: reason === 'expired' ? 'Link muddati tugagan' : 'Link o\u2018chirilgan',
+        error: reason === 'expired' ? 'Link muddati tugagan' : 'Link o‘chirilgan',
         code: reason.toUpperCase(),
       });
     }
@@ -372,7 +372,7 @@ export const kioskController = {
     if (doc.pinBlockedUntil && doc.pinBlockedUntil.getTime() > Date.now()) {
       const sec = Math.ceil((doc.pinBlockedUntil.getTime() - Date.now()) / 1000);
       return res.status(429).json({
-        error: `Ko\u2018p marta xato. ${sec} soniyadan keyin urinib ko\u2018ring.`,
+        error: `Ko‘p marta xato. ${sec} soniyadan keyin urinib ko‘ring.`,
         code: 'PIN_BLOCKED',
         retryAfter: sec,
       });
@@ -390,7 +390,7 @@ export const kioskController = {
       await doc.save();
 
       return res.status(401).json({
-        error: 'PIN noto\u2018g\u2018ri',
+        error: 'PIN noto‘g‘ri',
         code: 'PIN_WRONG',
         ...(doc.pinBlockedUntil && { retryAfter: 30 }),
       });
@@ -417,7 +417,7 @@ export const kioskController = {
     const expired = new Date(doc.expiresAt).getTime() < Date.now();
     if (!doc.isActive || expired) {
       return res.status(403).json({
-        error: expired ? 'Link muddati tugagan' : 'Link o\u2018chirilgan',
+        error: expired ? 'Link muddati tugagan' : 'Link o‘chirilgan',
         code: expired ? 'EXPIRED' : 'DISABLED',
       });
     }

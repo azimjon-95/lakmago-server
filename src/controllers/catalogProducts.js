@@ -53,7 +53,7 @@ export const catalogProductController = {
     const parsed = productSchema.safeParse(req.body);
     if (!parsed.success) {
       return res.status(400).json({
-        error: 'Ma\u2018lumot noto\u2018g\u2018ri',
+        error: 'Ma‘lumot noto‘g‘ri',
         details: parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`),
       });
     }
@@ -75,7 +75,7 @@ export const catalogProductController = {
   update: asyncHandler(async (req, res) => {
     const parsed = productSchema.partial().safeParse(req.body);
     if (!parsed.success) {
-      return res.status(400).json({ error: 'Ma\u2018lumot noto\u2018g\u2018ri' });
+      return res.status(400).json({ error: 'Ma‘lumot noto‘g‘ri' });
     }
 
     const product = await CatalogProduct.findByIdAndUpdate(

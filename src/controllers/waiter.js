@@ -48,7 +48,7 @@ export const waiterController = {
     const parsed = schema.safeParse(req.body);
     if (!parsed.success) {
       return res.status(400).json({
-        error: parsed.error.issues[0]?.message || 'Ma\u2018lumot noto\u2018g\u2018ri',
+        error: parsed.error.issues[0]?.message || 'Ma‘lumot noto‘g‘ri',
       });
     }
 
@@ -92,7 +92,7 @@ export const waiterController = {
 
     const parsed = schema.safeParse(req.body);
     if (!parsed.success) {
-      return res.status(400).json({ error: 'Ma\u2018lumot noto\u2018g\u2018ri' });
+      return res.status(400).json({ error: 'Ma‘lumot noto‘g‘ri' });
     }
 
     if (parsed.data.tableIds) {
@@ -125,7 +125,7 @@ export const waiterController = {
     ).select('-passwordHash');
 
     if (!waiter) return res.status(404).json({ error: 'Ofitsiant topilmadi' });
-    res.json({ ...waiter.toObject(), message: 'Keyingi kirishda yangi qurilma bog\u2018lanadi' });
+    res.json({ ...waiter.toObject(), message: 'Keyingi kirishda yangi qurilma bog‘lanadi' });
   }),
 
   // DELETE /api/panel/waiters/:id
@@ -164,7 +164,7 @@ export const waiterController = {
         '[waiter:login] muvaffaqiyatsiz —',
         waiter ? `login topildi (${loginKey}), parol mos emas` : `bunday login yo'q: "${loginKey}"`,
       );
-      return res.status(401).json({ error: 'Login yoki parol noto\u2018g\u2018ri' });
+      return res.status(401).json({ error: 'Login yoki parol noto‘g‘ri' });
     }
 
     if (!waiter.isActive) {
@@ -182,8 +182,8 @@ export const waiterController = {
     // ===== QURILMA TEKSHIRUVI =====
     if (waiter.deviceId && waiter.deviceId !== device) {
       return res.status(403).json({
-        error: 'Bu akkaunt boshqa qurilmaga bog\u2018langan. '
-          + 'Administratordan qurilmani almashtirishni so\u2018rang.',
+        error: 'Bu akkaunt boshqa qurilmaga bog‘langan. '
+          + 'Administratordan qurilmani almashtirishni so‘rang.',
         code: 'DEVICE_MISMATCH',
       });
     }

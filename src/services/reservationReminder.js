@@ -56,7 +56,7 @@ const REMINDERS = {
     minutes: 30,
     text: (r) => `🔔 <b>Tez orada!</b>\n\n${r.restaurantName} — bronigizga <b>30 daqiqa</b> qoldi.\n\n📅 Vaqt: ${fmtTime(r.scheduledAt)}\n\nStolingiz tayyorlanmoqda.`,
     buttons: (id) => [[
-      { text: '🚗 Yo\u2018ldamiz', callback_data: `resv_on_way_${id}` },
+      { text: '🚗 Yo‘ldamiz', callback_data: `resv_on_way_${id}` },
       { text: '❌ Bora olmaymiz', callback_data: `resv_not_coming_${id}` },
     ]],
   },
@@ -64,7 +64,7 @@ const REMINDERS = {
     minutes: 0,
     text: (r) => `🍽 <b>Bron vaqti keldi!</b>\n\n${r.restaurantName} sizni kutmoqda.\n\n📅 ${fmtTime(r.scheduledAt)}\n👥 ${r.guests} kishi`,
     buttons: (id) => [[
-      { text: '🚗 Yo\u2018ldamiz', callback_data: `resv_on_way_${id}` },
+      { text: '🚗 Yo‘ldamiz', callback_data: `resv_on_way_${id}` },
       { text: '✅ Keldik', callback_data: `resv_arrived_${id}` },
     ]],
   },
@@ -160,7 +160,7 @@ export async function handleReservationResponse(callbackQuery) {
   const LABELS = {
     coming: '✅ Rahmat! Restoranga xabar berdik.',
     not_coming: '❌ Bron bekor qilindi. Boshqa safar kutamiz!',
-    on_way: '🚗 Yaxshi yo\u2018l! Restoran sizni kutmoqda.',
+    on_way: '🚗 Yaxshi yo‘l! Restoran sizni kutmoqda.',
     arrived: '🎉 Xush kelibsiz! Yoqimli ishtaha.',
   };
   await tg('answerCallbackQuery', {

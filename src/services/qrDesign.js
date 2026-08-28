@@ -120,10 +120,10 @@ function wrap(text, maxChars, maxLines = 2) {
  */
 function pdfSafe(s) {
   return String(s || '')
-    .replace(/[\u02BB\u02BC\u0027\u2018]/g, '\u2018')
-    .replace(/[\u02B9\u02BD\u2019]/g, '\u2019')
-    .replace(/[\u2013\u2014]/g, '-')
-    .replace(/[^\u0020-\u007E\u00A0-\u00FF\u2018\u2019\u201C\u201D\u2022]/g, '');
+    .replace(/[\u02BB\u02BC\u0027‘]/g, '‘')
+    .replace(/[\u02B9\u02BD’]/g, '’')
+    .replace(/[\u2013—]/g, '-')
+    .replace(/[^\u0020-\u007E\u00A0-\u00FF‘’\u201C\u201D\u2022]/g, '');
 }
 
 /** Cloudinary URL ni jpg ga majburlash — PDFKit webp ni bilmaydi. */
@@ -338,7 +338,7 @@ export async function renderQrPdf(tables, restaurant, theme = {}) {
   const doc = new PDFDocument({
     size: 'A4',
     margin: 0,
-    info: { Title: `${restaurant?.name || 'Restoran'} \u2014 QR kodlar`, Author: 'LokmaGo' },
+    info: { Title: `${restaurant?.name || 'Restoran'} — QR kodlar`, Author: 'LokmaGo' },
   });
 
   const chunks = [];

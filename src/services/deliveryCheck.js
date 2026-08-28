@@ -168,8 +168,8 @@ export async function handleDeliveryResponse(cq) {
     await tg('sendMessage', {
       chat_id: cq.from.id,
       text: left > 0
-        ? '⏳ Yaxshi, biroz kutamiz va yana so\u2018raymiz.'
-        : '⏳ Muammo bo\u2018lsa qo\u2018llab-quvvatlashga yozing.',
+        ? '⏳ Yaxshi, biroz kutamiz va yana so‘raymiz.'
+        : '⏳ Muammo bo‘lsa qo‘llab-quvvatlashga yozing.',
     });
     return true;
   }
@@ -210,7 +210,7 @@ async function askRating(chatId, order) {
     chat_id: chatId,
     text:
       `🎉 Yoqimli ishtaha!\n\n<b>${order.restaurantName}</b> ga baho bering.\n` +
-      '<i>Bu ixtiyoriy — xohlamasangiz o\u2018tkazib yuboring.</i>',
+      '<i>Bu ixtiyoriy — xohlamasangiz o‘tkazib yuboring.</i>',
     parse_mode: 'HTML',
     reply_markup: {
       inline_keyboard: [
@@ -320,7 +320,7 @@ export async function handleRatingResponse(cq) {
     chat_id: cq.from.id,
     text:
       `${'⭐'.repeat(stars)}\n\nRahmat! Izoh yozmoqchimisiz?\n` +
-      '<i>Shu yerga yozing yoki o\u2018tkazib yuboring.</i>',
+      '<i>Shu yerga yozing yoki o‘tkazib yuboring.</i>',
     parse_mode: 'HTML',
     reply_markup: {
       inline_keyboard: [[
@@ -353,7 +353,7 @@ export async function handleReviewText(telegramId, text) {
 
   await tg('sendMessage', {
     chat_id: telegramId,
-    text: '✅ Izohingiz uchun rahmat! Restoran sahifasida ko\u2018rinadi.',
+    text: '✅ Izohingiz uchun rahmat! Restoran sahifasida ko‘rinadi.',
   });
   return true;
 }
