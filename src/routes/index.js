@@ -456,7 +456,23 @@ router.post('/admin/support/:id/reply', auth, requireRole('admin'), supportContr
 router.patch('/admin/support/:id/resolve', auth, requireRole('admin'), supportController.resolve);
 
 // ===== Admin paneli (role: admin) — dastur egasi =====
-router.get('/admin/stats', auth, requireRole('admin'), adminController.stats);
+/*
+ * '/admin/stats' — Boshqaruv (dashboard) sahifasining umumiy
+ * ko'rsatkichlari (bugungi buyurtma soni, aylanma, komissiya).
+ *
+ * Ilgari FAQAT requireRole('admin') edi — staff (xodim) UMUMAN
+ * kira olmasdi, department ahamiyatsiz edi. Dashboard sahifasi
+ * esa allowedPages orqali buxgalter, marketing kabi ko'p
+ * bo'limga ochiq (config/permissions.js), ammo sahifaning o'zi
+ * shu endpointdan ma'lumot olgani uchun sahifa ko'rinsa ham
+ * ichi bo'sh qolardi (403).
+ *
+ * Endi requirePage('dashboard') orqali: FAQAT o'z bo'limida
+ * 'dashboard' ruxsati bor xodim ko'radi. Bu umumiy son —
+ * individual buyurtma yoki mijoz ma'lumoti emas, shuning uchun
+ * bo'limlar aro ochiq bo'lishi xavfsiz.
+ */
+router.get('/admin/stats', ...AS('dashboard'), adminController.stats);
 router.get('/admin/restaurants', ...AS('restaurants'), adminController.restaurants);
 router.get('/admin/restaurants/:id/dishes', ...AS('restaurants'), adminController.restaurantDishes);
 router.get('/admin/restaurants/:id/reservations', ...AS('restaurants'), adminController.restaurantReservations);
