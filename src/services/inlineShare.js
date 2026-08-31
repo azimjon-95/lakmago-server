@@ -113,13 +113,33 @@ async function buildResult(dish, restaurant) {
     : '';
   const photo = photoUrl(dish.imageUrl || dish.images?.[0] || '');
 
-  // Xabar matni — HTML formatida
+  /*
+   * "Buyurtma berish" MATN ICHIDA emas, TUGMA sifatida.
+   *
+   * XATO EDI: link `<a href="...">Buyurtma berish</a>` bo'lib
+   * matnning o'zi ichida yozilgan edi. Telegram matn ichidagi
+   * havolani bosishda — hatto u to'g'ri t.me/.../?startapp
+   * bo'lsa ham — avval oraliq PREVIEW KARTASINI ko'rsatadi
+   * ("Веб-приложение LokmaGO... ЗАПУСТИТЬ") va foydalanuvchi
+   * Mini App'ni ochish uchun YANA bir marta bosishi kerak
+   * bo'lardi — skrinshotdagi holat aynan shu edi.
+   *
+   * INLINE TUGMA (reply_markup) esa boshqacha ishlaydi:
+   * Telegram uni maxsus tan oladi va bosilganda HECH QANDAY
+   * oraliq karta ko'rsatmasdan, DARHOL Mini App'ni taom bilan
+   * ochadi. Shuning uchun link endi matndan olib tashlanadi va
+   * reply_markup orqali tugma sifatida qo'shiladi.
+   */
+  const button = {
+    inline_keyboard: [[{ text: '🍽 Buyurtma berish', url: link }]],
+  };
+
+  // Xabar matni — endi havolasiz, faqat taom haqida ma'lumot
   const lines = [
     `🍽 <b>${esc(dish.name)}</b>`,
     price && `💰 <b>${esc(price)}</b>`,
     restaurant?.name && `📍 ${esc(restaurant.name)}`,
     dish.description && `\n${esc(dish.description)}`,
-    `\n👉 <a href="${link}">Buyurtma berish</a>`,
   ].filter(Boolean);
 
   const caption = lines.join('\n');
@@ -135,6 +155,7 @@ async function buildResult(dish, restaurant) {
       description: [price, restaurant?.name].filter(Boolean).join(' · '),
       caption,
       parse_mode: 'HTML',
+      reply_markup: button,
     };
   }
 
@@ -147,7 +168,8 @@ async function buildResult(dish, restaurant) {
     input_message_content: {
       message_text: caption,
       parse_mode: 'HTML',
-      disable_web_page_preview: false,
+      disable_web_page_preview: true,
     },
+    reply_markup: button,
   };
 }
