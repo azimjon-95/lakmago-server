@@ -276,6 +276,43 @@ export async function recordPayout(restaurantId, amount, adminId, note = '') {
   };
 }
 
+/*
+ * Barcha restoranlar bo'yicha naqd/karta buyurtma soni —
+ * LokmaGo admin paneli uchun (yagona so'rovda hammasi, N+1
+ * so'rov muammosi bo'lmasin).
+ */
+export async function getAllRestaurantsOrderCounts(from, to) {
+  const match = { status: 'delivered' };
+  if (from || to) {
+    match.updatedAt = {};
+    if (from) match.updatedAt.$gte = new Date(from);
+    if (to) match.updatedAt.$lte = new Date(to);
+  }
+
+  const rows = await Order.aggregate([
+    { $match: match },
+    {
+      $group: {
+        _id: {
+          restaurantId: '$restaurantId',
+          method: { $cond: [{ $eq: ['$paymentMethod', 'cash'] }, 'cash', 'card'] },
+        },
+        count: { $sum: 1 },
+      },
+    },
+  ]);
+
+  const byRestaurant = new Map();
+  for (const r of rows) {
+    const id = String(r._id.restaurantId);
+    if (!byRestaurant.has(id)) byRestaurant.set(id, { cashCount: 0, cardCount: 0 });
+    const bucket = byRestaurant.get(id);
+    if (r._id.method === 'cash') bucket.cashCount = r.count;
+    else bucket.cardCount = r.count;
+  }
+  return byRestaurant;
+}
+
 /** Restoran bo'yicha moliyaviy xulosa. */
 export async function getRestaurantSummary(restaurantId, from, to) {
   const match = { restaurantId };
@@ -303,5 +340,157 @@ export async function getRestaurantSummary(restaurantId, from, to) {
     tolangan: Math.abs(byType.payout || 0),
     qaytarilgan: Math.abs(byType.refund || 0),
     balans: restaurant?.balance || 0,
+  };
+}
+
+/*
+ * ═══════════════════════════════════════════════════════════
+ * RESTORAN O'ZI KO'RADIGAN HISOBOT
+ *
+ * Yuqoridagi getRestaurantSummary() LokmaGo admini uchun edi
+ * (Ledger tur bo'yicha yig'indi). Bu yerdagilar esa RESTORAN
+ * paneliga xos: "nechta buyurtma", "nechtasi naqd/karta",
+ * "qachon qancha o'tkazildi" — savolga JAVOB shaklida.
+ *
+ * XAVFSIZLIK: bu funksiyalar restaurantId ni har doim
+ * controller orqali (auth token'dan, rid(req)) oladi —
+ * so'rovdan emas. Restoran boshqa restoran ID'sini yozib
+ * kira olmasligi shu yerda emas, controller darajasida
+ * ta'minlanadi (controllers/restaurantBilling.js).
+ * ═══════════════════════════════════════════════════════════
+ */
+
+/**
+ * Sana oralig'ini "kun" chegaralariga aylantiradi.
+ *
+ * `from`/`to` berilmasa — BUGUN (restoran o'z mahalliy vaqtida
+ * kiritadi, server esa UTC bilan ishlaydi; frontend allaqachon
+ * to'g'ri ISO sanalarni yuboradi, bu yerda faqat standart
+ * qiymat qo'yiladi).
+ */
+function dayRange(from, to) {
+  const start = from ? new Date(from) : new Date();
+  const end = to ? new Date(to) : new Date();
+  if (!from) start.setHours(0, 0, 0, 0);
+  if (!to) end.setHours(23, 59, 59, 999);
+  return { start, end };
+}
+
+/**
+ * Restoran uchun buyurtma statistikasi: jami, naqd, karta —
+ * SON va SUMMA bilan. Faqat YAKUNLANGAN (yetkazilgan/topshirilgan)
+ * buyurtmalar hisoblanadi — bekor qilinganlar kirmaydi, chunki
+ * ularga hech qanday pul harakati bo'lmagan.
+ */
+export async function getRestaurantOrderStats(restaurantId, from, to) {
+  const { start, end } = dayRange(from, to);
+
+  /*
+   * Faqat 'delivered' — Order modelidagi YAGONA yakunlangan
+   * holat (models/Order.js). 'completed' bu sxemada UMUMAN
+   * mavjud emas — settleOrder() ham faqat shu holatga
+   * o'tishda chaqiriladi (controllers/restaurantPanel.js).
+   */
+  const rows = await Order.aggregate([
+    {
+      $match: {
+        restaurantId,
+        status: 'delivered',
+        updatedAt: { $gte: start, $lte: end },
+      },
+    },
+    {
+      $group: {
+        _id: { $cond: [{ $eq: ['$paymentMethod', 'cash'] }, 'cash', 'card'] },
+        count: { $sum: 1 },
+        total: { $sum: '$total' },
+      },
+    },
+  ]);
+
+  const cash = rows.find((r) => r._id === 'cash') || { count: 0, total: 0 };
+  const card = rows.find((r) => r._id === 'card') || { count: 0, total: 0 };
+
+  return {
+    from: start,
+    to: end,
+    ordersTotal: cash.count + card.count,
+    cash: { count: cash.count, amount: cash.total },
+    card: { count: card.count, amount: card.total },
+  };
+}
+
+/**
+ * Kunlik moliyaviy jadval — "qachon qancha o'tkazildi" savoliga
+ * javob. Har kun uchun: shu kunda yozilgan tushum, komissiya,
+ * o'tkazma (payout), va O'SHA KUN OXIRIDAGI balans.
+ *
+ * Balans oxirgi yozuv qiymatidan olinadi (Ledger yozuvlari
+ * xronologik ketma-ketlikda kelgani uchun kunning so'nggi
+ * o'zgarishi = kun oxiridagi holat).
+ */
+export async function getRestaurantDailyLedger(restaurantId, from, to) {
+  const { start, end } = dayRange(from, to);
+
+  const rows = await Ledger.aggregate([
+    { $match: { restaurantId, createdAt: { $gte: start, $lte: end } } },
+    {
+      $group: {
+        _id: {
+          day: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt' } },
+          type: '$type',
+        },
+        total: { $sum: '$amount' },
+        count: { $sum: 1 },
+      },
+    },
+    { $sort: { '_id.day': 1 } },
+  ]);
+
+  const byDay = new Map();
+  for (const r of rows) {
+    const day = r._id.day;
+    if (!byDay.has(day)) {
+      byDay.set(day, {
+        day,
+        tushum: 0, komissiya: 0, restoranUlushi: 0, tolangan: 0, qaytarilgan: 0,
+      });
+    }
+    const bucket = byDay.get(day);
+    if (r._id.type === 'payment_in') bucket.tushum = r.total;
+    if (r._id.type === 'commission') bucket.komissiya = r.total;
+    if (r._id.type === 'restaurant_due') bucket.restoranUlushi = r.total;
+    if (r._id.type === 'payout') bucket.tolangan = Math.abs(r.total);
+    if (r._id.type === 'refund') bucket.qaytarilgan = Math.abs(r.total);
+  }
+
+  return [...byDay.values()].sort((a, b) => b.day.localeCompare(a.day));
+}
+
+/**
+ * Karta orqali kelgan, lekin HALI restoranga o'tkazilmagan
+ * summa — "karta orqali to'langan pullarni Lokma restoran
+ * hisobiga o'tqazib berdimi" savoliga to'g'ridan-to'g'ri javob.
+ *
+ * Bu Restaurant.balance bilan BIR XIL EMAS: balans naqd
+ * komissiya qarzini ham o'z ichiga oladi (manfiy tomonga
+ * suradi). Bu yerda esa faqat "karta orqali kelib, hali
+ * o'tkazilmagan" qismi ajratib ko'rsatiladi — restoran
+ * "menga qachon pul kelishi kerak" deb so'raganda aniq
+ * javob berish uchun.
+ */
+export async function getRestaurantPendingPayout(restaurantId) {
+  const restaurant = await Restaurant.findById(restaurantId)
+    .select('balance totalPaidOut')
+    .lean();
+
+  return {
+    // Balans musbat bo'lsa — LokmaGo restoranga qarzdor (kelishi
+    // kerak bo'lgan pul). Manfiy bo'lsa — restoran LokmaGoga
+    // qarzdor (naqd buyurtmalar komissiyasi hali ushlanmagan).
+    balance: restaurant?.balance || 0,
+    pendingToReceive: Math.max(0, restaurant?.balance || 0),
+    owedToLokma: Math.max(0, -(restaurant?.balance || 0)),
+    totalPaidOutSoFar: restaurant?.totalPaidOut || 0,
   };
 }

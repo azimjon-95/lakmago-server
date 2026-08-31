@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { asyncHandler } from '../middleware/error.js';
 import { Ledger } from '../models/Ledger.js';
 import { Restaurant } from '../models/Restaurant.js';
-import { recordPayout, getRestaurantSummary } from '../services/billing.js';
+import { recordPayout, getRestaurantSummary, getAllRestaurantsOrderCounts } from '../services/billing.js';
 
 export const billingController = {
   // GET /api/admin/billing/overview — umumiy holat
@@ -37,8 +37,15 @@ export const billingController = {
     });
   }),
 
-  // GET /api/admin/billing/restaurants — restoranlar bo'yicha
-  byRestaurant: asyncHandler(async (_req, res) => {
+  /*
+   * GET /api/admin/billing/restaurants — restoranlar bo'yicha
+   *
+   * `from`/`to` ixtiyoriy: berilsa naqd/karta BUYURTMA SONI
+   * shu oraliq bo'yicha hisoblanadi (Order.updatedAt). Summalar
+   * (tushum, komissiya, balans) esa doim JAMI — Ledger'dan,
+   * chunki balans "hozirgi holat", bir kunlik emas.
+   */
+  byRestaurant: asyncHandler(async (req, res) => {
     const rows = await Ledger.aggregate([
       { $match: { restaurantId: { $ne: null } } },
       {
@@ -60,11 +67,13 @@ export const billingController = {
       .lean();
 
     const map = new Map(rows.map((r) => [String(r._id), r.types]));
+    const counts = await getAllRestaurantsOrderCounts(req.query.from, req.query.to);
 
     res.json(restaurants.map((r) => {
       const types = Object.fromEntries(
         (map.get(String(r._id)) || []).map((x) => [x.type, x.total]),
       );
+      const c = counts.get(String(r._id)) || { cashCount: 0, cardCount: 0 };
       return {
         _id: r._id,
         name: r.name,
@@ -74,6 +83,9 @@ export const billingController = {
         komissiya: types.commission || 0,
         balans: r.balance || 0,
         tolangan: r.totalPaidOut || 0,
+        // Naqd/karta buyurtma soni — tanlangan sana oralig'i bo'yicha
+        cashCount: c.cashCount,
+        cardCount: c.cardCount,
       };
     }));
   }),

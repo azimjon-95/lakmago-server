@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { restaurantController, dishController } from '../controllers/catalog.js';
+import { restaurantBillingController } from '../controllers/restaurantBilling.js';
 import { bannerController, authController, orderController } from '../controllers/misc.js';
 import { reservationController, paymentController } from '../controllers/services.js';
 import { adminController } from '../controllers/admin.js';
@@ -100,6 +101,17 @@ router.get('/reservations', auth, reservationController.myReservations);
 
 // ===== Restoran paneli (role: restaurant) =====
 router.get('/panel/me', auth, requireRole('restaurant'), restaurantPanelController.profile);
+
+/*
+ * Restoran o'z moliyaviy hisobotini ko'radi.
+ *
+ * `...R` = [auth, requireRole('restaurant')] — restaurantId
+ * har doim tokendan olinadi (controllers/restaurantBilling.js),
+ * boshqa restoran ma'lumotini so'rab bo'lmaydi.
+ */
+router.get('/panel/billing/summary', ...R, restaurantBillingController.summary);
+router.get('/panel/billing/daily', ...R, restaurantBillingController.daily);
+router.get('/panel/billing/ledger', ...R, restaurantBillingController.ledger);
 router.patch('/panel/me', auth, requireRole('restaurant'), restaurantPanelController.updateProfile);
 router.patch('/panel/me/active', auth, requireRole('restaurant'), restaurantPanelController.toggleActive);
 router.get('/panel/dishes', auth, requireRole('restaurant'), restaurantPanelController.dishes);

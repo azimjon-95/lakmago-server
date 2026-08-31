@@ -182,7 +182,7 @@ const orderSchema = new Schema(
     isPaid: { type: Boolean, default: false },
     paidAt: { type: Date, default: null },
 
-    paymentMethod: { type: String, enum: ['payme', 'click', 'uzum', 'cash'], default: 'cash' },
+    paymentMethod: { type: String, enum: ['payme', 'click', 'paynet', 'uzum', 'cash'], default: 'cash' },
     paymentLabel: { type: String },
     courierName: { type: String },
     etaMinutes: { type: Number },
