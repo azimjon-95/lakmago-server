@@ -56,7 +56,7 @@ export async function handleInlineQuery(inlineQuery) {
     const dish = await Dish.findById(m[1]).lean().catch(() => null);
     if (dish) {
       const rest = await Restaurant.findById(dish.restaurantId)
-        .select('name').lean().catch(() => null);
+        .select('name address').lean().catch(() => null);
       results.push(await buildResult(dish, rest));
     }
   } else {
@@ -73,7 +73,7 @@ export async function handleInlineQuery(inlineQuery) {
 
     const restIds = [...new Set(dishes.map((d) => String(d.restaurantId)))];
     const rests = await Restaurant.find({ _id: { $in: restIds } })
-      .select('name').lean().catch(() => []);
+      .select('name address').lean().catch(() => []);
     const restMap = new Map(rests.map((r) => [String(r._id), r]));
 
     for (const d of dishes) {
@@ -105,6 +105,20 @@ export async function handleInlineQuery(inlineQuery) {
   }
 }
 
+/*
+ * Ichimlikmi — taom emasmi.
+ *
+ * Ichimlikda 'volume' ("0.5 l") bo'ladi, taomda 'weight'
+ * ("150 г"). Ular BIR-BIRINI ALMASHTIRMAYDI: ichimlikda
+ * kaloriya/oqsil odatda kiritilmaydi (admin panelda ham shu
+ * qoidaga ko'ra forma o'zgaradi — src/lib/dishMeta.js,
+ * lakmago-admin), shuning uchun bu yerda ham ular faqat
+ * mos kelgan holatda ko'rsatiladi.
+ */
+function isDrink(dish) {
+  return Boolean(dish.volume) && !dish.weight;
+}
+
 /** Bitta taom uchun inline natija. */
 async function buildResult(dish, restaurant) {
   const link = await miniAppLink(dish._id);
@@ -134,15 +148,64 @@ async function buildResult(dish, restaurant) {
     inline_keyboard: [[{ text: '🍽 Buyurtma berish', url: link }]],
   };
 
-  // Xabar matni — endi havolasiz, faqat taom haqida ma'lumot
-  const lines = [
-    `🍽 <b>${esc(dish.name)}</b>`,
-    price && `💰 <b>${esc(price)}</b>`,
-    restaurant?.name && `📍 ${esc(restaurant.name)}`,
-    dish.description && `\n${esc(dish.description)}`,
-  ].filter(Boolean);
+  /*
+   * ═══ CAPTION — TARTIB BILAN ═══
+   *
+   * 1. Sarlavha (taom nomi)
+   * 2. Tavsif — bo'lsa
+   * 3. Narx — chegirma bo'lsa eski narx bilan chizib qo'yiladi
+   * 4. Restoran — nomi VA manzili (ilgari faqat nomi bor edi)
+   * 5. Miqdor/kaloriya/vaqt — BITTA QATORDA, faqat mavjudlari.
+   *    Oqsil/yog'/uglevod ATAYLAB kiritilmadi: bu inline karta
+   *    "reklama" vazifasini bajaradi, batafsil ozuqa jadvali
+   *    "Buyurtma berish" bosilgach ilovaning o'zida to'liq
+   *    ko'rinadi (screenshot 2) — bu yerda takrorlash caption'ni
+   *    cho'zib, o'qishni qiyinlashtirardi.
+   */
+  const priceLine = price
+    ? (dish.oldPrice > dish.price
+      ? `💰 <b>${esc(price)}</b> <s>${esc(dish.oldPrice.toLocaleString('ru-RU'))} so'm</s>`
+      : `💰 <b>${esc(price)}</b>`)
+    : '';
 
-  const caption = lines.join('\n');
+  const restLine = restaurant?.name
+    ? `📍 <b>${esc(restaurant.name)}</b>${restaurant.address ? ` — ${esc(restaurant.address)}` : ''}`
+    : '';
+
+  const factsParts = [];
+  const amount = isDrink(dish) ? dish.volume : dish.weight;
+  if (amount) factsParts.push(`⚖️ ${esc(amount)}`);
+  if (!isDrink(dish) && dish.calories) factsParts.push(`🔥 ${dish.calories} kkal`);
+  if (dish.prepMinutes) factsParts.push(`⏱ ${dish.prepMinutes} daq`);
+  const factsLine = factsParts.join('   ');
+
+  /*
+   * Ikki blok: "asosiy matn" (nom + tavsif) va "faktlar"
+   * (narx, restoran, o'lcham/kaloriya/vaqt). Ular orasida
+   * BITTA bo'sh qator — o'qishga qulay, lekin ortiqcha
+   * bo'shliq yig'ilib qolmaydi (murakkab filtr shart emas).
+   */
+  /*
+   * Tavsif uzun bo'lsa qisqartiriladi — Telegram rasm captioni
+   * uchun 1024 belgi chegarasi bor, undan oshsa Telegram
+   * butun xabarni RAD ETADI (taom umuman ulashilmay qoladi).
+   * Nom, narx, restoran va faktlar ustuvor — ular hech qachon
+   * kesilmaydi, faqat tavsif joy bo'shatib beradi.
+   */
+  const desc = dish.description
+    ? esc(dish.description.length > 220
+      ? `${dish.description.slice(0, 220).trim()}…`
+      : dish.description)
+    : '';
+
+  const header = [
+    `🍽 <b>${esc(dish.name)}</b>`,
+    desc,
+  ].filter(Boolean).join('\n');
+
+  const facts = [priceLine, restLine, factsLine].filter(Boolean).join('\n');
+
+  const caption = [header, facts].filter(Boolean).join('\n\n');
 
   // Rasm bo'lsa — photo turi (rasm tepada chiqadi)
   if (photo) {
