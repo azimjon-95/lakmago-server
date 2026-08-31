@@ -1,5 +1,6 @@
 import { config } from '../config/index.js';
 import { GroupChat } from '../models/GroupChat.js';
+import { buildMiniAppLink } from './telegram.js';
 
 const TG_API = `https://api.telegram.org/bot${config.telegramBotToken}`;
 
@@ -14,11 +15,21 @@ function promoText() {
   );
 }
 
-// WebApp tugmasi (guruhда inline URL tugma — web_app guruhда ishlamaydi, shuning uchun URL)
-function promoKeyboard() {
+/*
+ * XATO EDI: `url: config.webappUrl` = oddiy https://lokma.uz.
+ * Guruhda web_app tugma turi ishlamaydi (Telegram taqiqlaydi),
+ * shuning uchun oddiy `url` ishlatilgan — TO'G'RI qaror, lekin
+ * QIYMATI noto'g'ri edi: oddiy sayt manzili Telegram tomonidan
+ * brauzerda ochiladi, Mini App sifatida emas.
+ *
+ * t.me/BOT/APP?startapp ko'rinishidagi deep link esa `url`
+ * turida ham ishlaydi (guruhda ham) VA Mini App sifatida
+ * ochiladi — Telegram buni maxsus tan oladi (services/telegram.js).
+ */
+async function promoKeyboard() {
   return {
     inline_keyboard: [[
-      { text: '🍽 Buyurtma berish', url: config.webappUrl },
+      { text: '🍽 Buyurtma berish', url: await buildMiniAppLink() },
     ]],
   };
 }
@@ -57,7 +68,7 @@ export async function sendAndPinPromo(chatId) {
     chat_id: chatId,
     text: promoText(),
     parse_mode: 'HTML',
-    reply_markup: promoKeyboard(),
+    reply_markup: await promoKeyboard(),
     disable_web_page_preview: true,
   });
 

@@ -1,6 +1,7 @@
 import { config } from '../config/index.js';
 import { Dish } from '../models/Dish.js';
 import { Restaurant } from '../models/Restaurant.js';
+import { buildMiniAppLink } from './telegram.js';
 
 /**
  * Inline rejim — taomni rasm va formatlangan matn bilan ulashish.
@@ -32,29 +33,10 @@ function photoUrl(url) {
   return url;
 }
 
-// Bot username Telegram'dan bir marta olinadi va keshlanadi.
-// .env dagi qiymat noto'g'ri bo'lsa ham havola to'g'ri bo'ladi.
-let cachedUsername = null;
-
-async function getBotUsername() {
-  if (cachedUsername) return cachedUsername;
-  try {
-    const r = await fetch(`${TG_API}/getMe`);
-    const d = await r.json();
-    if (d.ok && d.result?.username) {
-      cachedUsername = d.result.username;
-      return cachedUsername;
-    }
-  } catch { /* pastdagi zaxiraga o'tamiz */ }
-  return config.botUsername;
-}
-
+// Bot username olish va deep link yasash endi markazda:
+// services/telegram.js -> buildMiniAppLink(). Shu yerda takrorlanmaydi.
 async function miniAppLink(dishId) {
-  const username = await getBotUsername();
-  const base = config.webappName
-    ? `https://t.me/${username}/${config.webappName}`
-    : `https://t.me/${username}`;
-  return `${base}?startapp=food_${dishId}`;
+  return buildMiniAppLink(`food_${dishId}`);
 }
 
 /**

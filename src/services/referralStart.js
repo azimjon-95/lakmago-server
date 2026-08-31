@@ -1,6 +1,7 @@
 import { config } from '../config/index.js';
 import { User } from '../models/User.js';
 import { parseReferralCode, attachReferral, checkChannelSubscription } from './referral.js';
+import { buildMiniAppLink } from './telegram.js';
 
 const TG_API = `https://api.telegram.org/bot${config.telegramBotToken}`;
 
@@ -116,17 +117,24 @@ export async function sendWebAppEntry(telegramId, user) {
     },
   });
 
-  // web_app tugmasi rad etilsa (URL noto'g'ri) — oddiy havola bilan yuboramiz.
-  // Shunda bot baribir ishlaydi, faqat ilova brauzerda ochiladi.
+  /*
+   * web_app tugmasi rad etilsa (URL sozlamada xato va h.k.) —
+   * oddiy `url` bilan qayta urinamiz.
+   *
+   * XATO EDI: `url: config.webappUrl` (oddiy https://lokma.uz)
+   * ishlatilardi — bu Telegram tomonidan BRAUZERDA ochiladi,
+   * Mini App sifatida emas. t.me deep link esa `url` turida
+   * ham Mini App bo'lib ochiladi (services/telegram.js).
+   */
   if (withWebApp && !withWebApp.ok) {
-    console.warn('[bot] web_app tugmasi rad etildi, oddiy havola bilan qayta urinilmoqda');
+    console.warn('[bot] web_app tugmasi rad etildi, deep link bilan qayta urinilmoqda');
     await tg('sendMessage', {
       chat_id: telegramId,
       text,
       parse_mode: 'HTML',
       reply_markup: {
         inline_keyboard: [
-          [{ text: '🍽 Taom buyurtma qilish', url: config.webappUrl }],
+          [{ text: '🍽 Taom buyurtma qilish', url: await buildMiniAppLink() }],
           ...menuRows,
         ],
       },

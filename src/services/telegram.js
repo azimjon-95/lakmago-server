@@ -2,6 +2,66 @@ import { config } from '../config/index.js';
 
 const TG_API = `https://api.telegram.org/bot${config.telegramBotToken}`;
 
+/*
+ * ═══ MINI APP DEEP LINK — markaziy joy ═══
+ *
+ * MUAMMO: Telegram'da tugma ikki XIL turda bo'ladi va ular
+ * chalkashtirilgan edi:
+ *
+ *   web_app: { url: 'https://lokma.uz' }
+ *     → Mini App sifatida ochiladi (Telegram ichida, WebView).
+ *     → LEKIN faqat SHAXSIY chatda ishlaydi. Guruhga bunday
+ *       tugma yuborishga Telegram Bot API o'zi yo'l qo'ymaydi.
+ *
+ *   url: 'https://lokma.uz'
+ *     → Guruhda ham ishlaydi, LEKIN oddiy tashqi havola —
+ *       Telegram uni brauzerda ochadi ("Открыть в браузере"),
+ *       Mini App emas. Aynan shu www.lokma.uz kabi oddiy
+ *       manzil guruh promo tugmasida va referal tugmasida
+ *       ishlatilgani uchun ular BRAUZERDA ochilardi.
+ *
+ *   url: 'https://t.me/BOT_USERNAME/APP_NAME?startapp=...'
+ *     → Bu UCHINCHI, to'g'ri yo'l: t.me domenidagi maxsus
+ *       deep link. Oddiy `url` turidagi tugmada ham ishlaydi
+ *       (ya'ni GURUHDA ham) VA Telegram buni avtomatik
+ *       ravishda Mini App sifatida ochadi — chunki bu link
+ *       t.me domeniga tegishli va Telegram klienti buni
+ *       maxsus tan oladi.
+ *
+ * Xulosa: guruhga/referalga yuboriladigan HAR QANDAY tugma
+ * shu funksiyadan olingan link bilan, `url:` turida
+ * (web_app EMAS) yuborilishi kerak.
+ */
+let cachedBotUsername = null;
+
+async function getBotUsername() {
+  if (cachedBotUsername) return cachedBotUsername;
+  try {
+    const r = await fetch(`${TG_API}/getMe`);
+    const d = await r.json();
+    if (d.ok && d.result?.username) {
+      cachedBotUsername = d.result.username;
+      return cachedBotUsername;
+    }
+  } catch { /* pastdagi zaxiraga o'tamiz */ }
+  return config.botUsername;
+}
+
+/**
+ * Mini App'ga to'g'ridan-to'g'ri ochiladigan deep link.
+ *
+ * @param {string} [startParam] - ixtiyoriy: qaysi ekran/taom
+ *   bilan ochilsin (masalan 'food_123'). Berilmasa ilova
+ *   oddiy bosh sahifadan ochiladi.
+ */
+export async function buildMiniAppLink(startParam) {
+  const username = await getBotUsername();
+  const base = config.webappName
+    ? `https://t.me/${username}/${config.webappName}`
+    : `https://t.me/${username}`;
+  return startParam ? `${base}?startapp=${startParam}` : `${base}?startapp`;
+}
+
 // Foydalanuvchiga push xabar yuborish (buyurtma statusi, bron tasdiqi)
 export async function notifyUser(telegramId, text) {
   if (!config.telegramBotToken) {
