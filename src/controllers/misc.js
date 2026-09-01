@@ -533,7 +533,17 @@ export const orderController = {
   // GET /api/orders/:id
   getOne: asyncHandler(async (req, res) => {
     if (!/^[a-f\d]{24}$/i.test(req.params.id)) return res.status(404).json({ error: 'Buyurtma topilmadi' });
-    const order = await Order.findById(req.params.id);
+    /*
+     * XAVFSIZLIK: userId bilan cheklanadi.
+     *
+     * ILGARI faqat Order.findById(id) edi — egasi TEKSHIRILMAGAN.
+     * Login qilgan istalgan mijoz istalgan buyurtma ID'sini
+     * kiritib, BOSHQA mijozning manzili, telefoni, to'lov
+     * holatini ko'ra olardi. ID'lar ketma-ket taxmin
+     * qilinadigan formatda emas (MongoDB ObjectId), lekin bu
+     * "xavfsizlik qorong'ulik orqali" — himoya emas.
+     */
+    const order = await Order.findOne({ _id: req.params.id, userId: req.userId });
     if (!order) return res.status(404).json({ error: 'Buyurtma topilmadi' });
     res.json(order);
   }),
