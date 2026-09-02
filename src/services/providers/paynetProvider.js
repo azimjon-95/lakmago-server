@@ -2,36 +2,66 @@ import { PaymentProvider } from './base.js';
 import { config } from '../../config/index.js';
 
 /**
- * Paynet.
+ * Paynet — UWS (Universal Web Service) konnektori.
  *
  * ┌──────────────────────────────────────────────────────────┐
- * │  DIQQAT: TRANSPORT QATLAMI HALI YOZILMAGAN               │
- * │                                                          │
- * │  Paynet merchant API rasmiy hujjati mavjud emas edi.      │
- * │  Endpoint, imzo usuli va maydon nomlarini taxmin qilib    │
- * │  yozish xavfli: noto'g'ri imzo bilan to'lov tasdiqlansa   │
- * │  pul yo'qoladi yoki soxta webhook qabul qilinadi.         │
- * │                                                          │
- * │  Hujjat kelgach faqat shu fayldagi TODO joylar            │
- * │  to'ldiriladi — qolgan tizim (model, split, payout,       │
- * │  registr, marshrutlar) tayyor va o'zgarmaydi.             │
+ * │  UWS TRANSPORT QATLAMI YOZILDI                            │
+ * │  (services/paynetUws.js, controllers/paynetUws.js)        │
+ * │                                                            │
+ * │  Arxitektura Click'dan farqli: Paynet HAR DOIM mijoz,      │
+ * │  bizning server esa server. Mijoz Paynet ilovasida         │
+ * │  bizning xizmatimizni tanlaydi, PAYNET bizga JSON-RPC      │
+ * │  so'rov yuboradi (POST /payments/paynet/uws). Shuning      │
+ * │  uchun bu klass (createCheckout/handleWebhook) UWS uchun   │
+ * │  ISHLATILMAYDI — checkout so'rovi bizdan Paynet'ga emas.   │
+ * │                                                            │
+ * │  createCheckout/handleWebhook HALI TODO qoladi: Paynet     │
+ * │  mijozga ko'rsatiladigan QR/deeplink formatini keyingi     │
+ * │  bosqichda taqdim etadi (test muvaffaqiyatli tugagach).    │
+ * │  O'shanda bu ikkalasi to'ldiriladi.                        │
  * └──────────────────────────────────────────────────────────┘
  *
  * Biznes modeli (tasdiqlangan, paymentSplit.js da bajarilgan):
  *   100% mijozdan → 90% restoran, 10% LokmaGo
- *   Paynet 2.5% ni LokmaGo ulushidan oladi → LokmaGo netto 7.5%
+ *   Paynet o'z haqini LokmaGo ulushidan oladi → LokmaGo netto kamayadi
  *   Restoran ulushi tegilmaydi.
  */
 export class PaynetProvider extends PaymentProvider {
   constructor() { super('paynet'); }
 
+  /*
+   * UWS uchun kerakli uchtasi: serviceId (Paynet test: 155),
+   * username/password (Basic Auth, BIZ o'ylab topamiz).
+   * merchantId/secretKey/baseUrl — checkout uchun, hali
+   * ishlatilmaydi, shuning uchun tekshiruvga kiritilmagan.
+   */
   isConfigured() {
     return Boolean(
       config.paynet.enabled
-      && config.paynet.merchantId
-      && config.paynet.secretKey
-      && config.paynet.baseUrl,
+      && config.paynet.serviceId
+      && config.paynet.username
+      && config.paynet.password,
     );
+  }
+
+  /*
+   * MUHIM AJRATISH: isConfigured() != mijozga ko'rsatish
+   * mumkinmi.
+   *
+   * isConfigured() true bo'lishi mumkin (UWS backend tayyor,
+   * Paynet bizga so'rov yubora oladi, sinov o'tkazish mumkin),
+   * lekin BIZDA HALI CHECKOUT YO'Q — mijoz "Paynet" tugmasini
+   * bossa createCheckout() chaqiriladi va u hali xato tashlaydi
+   * (QR/deeplink formatini Paynet test tugagach beradi).
+   *
+   * Shuning uchun availableProviders() (mijozga ko'rinadigan
+   * ro'yxat) UCHUN alohida shart: PAYNET_CHECKOUT_READY=true
+   * bo'lgandagina mijozga ko'rsatiladi. Bu env o'zgaruvchisi
+   * QR/deeplink kelib, createCheckout() to'ldirilgandan KEYIN
+   * yoqiladi — Payme'dagi acceptsNewPayments() naqshi bilan bir xil.
+   */
+  acceptsNewPayments() {
+    return this.isConfigured() && process.env.PAYNET_CHECKOUT_READY === 'true';
   }
 
   /*

@@ -166,10 +166,33 @@ export const config = {
   },
 
   paynet: {
-    // Paynet rasmiy hujjati kelgach to'ldiriladi
     enabled: process.env.PAYNET_ENABLED === 'true',
+
+    /*
+     * ═══ UWS (Universal Web Service) — kiruvchi RPC server ═══
+     *
+     * Click'dan TUBDAN farqli arxitektura: u yerda BIZ mijozni
+     * Click sahifasiga yo'naltiramiz (checkout). Paynet UWS'da
+     * esa YO'NALISH TESKARI — Paynet HAR DOIM mijoz (client),
+     * bizning serverimiz esa server. Mijoz Paynet ilovasida
+     * bizning xizmatimizni tanlaydi, PAYNET keyin bizga JSON-RPC
+     * so'rov yuboradi (POST /uws). Shuning uchun bu yerda
+     * "checkout" uchun kerak bo'ladigan merchantId/secretKey
+     * o'rniga Paynet SO'ROVLARINI autentifikatsiya qilish uchun
+     * HTTP Basic Auth login/parol bor — buni BIZ o'ylab topamiz
+     * va Paynet menejeriga "Texnik hamkorlik tartibi" anketasida
+     * taqdim etamiz (ular bizga emas).
+     */
+    serviceId: process.env.PAYNET_SERVICE_ID || '',      // Paynet test: 155
+    username: process.env.PAYNET_UWS_USERNAME || '',     // biz o'ylab topamiz
+    password: process.env.PAYNET_UWS_PASSWORD || '',     // biz o'ylab topamiz
+
+    /*
+     * Quyidagilar KEYINGI BOSQICH uchun — Paynet mijozga
+     * ko'rsatiladigan QR/deeplink formatini taqdim etgach
+     * to'ldiriladi (hozircha checkout oqimi yo'q).
+     */
     merchantId: process.env.PAYNET_MERCHANT_ID || '',
-    serviceId: process.env.PAYNET_SERVICE_ID || '',
     secretKey: process.env.PAYNET_SECRET_KEY || '',
     baseUrl: process.env.PAYNET_BASE_URL || '',
     returnUrl: process.env.PAYNET_RETURN_URL || '',

@@ -15,6 +15,8 @@ import { supportController } from '../controllers/support.js';
 import { cardController } from '../controllers/cards.js';
 import { cardPaymentController } from '../controllers/cardPayment.js';
 import { paymentController as gatewayController } from '../controllers/payments.js';
+import { paynetUwsController } from '../controllers/paynetUws.js';
+import { paynetIpWhitelist, paynetBasicAuth } from '../middleware/paynetAuth.js';
 import { billingController } from '../controllers/billing.js';
 import { settlementController } from '../controllers/settlement.js';
 import { expenseController } from '../controllers/expense.js';
@@ -434,6 +436,19 @@ router.post('/payments/payme', gatewayController.paymeWebhook);   // eskirgan
 router.post('/payments/paynet', gatewayController.paynetWebhook);
 router.post('/payments/click/prepare', gatewayController.clickPrepare);
 router.post('/payments/click/complete', gatewayController.clickComplete);
+
+/*
+ * Paynet UWS — Click'dan farqli, o'ziga xos auth zanjiri:
+ * Basic Auth (imzo emas, login/parol) + ixtiyoriy IP whitelist.
+ * `auth` (bizning JWT middleware) ISHLATILMAYDI — bu Paynet
+ * serveridan keladigan so'rov, mijoz/xodim emas.
+ */
+router.post(
+  '/payments/paynet/uws',
+  paynetIpWhitelist,
+  paynetBasicAuth,
+  paynetUwsController,
+);
 // Mijoz uchun
 router.get('/payments/status', gatewayController.status);
 router.get('/payments/link/:orderId', auth, gatewayController.getLink);

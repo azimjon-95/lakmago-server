@@ -59,7 +59,7 @@ const WEBHOOK_PATHS = [
   '/payments/click/prepare',
   '/payments/click/complete',
   '/payments/payme',
-  '/payments/paynet',
+  '/payments/paynet',   // startsWith orqali /payments/paynet/uws ham qamraladi
 ];
 
 export const apiLimiter = rateLimit({
