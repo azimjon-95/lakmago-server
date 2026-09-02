@@ -152,6 +152,69 @@ async function isStillPinned(chatId, messageId) {
   }
 }
 
+/*
+ * ═══ ESKI XABARLARDAGI TUGMANI YANGILASH ═══
+ *
+ * MUHIM TOPILMA: dailyGroupCheck() va onBotPromotedToAdmin()
+ * `group.promoMessageId` mavjud bo'lsa YANGI XABAR HECH QACHON
+ * YUBORMAYDI — faqat pin holatini tekshiradi. Ya'ni promoText()
+ * yoki promoKeyboard() ichidagi o'zgarish (masalan link formati
+ * tuzatilishi) FAQAT yangi guruhlarga ta'sir qiladi — avgustda
+ * (yoki undan oldin) yuborilgan xabarlar ESKI holicha, eski
+ * (noto'g'ri) tugma bilan abadiy qolib ketardi.
+ *
+ * Bu funksiya xabarni O'CHIRIB QAYTA YUBORMAYDI (bu pin holatini
+ * yo'qotardi, guruh a'zolariga bildirishnoma ketardi) — faqat
+ * `editMessageReplyMarkup` bilan TUGMANI YANGILAYDI. Matn,
+ * pin, xabar ID — hech biri o'zgarmaydi, mijoz hech narsa
+ * sezmaydi, faqat tugma bosilganda endi to'g'ri ishlaydi.
+ *
+ * Bir martalik migratsiya sifatida ishlatiladi (admin panel
+ * yoki bir marta qo'lda chaqirish orqali) — kod tuzatilgach
+ * BARCHA mavjud guruhdagi eski xabarlarni to'g'irlash uchun.
+ */
+export async function refreshPromoButton(chatId, messageId) {
+  await tg('editMessageReplyMarkup', {
+    chat_id: chatId,
+    message_id: messageId,
+    reply_markup: await promoKeyboard(),
+  });
+}
+
+/**
+ * Barcha faol guruhlardagi promo tugmasini yangilaydi.
+ * Xabar yuborilmagan guruh (promoMessageId yo'q) — o'tkazib
+ * yuboriladi, chunki onBotPromotedToAdmin() uni baribir to'g'ri
+ * (yangi) link bilan yuboradi.
+ */
+export async function refreshAllPromoButtons() {
+  const groups = await GroupChat.find({ isActive: true, promoMessageId: { $ne: null } });
+  let fixed = 0;
+  let failed = 0;
+
+  for (const group of groups) {
+    try {
+      await refreshPromoButton(group.chatId, group.promoMessageId);
+      fixed++;
+    } catch (e) {
+      failed++;
+      /*
+       * Eng ko'p uchraydigan sabab: xabar o'chirilgan yoki
+       * "message is not modified" (agar tugma ALLAQACHON
+       * to'g'ri bo'lsa — bu XATO EMAS, shunchaki hech narsa
+       * o'zgarmagani uchun Telegram rad etadi).
+       */
+      if (!/message is not modified/i.test(e.message)) {
+        console.warn(`[bot] ${group.chatId} — tugma yangilanmadi: ${e.message}`);
+      } else {
+        fixed++; failed--;   // aslida allaqachon to'g'ri edi — muvaffaqiyat hisoblanadi
+      }
+    }
+  }
+
+  return { total: groups.length, fixed, failed };
+}
+
 // KUNLIK TEKSHIRUV — barcha faol guruhlarni ko'rib chiqadi:
 //   - reklama yuborilmaган bo'lsa → yuboradi + pin
 //   - yuborilган lekin pin yo'qolган bo'lsa → qayta pin qiladi (yoki qayta yuboradi)

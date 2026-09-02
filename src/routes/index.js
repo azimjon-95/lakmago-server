@@ -521,6 +521,7 @@ router.post('/admin/groups/add', auth, requireRole('admin'), adminController.add
 router.post('/admin/groups/:chatId/resend', auth, requireRole('admin'), adminController.resendPromo);
 router.post('/admin/groups/:chatId/broadcast', auth, requireRole('admin'), adminController.broadcast);
 router.post('/admin/groups/broadcast-all', auth, requireRole('admin'), adminController.broadcastAll);
+router.post('/admin/groups/refresh-promo-buttons', auth, requireRole('admin'), adminController.refreshPromoButtons);
 router.post('/admin/groups/check', auth, requireRole('admin'), adminController.runGroupCheck);
 // Buyurtmalar nazorati
 router.get('/admin/orders', ...AS('orders'), adminController.orders);

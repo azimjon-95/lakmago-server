@@ -578,6 +578,24 @@ export const adminController = {
     res.json({ total: groups.length, sent, failed });
   }),
 
+  /*
+   * POST /api/admin/groups/refresh-promo-buttons
+   *
+   * BIR MARTALIK MIGRATSIYA: promoKeyboard() ichidagi link
+   * formati tuzatilgach (t.me/...?startapp), avval yuborilgan
+   * xabarlar ESKI (noto'g'ri, brauzerda ochiladigan) tugma
+   * bilan qolib ketgan edi — chunki dailyGroupCheck() mavjud
+   * xabarni qayta yubormaydi, faqat pin qiladi.
+   *
+   * Bu endpoint xabar matnini/pin holatini BUZMASDAN, faqat
+   * tugmani (editMessageReplyMarkup) yangilaydi. Kod tuzatishi
+   * kiritilgandan keyin BIR MARTA chaqiriladi.
+   */
+  refreshPromoButtons: asyncHandler(async (_req, res) => {
+    const { refreshAllPromoButtons } = await import('../services/telegramGroup.js');
+    res.json(await refreshAllPromoButtons());
+  }),
+
   // POST /api/admin/groups/check — kunlik tekshiruvni qo'lda ishga tushirish
   runGroupCheck: asyncHandler(async (_req, res) => {
     const { dailyGroupCheck } = await import('../services/telegramGroup.js');
