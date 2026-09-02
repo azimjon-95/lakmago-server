@@ -274,8 +274,15 @@ export const dineInLiveController = {
     ]);
 
     const { Restaurant } = await import('../models/Restaurant.js');
+    /*
+     * `phone` ATAYLAB olib tashlandi — bu chek mijozga ham
+     * chiqadi (izoh: "Mijoz va restoran uchun bir xil"), va
+     * hozircha restoran telefon raqami mijozga umuman
+     * ko'rsatilmasligi kerak (boshqa xavfsizlik tuzatishi
+     * bilan bir qatorda, catalog.js).
+     */
     const restaurant = await Restaurant.findById(session.restaurantId)
-      .select('name address phone imageUrl').lean();
+      .select('name address imageUrl').lean();
 
     // Barcha taomlarni birlashtiramiz
     const lines = [];

@@ -123,13 +123,60 @@ export const restaurantController = {
   // GET /api/restaurants/:id
   getOne: asyncHandler(async (req, res) => {
     if (!isValidId(req.params.id)) return res.status(404).json({ error: 'Restoran topilmadi' });
+
+    /*
+     * XAVFSIZLIK: "oq ro'yxat" (faqat kerakli maydonlar),
+     * "qora ro'yxat" EMAS.
+     *
+     * ILGARI: .select('-ownerId -__v') — "hammasini qaytar,
+     * faqat shu ikkitasini yashir". Bu XAVFLI naqsh: modelda
+     * XOHLAGAN vaqt yangi maxfiy maydon qo'shilsa (masalan
+     * bank hisob raqami), u AVTOMATIK ravishda mijozga oshkor
+     * bo'lib qolardi — hech kim buni sezmasdan.
+     *
+     * Tekshirsam, bu ANIQ SODIR BO'LGAN edi: model'da
+     * `balance` (LokmaGo-restoran hisob-kitob balansi),
+     * `commissionPercent`/`commissionMode` (shartnoma
+     * komissiyasi — biznes siri), `totalPaidOut`,
+     * `totalOrders`, `contractNumber`/`contractDate`
+     * (shartnoma ma'lumotlari), `deliveryMarkupPercent`
+     * (yetkazishga qo'shilgan ICHKI ustama foizi) va
+     * `phone` (shaxsiy telefon) — BARCHASI istalgan kishiga
+     * GET /restaurants/:id orqali ko'rinib turardi.
+     *
+     * Endi faqat mijozga KERAKLI, XAVFSIZ maydonlar sanab
+     * chiqiladi. Yangi maxfiy maydon qo'shilsa — bu ro'yxatda
+     * bo'lmagani uchun AVTOMATIK yashirin qoladi, aksincha emas.
+     */
     const restaurant = await Restaurant.findById(req.params.id)
-      .select('-ownerId -__v')
+      .select([
+        'name', 'cuisine', 'category', 'kind',
+        'rating', 'reviewCount',
+        'deliveryMin', 'deliveryMax', 'deliveryFee', 'freeDeliveryThreshold',
+        'tint', 'icon', 'imageUrl', 'images', 'discount',
+        'address', 'lat', 'lng', 'landmark',
+        'openTime', 'closeTime', 'timezone', 'workingDays',
+        'legalName', 'legalAddress', 'inn',
+        'minOrderAmount',
+        'delivery',
+        'serviceFeePercent', 'serviceFeeMin', 'serviceFeeMax',
+        'pickupEnabled', 'pickupDiscountPercent',
+        'deliveryEnabled',
+        'prepMinutes',
+        'shopTypes',
+        'reservationEnabled', 'reservationNote',
+        'isFresh', 'isBlocked', 'isActive',   // status filtri uchun quyida kerak
+        'createdAt',
+      ].join(' '))
       .lean();
     if (!restaurant) return res.status(404).json({ error: 'Restoran topilmadi' });
     if (restaurant.isBlocked || !restaurant.isActive) {
       return res.status(404).json({ error: 'Restoran hozircha mavjud emas' });
     }
+    // isBlocked/isActive faqat yuqoridagi tekshiruv uchun kerak edi —
+    // javobda mijozga chiqarilmaydi (texnik holat, ma'nosi yo'q)
+    delete restaurant.isBlocked;
+    delete restaurant.isActive;
 
     // isOpen — DOIM Toshkent (yoki restoranning o'z) vaqt
     // mintaqasidan hisoblanadi, mijoz qurilmasi qaysi davlatda
@@ -184,8 +231,11 @@ export const restaurantController = {
     const dish = await Dish.findById(req.params.id).lean();
     if (!dish) return res.status(404).json({ error: 'Taom topilmadi' });
     // Taom restorani bloklangan/nofaol bo'lsa ko'rsatmaymiz
+    // (deliveryMarkupPercent BU YERDA ishlatilmaydi — narx
+    // withCustomerPrices() ichida alohida hisoblanadi; keraksiz
+    // maxfiy maydonni so'ramaslik uchun select'dan olib tashlandi)
     const restaurant = await Restaurant.findById(dish.restaurantId)
-      .select('isBlocked isActive name deliveryMarkupPercent').lean();
+      .select('isBlocked isActive name').lean();
     if (!restaurant || restaurant.isBlocked || !restaurant.isActive) {
       return res.status(404).json({ error: 'Taom mavjud emas' });
     }
