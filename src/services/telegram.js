@@ -50,15 +50,20 @@ async function getBotUsername() {
 /**
  * Mini App'ga to'g'ridan-to'g'ri ochiladigan deep link.
  *
+ * Format: https://t.me/{bot}?startapp={param} — SHORT NAME
+ * (config.webappName, ilgari "/lokmago" bo'lib qo'shilardi)
+ * QISMISIZ. Bot BotFather'da "Menu Button" orqali BITTA
+ * asosiy Web App'ga bog'langan bo'lsa, Telegram short name
+ * ko'rsatilmasa ham to'g'ri Web App'ni avtomatik ochadi —
+ * so'ralgan aniq format shu.
+ *
  * @param {string} [startParam] - ixtiyoriy: qaysi ekran/taom
  *   bilan ochilsin (masalan 'food_123'). Berilmasa ilova
  *   oddiy bosh sahifadan ochiladi.
  */
 export async function buildMiniAppLink(startParam) {
   const username = await getBotUsername();
-  const base = config.webappName
-    ? `https://t.me/${username}/${config.webappName}`
-    : `https://t.me/${username}`;
+  const base = `https://t.me/${username}`;
   return startParam ? `${base}?startapp=${startParam}` : `${base}?startapp`;
 }
 
