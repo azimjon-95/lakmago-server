@@ -2,34 +2,48 @@ import { z } from 'zod';
 import { asyncHandler } from '../middleware/error.js';
 import { CatalogProduct } from '../models/CatalogProduct.js';
 import { Dish } from '../models/Dish.js';
-
-const CATEGORIES = [
-  'milliy', 'osh', 'shashlik', 'sup', 'salat', 'choyxona',
-  'zavtroki', 'obed',
-  'fastfood', 'lavash', 'burger', 'tovuq', 'pitsa',
-  'sushi', 'evropa', 'turetskaya',
-  'koffe', 'shirinlik', 'salqin', 'magazin_oziq',
-];
+import { Restaurant } from '../models/Restaurant.js';
+import { CATALOG_CATEGORY_VALUES, DRINKS_CATEGORY } from '../constants/catalogCategories.js';
 
 const productSchema = z.object({
   name: z.string().min(2).max(120),
   description: z.string().max(500).optional().default(''),
-  category: z.enum(CATEGORIES),
+  category: z.enum(CATALOG_CATEGORY_VALUES),
   volume: z.string().max(30).optional().default(''),
-  brand: z.string().max(60).optional().default(''),
   imageUrl: z.string().url().or(z.literal('')).optional().default(''),
-  suggestedPrice: z.number().min(0).max(10000000).optional().default(0),
+  isActive: z.boolean().optional(),
+  // Eski mijozlar (yoki eski frontend keshi) hali ham shu maydonlarni
+  // yuborishi mumkin — qabul qilamiz, lekin talab qilmaymiz. Yangi
+  // admin formasi bularni umuman yubormaydi (narx/brend/kaloriya
+  // endi katalog darajasida kerak emas — restoran/do'kon o'z narxini
+  // qo'yadi).
+  brand: z.string().max(60).optional(),
+  suggestedPrice: z.number().min(0).max(10000000).optional(),
   calories: z.number().min(0).optional(),
   protein: z.number().min(0).optional(),
   fat: z.number().min(0).optional(),
   carbs: z.number().min(0).optional(),
-  isActive: z.boolean().optional(),
 });
+
+/*
+ * CatalogProduct.category (70 ta, do'kon assortimenti) bilan
+ * Dish.category (mijoz ilovasidagi qidiruv/filtr kategoriyasi,
+ * ATAYLAB kichik — Dish.js dagi izohga qarang) ORASIDA to'g'ridan
+ * to'g'ri moslik yo'q. Shuning uchun katalogdan menyuga
+ * qo'shilganda mos kichik kategoriyaga xaritalanadi:
+ *   - "ichimliklar"  -> "salqin"       (mijoz ilovasida "Ichimlik")
+ *   - qolgan 69 tasi -> "magazin_oziq" (mijoz ilovasida "Do'kon mahsuloti")
+ * Aks holda mijoz bosh sahifasidagi kategoriya filtri 70 tagacha
+ * shishib ketardi.
+ */
+function toDishCategory(catalogCategory) {
+  return catalogCategory === DRINKS_CATEGORY ? 'salqin' : 'magazin_oziq';
+}
 
 export const catalogProductController = {
   // ===== ADMIN =====
 
-  // GET /api/admin/catalog
+  // GET /api/admin/catalog — admin har doim BARCHA 70 kategoriyani ko'radi
   list: asyncHandler(async (req, res) => {
     const filter = {};
     if (req.query.category) filter.category = req.query.category;
@@ -41,7 +55,7 @@ export const catalogProductController = {
     }
 
     const items = await CatalogProduct.find(filter)
-      .sort({ category: 1, brand: 1, name: 1 })
+      .sort({ category: 1, name: 1 })
       .limit(500)
       .lean();
 
@@ -103,12 +117,25 @@ export const catalogProductController = {
     res.json({ deleted: true });
   }),
 
-  // ===== RESTORAN =====
+  // ===== RESTORAN / DO'KON =====
 
   // GET /api/panel/catalog — tanlash uchun ro'yxat
+  //
+  // Muassasa turiga qarab qat'iy cheklov: restoran/kafe/oshxona/
+  // choyxona/fastfood/klub FAQAT "ichimliklar" ko'radi — mijoz
+  // (frontend) so'ragan category filtri bu holatda E'TIBORGA
+  // OLINMAYDI, chunki bu biznes qoidasi. Faqat do'kon (kind === 'shop')
+  // barcha 70 kategoriyani ko'radi va filtrlashi mumkin.
   forRestaurant: asyncHandler(async (req, res) => {
+    const restaurant = await Restaurant.findById(req.restaurantId).select('kind').lean();
+    const isShop = restaurant?.kind === 'shop';
+
     const filter = { isActive: true };
-    if (req.query.category) filter.category = req.query.category;
+    if (isShop) {
+      if (req.query.category) filter.category = req.query.category;
+    } else {
+      filter.category = DRINKS_CATEGORY;
+    }
     if (req.query.q) {
       filter.$or = [
         { name: { $regex: req.query.q, $options: 'i' } },
@@ -161,7 +188,7 @@ export const catalogProductController = {
       catalogProductId: product._id,
       name: product.name,
       description: product.description,
-      category: product.category,
+      category: toDishCategory(product.category),
       section: product.category,
       volume: product.volume,
       imageUrl: product.imageUrl,
@@ -172,7 +199,7 @@ export const catalogProductController = {
       protein: product.protein,
       fat: product.fat,
       carbs: product.carbs,
-      prepMinutes: 1, // ichimlik — tayyorlash kerak emas
+      prepMinutes: 1, // ichimlik/do'kon mahsuloti — tayyorlash kerak emas
       isAvailable: true,
     });
 

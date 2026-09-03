@@ -1,4 +1,5 @@
 import { Schema, model } from 'mongoose';
+import { CATALOG_CATEGORY_VALUES } from '../constants/catalogCategories.js';
 
 /**
  * Umumiy mahsulot katalogi.
@@ -9,24 +10,23 @@ import { Schema, model } from 'mongoose';
  *
  * Yechim: admin bir marta yaratadi, restoran tanlab faqat
  * o'z narxini qo'yadi.
+ *
+ * Kategoriya endi oziq-ovqat do'konlari (dukonlar) uchun ham
+ * moslashtirilgan 70 ta kategoriyani o'z ichiga oladi — qarang
+ * constants/catalogCategories.js. Restoran/kafe/oshxona/choyxona
+ * turidagi muassasalarga FAQAT "ichimliklar" ko'rinadi, qolgan
+ * 69 tasi faqat do'kon (Restaurant.kind === 'shop') uchun.
  */
 const catalogProductSchema = new Schema(
   {
     name: { type: String, required: true, trim: true, index: true },
     description: { type: String, default: '' },
 
-    // Dish bilan bir xil kategoriyalar
     category: {
       type: String,
       required: true,
       index: true,
-      enum: [
-        'milliy', 'osh', 'shashlik', 'sup', 'salat', 'choyxona',
-        'zavtroki', 'obed',
-        'fastfood', 'lavash', 'burger', 'tovuq', 'pitsa',
-        'sushi', 'evropa', 'turetskaya',
-        'koffe', 'shirinlik', 'salqin', 'magazin_oziq',
-      ],
+      enum: CATALOG_CATEGORY_VALUES,
     },
 
     // Hajm yoki og'irlik: "0.5 l", "1 l", "330 ml", "250 g"
@@ -34,13 +34,15 @@ const catalogProductSchema = new Schema(
 
     imageUrl: { type: String, default: '' },
 
-    // Brend — bir mahsulotning turli hajmlarini guruhlash uchun
+    /*
+     * Brend, tavsiya narx, kaloriya/oqsil/yog'/uglevod — ADMIN
+     * FORMASIDAN OLIB TASHLANDI (narxni restoran/do'kon o'zi
+     * qo'yadi, brend/ozuqaviy ma'lumot kerak emas). Maydonlar
+     * eski yozuvlar bilan moslik uchun sxemada qoladi, lekin
+     * endi yangi mahsulot qo'shishda to'ldirilmaydi.
+     */
     brand: { type: String, default: '', index: true },
-
-    // Tavsiya etilgan narx — restoran o'zgartirishi mumkin
     suggestedPrice: { type: Number, default: 0 },
-
-    // Ozuqaviy ma'lumot (ixtiyoriy)
     calories: { type: Number },
     protein: { type: Number },
     fat: { type: Number },
