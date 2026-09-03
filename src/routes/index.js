@@ -96,6 +96,7 @@ router.post('/payments/create', auth, paymentController.create);
  * tekshiruvini amalga oshiradi).
  */
 
+router.get('/reservations/menu/:restaurantId', reservationController.preOrderMenu);
 router.get('/reservations/my', auth, reservationController.myReservations);
 router.patch('/reservations/:id/cancel', auth, reservationController.cancelMine);
 router.post('/reservations', auth, reservationController.create);

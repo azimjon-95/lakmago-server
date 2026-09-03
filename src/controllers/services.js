@@ -5,6 +5,7 @@ import { Order } from '../models/Order.js';
 import { getIO } from '../sockets/io.js';
 import { notify } from '../services/notifications.js';
 import { notifyUser } from '../services/telegram.js';
+import { getDineInMenu } from '../services/dineInPricing.js';
 
 const reservationSchema = z.object({
   restaurantId: z.string(),
@@ -25,6 +26,30 @@ const reservationSchema = z.object({
 });
 
 export const reservationController = {
+  /*
+   * GET /api/reservations/menu/:restaurantId — bron oldindan
+   * buyurtma ekrani uchun menyu (restoranning o'z narxida,
+   * yetkazish ustamasi va mijoz xizmat haqisiz).
+   *
+   * ATAYLAB DineInConfig.status'ga BOG'LIQ EMAS. QR/Kiosk Dine-in
+   * (zalda QR skanerlab o'zi buyurtma berish) va bron oldindan
+   * buyurtmasi ikkita MUSTAQIL funksiya — biri restoranning
+   * jismoniy stollariga QR joylashtirilgan bo'lishini talab qiladi
+   * va restoran buni ATAYLAB yoqadi (DineInConfig.status==='active'),
+   * ikkinchisi esa shunchaki "kelishdan oldin taom tanlash" —
+   * har doim mavjud bo'lishi kerak. Ilgari ikkalasi bitta
+   * getDineInMenu servisiga BOG'LIQ EMAS edi (u DineInConfig'ni
+   * faqat useGlobalStopList uchun o'qiydi), lekin ESKI controller
+   * (dineInOrderController.menu) DineInConfig.status tekshiruvini
+   * QO'SHIB QO'YGAN edi — shuning uchun Dine-in o'chirilgan
+   * restoranlarda bron oldindan buyurtmasi "Dine-in faol emas"
+   * xatosi bilan butunlay ishlamay qolgan edi.
+   */
+  preOrderMenu: asyncHandler(async (req, res) => {
+    const dishes = await getDineInMenu(req.params.restaurantId);
+    res.json(dishes);
+  }),
+
   // POST /api/reservations
   create: asyncHandler(async (req, res) => {
     const parsed = reservationSchema.safeParse(req.body);
