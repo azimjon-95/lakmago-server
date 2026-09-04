@@ -62,6 +62,8 @@ router.post('/auth/telegram', loginLimiter, authController.telegram); // mijoz (
 router.post('/auth/telegram-web', loginLimiter, authController.telegramWeb); // mijoz — browser (Telegram Login Widget)
 router.post('/auth/refresh', loginLimiter, authController.refresh);   // mijoz — refresh token rotatsiyasi
 router.post('/auth/logout', authController.logout);                  // mijoz — sessiyani bekor qilish
+router.get('/auth/sessions', auth, authController.listSessions);     // mijoz — faol sessiyalar ro'yxati (3-bosqich: device nazorati)
+router.delete('/auth/sessions/:id', auth, authController.revokeSession); // mijoz — bitta qurilmada chiqish
 router.post('/auth/login', loginLimiter, panelAuthController.login);  // admin/restoran (panel)
 router.get('/auth/me', auth, panelAuthController.me);                 // umumiy — role bo'yicha ajratiladi
 

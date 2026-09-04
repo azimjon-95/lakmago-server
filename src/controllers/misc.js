@@ -12,7 +12,7 @@ import { isRestaurantOpen as isOpenTz } from '../services/restaurantTime.js';
 import { quoteDelivery } from '../services/deliveryEngine.js';
 import { applyPromotion, markPromotionUsed } from '../services/promotions.js';
 import { User } from '../models/User.js';
-import { AuthIdentity } from '../models/AuthIdentity.js';
+import { linkIdentity } from '../services/authIdentity.js';
 import { Session } from '../models/Session.js';
 import { Order } from '../models/Order.js';
 import { getIO } from '../sockets/io.js';
@@ -106,11 +106,24 @@ async function completeTelegramAuth(tgUser, { platform, deviceId, startParam } =
     throw err;
   }
 
-  await AuthIdentity.findOneAndUpdate(
-    { provider: 'telegram', providerUserId: telegramId },
-    { $setOnInsert: { userId: user._id, provider: 'telegram', providerUserId: telegramId } },
-    { upsert: true, setDefaultsOnInsert: true },
-  );
+  /*
+   * AuthIdentity bog'lash — linkIdentity() orqali (services/authIdentity.js,
+   * Auth 3-bosqich fundamenti). Bu YANGI foydalanuvchi uchun ham,
+   * ESKI (AuthIdentity'ga hali ega bo'lmagan, lazy migratsiya)
+   * foydalanuvchi uchun ham ishlaydi. Xato (IDENTITY_ALREADY_LINKED)
+   * amalda deyarli imkonsiz — user allaqachon telegramId orqali
+   * topilgan, demak shu telegramId'ga bog'langan identity, agar
+   * mavjud bo'lsa, mantiqan shu userga tegishli bo'lishi kerak.
+   * Faqat ma'lumotlar bazasi nomuvofiqligi holatida yuz beradi —
+   * bunday holatda ham LOGIN MUVAFFAQIYATSIZ bo'lmasligi kerak
+   * (foydalanuvchi tajribasi ustuvor), shuning uchun log qilinadi,
+   * lekin otilmaydi.
+   */
+  try {
+    await linkIdentity(user._id, 'telegram', telegramId);
+  } catch (e) {
+    console.error('[auth] linkIdentity nomuvofiqlik:', e.message);
+  }
 
   if (user.referredBy && !user.referralRewarded) {
     try { await rewardReferralIfSubscribed(user); } catch { /* jim */ }
@@ -232,6 +245,44 @@ export const authController = {
         { revokedAt: new Date() },
       );
     }
+    res.json({ ok: true });
+  }),
+
+  /*
+   * ===== 3-BOSQICH: Session nazorati (device/session management) =====
+   *
+   * Android/iOS qo'shilganda bitta foydalanuvchi bir vaqtning
+   * o'zida bir nechta faol sessiyaga ega bo'ladi (telegram + web +
+   * android + ios). Bu ikkita endpoint HOZIROQ real va foydali —
+   * yangi provayder yoki fake ma'lumot talab qilmaydi, faqat
+   * mavjud Session kolleksiyasi ustidan ishlaydi.
+   */
+
+  // GET /api/auth/sessions — joriy foydalanuvchining barcha FAOL
+  // (bekor qilinmagan, muddati o'tmagan) sessiyalari. refreshTokenHash
+  // HECH QACHON qaytarilmaydi — faqat qurilma/platforma/vaqt ma'lumoti.
+  listSessions: asyncHandler(async (req, res) => {
+    const sessions = await Session.find({
+      userId: req.userId,
+      revokedAt: null,
+      expiresAt: { $gt: new Date() },
+    })
+      .select('platform deviceId createdAt expiresAt')
+      .sort({ createdAt: -1 })
+      .lean();
+    res.json({ sessions });
+  }),
+
+  // DELETE /api/auth/sessions/:id — bitta qurilmadagi sessiyani
+  // bekor qiladi ("boshqa qurilmada chiqish"). Faqat O'ZINING
+  // sessiyasini bekor qila oladi — userId bo'yicha tekshiriladi,
+  // aks holda boshqa foydalanuvchi sessiyasini bekor qilish mumkin
+  // bo'lib qolardi (IDOR — Insecure Direct Object Reference).
+  revokeSession: asyncHandler(async (req, res) => {
+    const session = await Session.findOne({ _id: req.params.id, userId: req.userId });
+    if (!session) return res.status(404).json({ error: 'Sessiya topilmadi' });
+    session.revokedAt = new Date();
+    await session.save();
     res.json({ ok: true });
   }),
 };
