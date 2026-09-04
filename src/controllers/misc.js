@@ -1,6 +1,9 @@
 import { z } from 'zod';
 import { asyncHandler } from '../middleware/error.js';
-import { signToken, verifyTelegramInitData } from '../middleware/auth.js';
+import {
+  signToken, verifyTelegramInitData,
+  signAccessToken, generateRefreshToken, hashRefreshToken, refreshTokenExpiry,
+} from '../middleware/auth.js';
 import { Banner } from '../models/User.js';
 import { Restaurant } from '../models/Restaurant.js';
 import { Dish } from '../models/Dish.js';
@@ -9,6 +12,8 @@ import { isRestaurantOpen as isOpenTz } from '../services/restaurantTime.js';
 import { quoteDelivery } from '../services/deliveryEngine.js';
 import { applyPromotion, markPromotionUsed } from '../services/promotions.js';
 import { User } from '../models/User.js';
+import { AuthIdentity } from '../models/AuthIdentity.js';
+import { Session } from '../models/Session.js';
 import { Order } from '../models/Order.js';
 import { getIO } from '../sockets/io.js';
 import { notify } from '../services/notifications.js';
@@ -53,7 +58,8 @@ export const bannerController = {
 
 export const authController = {
   // POST /api/auth/telegram
-  // Body: { initData } — Telegram.WebApp.initData (server shu yerdan initDataUnsafe.user ni oladi va tasdiqlaydi)
+  // Body: { initData, platform?, deviceId? } — Telegram.WebApp.initData
+  // (server shu yerdan initDataUnsafe.user ni oladi va tasdiqlaydi)
   telegram: asyncHandler(async (req, res) => {
     const { initData } = req.body;
     if (!initData) return res.status(400).json({ error: 'initData yo‘q' });
@@ -94,15 +100,109 @@ export const authController = {
       await user.save();
     }
 
+    // 2.1) BLOCKED foydalanuvchi — autentifikatsiya rad etiladi.
+    // Access token qisqa umrli (1 soat) bo'lgani uchun bu yerda
+    // tekshirish yetarli: har oddiy so'rovda emas, faqat har yangi
+    // token olishda (login/refresh) — bloklash amalda tez ta'sir
+    // qiladi, lekin har so'rovda qo'shimcha DB query kerak emas.
+    if (user.status === 'BLOCKED') {
+      return res.status(403).json({ error: 'Akkauntingiz bloklangan' });
+    }
+
+    // 2.2) AuthIdentity bog'lash — YANGI foydalanuvchi uchun ham,
+    // ESKI (bu commit'dan oldin yaratilgan, hali AuthIdentity'ga
+    // ega bo'lmagan) foydalanuvchi uchun ham ishlaydi (LAZY
+    // MIGRATSIYA — alohida skript shart emas, lekin bir martalik
+    // migratsiya skripti ham mavjud, pastga qarang: scripts/).
+    // upsert — parallel so'rovlarda ham xavfsiz (unique index bor).
+    await AuthIdentity.findOneAndUpdate(
+      { provider: 'telegram', providerUserId: telegramId },
+      { $setOnInsert: { userId: user._id, provider: 'telegram', providerUserId: telegramId } },
+      { upsert: true, setDefaultsOnInsert: true },
+    );
+
     // 3) Referal bonusини tekshirish (obuna bo'lган bo'lsa beramiz)
     if (user.referredBy && !user.referralRewarded) {
       try { await rewardReferralIfSubscribed(user); } catch { /* jim */ }
     }
 
-    // 4) JWT qaytarish
+    // 4) Token qaytarish.
+    //
+    // `token` — ESKI, uzoq muddatli (30 kun) JWT. Orqaga moslik
+    // uchun SAQLANADI: hozirgi client shu maydonni o'qiydi va
+    // localStorage'da saqlaydi, refresh oqimini hali bilmaydi.
+    // Client yangilanganda shu maydonni asta-sekin olib tashlash
+    // mumkin bo'ladi.
+    //
+    // `accessToken` + `refreshToken` — YANGI, qisqa/uzoq juftlik
+    // (Session sifatida DB'da hash holida saqlanadi, rotatsiya
+    // bilan). Yangilangan client shularni ishlatadi.
     const token = signToken(String(user._id), user.role ?? 'customer');
-    res.json({ token, user, isNewUser });
-  })
+    const accessToken = signAccessToken(String(user._id), user.role ?? 'customer');
+
+    const refreshToken = generateRefreshToken();
+    await Session.create({
+      userId: user._id,
+      refreshTokenHash: hashRefreshToken(refreshToken),
+      deviceId: req.body.deviceId || '',
+      platform: ['telegram', 'web', 'android', 'ios'].includes(req.body.platform) ? req.body.platform : 'telegram',
+      expiresAt: refreshTokenExpiry(),
+    });
+
+    res.json({ token, accessToken, refreshToken, user, isNewUser });
+  }),
+
+  // POST /api/auth/refresh
+  // Body: { refreshToken }
+  // Eski Session revoke qilinadi, yangisi yaratiladi (rotatsiya) —
+  // o'g'irlangan eski refresh token qayta ishlatilsa rad etiladi.
+  refresh: asyncHandler(async (req, res) => {
+    const { refreshToken } = req.body;
+    if (!refreshToken) return res.status(400).json({ error: 'refreshToken yo‘q' });
+
+    const tokenHash = hashRefreshToken(refreshToken);
+    const session = await Session.findOne({ refreshTokenHash: tokenHash });
+
+    if (!session || session.revokedAt || session.expiresAt < new Date()) {
+      return res.status(401).json({ error: 'Sessiya yaroqsiz — qayta kiring' });
+    }
+
+    const user = await User.findById(session.userId);
+    if (!user || user.status === 'BLOCKED') {
+      session.revokedAt = new Date();
+      await session.save();
+      return res.status(403).json({ error: 'Akkauntingiz bloklangan' });
+    }
+
+    // Rotatsiya: eski sessiya bekor qilinadi, yangisi yaratiladi
+    session.revokedAt = new Date();
+    await session.save();
+
+    const newRefreshToken = generateRefreshToken();
+    await Session.create({
+      userId: user._id,
+      refreshTokenHash: hashRefreshToken(newRefreshToken),
+      deviceId: session.deviceId,
+      platform: session.platform,
+      expiresAt: refreshTokenExpiry(),
+    });
+
+    const accessToken = signAccessToken(String(user._id), user.role ?? 'customer');
+    res.json({ accessToken, refreshToken: newRefreshToken });
+  }),
+
+  // POST /api/auth/logout
+  // Body: { refreshToken }
+  logout: asyncHandler(async (req, res) => {
+    const { refreshToken } = req.body;
+    if (refreshToken) {
+      await Session.updateOne(
+        { refreshTokenHash: hashRefreshToken(refreshToken), revokedAt: null },
+        { revokedAt: new Date() },
+      );
+    }
+    res.json({ ok: true });
+  }),
 };
 
 // MongoDB ObjectId formatи (24 belgili hex)

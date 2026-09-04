@@ -117,6 +117,19 @@ export const panelAuthController = {
       });
     }
 
+    // Mijoz (Telegram Mini App) — Auth fundamenti: GET /auth/me
+    // to'liq profil obyektini qaytaradi (panel javobidan farqli,
+    // chunki client (masalan ProfilePage) shu maydonlarga tayanadi:
+    // addresses, cards, bonusBalance va h.k.). status===BLOCKED
+    // bo'lsa rad etiladi — token hali muddati o'tmagan bo'lsa ham
+    // (admin keyinroq bloklagan bo'lishi mumkin).
+    if (req.role === 'customer') {
+      const user = await User.findById(req.userId);
+      if (!user) return res.status(404).json({ error: 'Foydalanuvchi topilmadi' });
+      if (user.status === 'BLOCKED') return res.status(403).json({ error: 'Akkauntingiz bloklangan' });
+      return res.json({ user });
+    }
+
     const user = await User.findById(req.userId).populate('restaurantId');
     if (!user) return res.status(404).json({ error: 'Foydalanuvchi topilmadi' });
     res.json({

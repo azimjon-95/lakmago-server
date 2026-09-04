@@ -18,6 +18,22 @@ const userSchema = new Schema(
 
     lastLoginAt: { type: Date },
     phone: { type: String },
+    // Telefon SMS/qo'ng'iroq orqali tasdiqlanganmi (hozircha
+    // ishlatilmaydi — Auth fundamenti uchun tayyorlab qo'yilgan,
+    // kelajakda "phone" auth-provayderi qo'shilganda kerak bo'ladi)
+    phoneVerified: { type: Boolean, default: false },
+
+    /*
+     * status — YANGI, ACTIVE|BLOCKED|DELETED. Mavjud `isActive`
+     * (pastda) bilan BIR TOMONLAMA sinxron: status o'zgarsa
+     * isActive ham avtomatik yangilanadi (pre-save hook, pastda).
+     * Aksincha EMAS — isActive'ni to'g'ridan-to'g'ri o'zgartiradigan
+     * eski kod yo'q (tekshirildi), shuning uchun bu xavfsiz.
+     * Ikkalasini saqlash sababi: isActive allaqachon admin
+     * ro'yxatida filtr sifatida ishlatiladi (controllers/admin.js),
+     * uni olib tashlash keraksiz risk.
+     */
+    status: { type: String, enum: ['ACTIVE', 'BLOCKED', 'DELETED'], default: 'ACTIVE', index: true },
 
     // Rol: customer (mijoz), restaurant (restoran egasi), admin (dastur egasi)
     role: { type: String, enum: ['customer', 'restaurant', 'admin'], default: 'customer' },
@@ -95,6 +111,25 @@ const userSchema = new Schema(
   { timestamps: true },
 );
 
+/*
+ * avatarUrl — Auth fundamenti spetsifikatsiyasidagi nom. Alohida
+ * maydon sifatida SAQLAMAYMIZ (ikki manba = asinxron bo'lib qolish
+ * xavfi) — buning o'rniga mavjud photoUrl'ga ishora qiluvchi
+ * VIRTUAL. Yangi kod user.avatarUrl deb o'qishi mumkin, eski kod
+ * esa user.photoUrl bilan davom etaveradi — ikkalasi ham bir xil
+ * qiymatni ko'radi.
+ */
+userSchema.virtual('avatarUrl').get(function () { return this.photoUrl; });
+
+// status o'zgarsa isActive avtomatik sinxronlanadi (bir tomonlama
+// — pastga qarang, User.js boshidagi izohga)
+userSchema.pre('save', function (next) {
+  if (this.isModified('status')) {
+    this.isActive = this.status === 'ACTIVE';
+  }
+  next();
+});
+
 // Parolni tekshirish
 userSchema.methods.checkPassword = function (plain) {
   if (!this.passwordHash) return false;
@@ -106,8 +141,9 @@ userSchema.statics.hashPassword = function (plain) {
   return bcrypt.hashSync(plain, 10);
 };
 
-// JSON'da parol hash'ini yashirish
+// JSON'da parol hash'ini yashirish, virtual maydonlarni qo'shish
 userSchema.set('toJSON', {
+  virtuals: true,
   transform(_doc, ret) {
     delete ret.passwordHash;
     return ret;

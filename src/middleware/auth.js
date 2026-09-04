@@ -85,6 +85,41 @@ export function signToken(userId, role, restaurantId = null, department = null) 
   return jwt.sign({ userId, role, restaurantId, department }, config.jwtSecret, { expiresIn: '30d' });
 }
 
+/*
+ * ===== AUTH FUNDAMENTI (Telegram Mini App + kelajakdagi Web/Android/iOS) =====
+ *
+ * signToken() (yuqorida) admin/restoran/xodim panellarida ishlatiladi
+ * — ularga TEGILMADI, hali ham 30 kunlik yagona token bilan ishlaydi
+ * (panelda refresh oqimi yo'q, uni o'zgartirish alohida ish).
+ *
+ * Quyidagilar FAQAT customer (Telegram Mini App) auth oqimi uchun —
+ * access token QISQA muddatli (bloklash tezda ta'sir qilishi uchun),
+ * refresh token esa UZOQ muddatli va Session sifatida DB'da HASH
+ * holida saqlanadi (xom holda hech qachon emas).
+ */
+const ACCESS_TOKEN_TTL = '1h';
+const REFRESH_TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 kun
+
+export function signAccessToken(userId, role = 'customer') {
+  return jwt.sign({ userId, role, type: 'access' }, config.jwtSecret, { expiresIn: ACCESS_TOKEN_TTL });
+}
+
+// Xavfsiz tasodifiy refresh token — JWT EMAS (imzo tekshirish shart
+// emas, faqat DB'dagi hash bilan solishtiriladi — shuning uchun
+// istalgan payt Session'ni revoke qilib bekor qilsa bo'ladi, JWT
+// singari muddati tugagunga qadar kutish shart emas)
+export function generateRefreshToken() {
+  return crypto.randomBytes(48).toString('hex');
+}
+
+export function hashRefreshToken(token) {
+  return crypto.createHash('sha256').update(token).digest('hex');
+}
+
+export function refreshTokenExpiry() {
+  return new Date(Date.now() + REFRESH_TOKEN_TTL_MS);
+}
+
 /**
  * Sahifa darajasidagi ruxsat — xodim (staff) faqat o'z bo'limiga
  * tegishli sahifalarga kira oladi. Admin va restoran uchun

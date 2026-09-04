@@ -57,9 +57,11 @@ const R = [auth, requireRole('restaurant')];   // Restoran paneli
 const AS = (page) => [auth, requireRole('admin', 'staff'), requirePage(page)];
 
 // ===== Autentifikatsiya =====
-router.post('/auth/telegram', loginLimiter, authController.telegram);       // mijoz (webapp)
-router.post('/auth/login', loginLimiter, panelAuthController.login);         // admin/restoran (panel)
-router.get('/auth/me', auth, panelAuthController.me);
+router.post('/auth/telegram', loginLimiter, authController.telegram); // mijoz (webapp)
+router.post('/auth/refresh', loginLimiter, authController.refresh);   // mijoz — refresh token rotatsiyasi
+router.post('/auth/logout', authController.logout);                  // mijoz — sessiyani bekor qilish
+router.post('/auth/login', loginLimiter, panelAuthController.login);  // admin/restoran (panel)
+router.get('/auth/me', auth, panelAuthController.me);                 // umumiy — role bo'yicha ajratiladi
 
 // ===== Ochiq katalog (mijoz webapp) =====
 router.get('/banners', bannerController.list);
