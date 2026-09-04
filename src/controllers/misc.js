@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { asyncHandler } from '../middleware/error.js';
 import {
-  signToken, verifyTelegramInitData,
+  signToken, verifyTelegramInitData, verifyTelegramLoginWidget,
   signAccessToken, generateRefreshToken, hashRefreshToken, refreshTokenExpiry,
 } from '../middleware/auth.js';
 import { Banner } from '../models/User.js';
@@ -56,100 +56,131 @@ export const bannerController = {
 
 
 
+/*
+ * Telegram orqali autentifikatsiyani YAKUNLAYDI — User topish/
+ * yaratish, BLOCKED tekshiruvi, AuthIdentity bog'lash, referal,
+ * Session + tokenlar. Mini App (initData) va Login Widget (browser)
+ * IKKALASI HAM shu funksiyaga kelib qo'shiladi — faqat DASTLABKI
+ * VALIDATSIYA farqli (tepada authController.telegram va
+ * authController.telegramWeb'ga qarang).
+ *
+ * tgUser maydonlari: id (majburiy), first_name, last_name,
+ * username, language_code (FAQAT Mini App'da bor), is_premium
+ * (FAQAT Mini App'da bor), photo_url.
+ *
+ * MUHIM: language_code/is_premium kabi FAQAT Mini App orqali
+ * keladigan maydonlar undefined bo'lsa, profileFields'ga UMUMAN
+ * QO'SHILMAYDI — aks holda foydalanuvchi avval Mini App'da
+ * o'rnatgan qiymat (masalan languageCode:'uz'), keyin Login
+ * Widget orqali kirganda undefined bilan ustidan yozilib
+ * o'chib qolardi (Object.assign undefined'ni ham qo'llaydi).
+ */
+async function completeTelegramAuth(tgUser, { platform, deviceId, startParam } = {}) {
+  const telegramId = String(tgUser.id);
+  const profileFields = { lastLoginAt: new Date() };
+  if (tgUser.first_name !== undefined) profileFields.firstName = tgUser.first_name;
+  if (tgUser.last_name !== undefined) profileFields.lastName = tgUser.last_name;
+  if (tgUser.username !== undefined) profileFields.username = tgUser.username;
+  if (tgUser.language_code !== undefined) profileFields.languageCode = tgUser.language_code;
+  if (tgUser.is_premium !== undefined) profileFields.isPremium = Boolean(tgUser.is_premium);
+  if (tgUser.photo_url !== undefined) profileFields.photoUrl = tgUser.photo_url;
+
+  let user = await User.findOne({ telegramId });
+  let isNewUser = false;
+  if (!user) {
+    isNewUser = true;
+    user = await User.create({ telegramId, ...profileFields });
+
+    const refCode = parseReferralCode(startParam);
+    if (refCode) {
+      try { await attachReferral(user, refCode); } catch { /* jim */ }
+    }
+  } else {
+    Object.assign(user, profileFields);
+    await user.save();
+  }
+
+  if (user.status === 'BLOCKED') {
+    const err = new Error('Akkauntingiz bloklangan');
+    err.status = 403;
+    throw err;
+  }
+
+  await AuthIdentity.findOneAndUpdate(
+    { provider: 'telegram', providerUserId: telegramId },
+    { $setOnInsert: { userId: user._id, provider: 'telegram', providerUserId: telegramId } },
+    { upsert: true, setDefaultsOnInsert: true },
+  );
+
+  if (user.referredBy && !user.referralRewarded) {
+    try { await rewardReferralIfSubscribed(user); } catch { /* jim */ }
+  }
+
+  const token = signToken(String(user._id), user.role ?? 'customer');
+  const accessToken = signAccessToken(String(user._id), user.role ?? 'customer');
+
+  const refreshToken = generateRefreshToken();
+  await Session.create({
+    userId: user._id,
+    refreshTokenHash: hashRefreshToken(refreshToken),
+    deviceId: deviceId || '',
+    platform: ['telegram', 'web', 'android', 'ios'].includes(platform) ? platform : 'telegram',
+    expiresAt: refreshTokenExpiry(),
+  });
+
+  return { token, accessToken, refreshToken, user, isNewUser };
+}
+
 export const authController = {
-  // POST /api/auth/telegram
-  // Body: { initData, platform?, deviceId? } — Telegram.WebApp.initData
-  // (server shu yerdan initDataUnsafe.user ni oladi va tasdiqlaydi)
+  // POST /api/auth/telegram — Telegram Mini App (initData)
+  // Body: { initData, platform?, deviceId? }
   telegram: asyncHandler(async (req, res) => {
     const { initData } = req.body;
     if (!initData) return res.status(400).json({ error: 'initData yo‘q' });
 
-    // 1) initData'ni Telegram Bot Token bilan HMAC-SHA256 orqali tasdiqlash
     const data = verifyTelegramInitData(initData);
     if (!data) return res.status(401).json({ error: 'Telegram tekshiruvi muvaffaqiyatsiz' });
 
     const tgUser = JSON.parse(data.user ?? '{}');
     if (!tgUser.id) return res.status(400).json({ error: 'Telegram user ma’lumoti topilmadi' });
 
-    const telegramId = String(tgUser.id);
-    const profileFields = {
-      firstName: tgUser.first_name,
-      lastName: tgUser.last_name,
-      username: tgUser.username,
-      languageCode: tgUser.language_code,
-      isPremium: Boolean(tgUser.is_premium),
-      photoUrl: tgUser.photo_url,
-      lastLoginAt: new Date()
-    };
-
-    // 2) telegramId bo'yicha qidirish — topilmasa yaratish, topilsa yangilash
-    let user = await User.findOne({ telegramId });
-    let isNewUser = false;
-    if (!user) {
-      isNewUser = true;
-      user = await User.create({ telegramId, ...profileFields });
-
-      // Yangi foydalanuvchи referal havola bilan kelган bo'lsa — bog'laymiz
-      const startParam = req.body.startParam || req.body.start_param;
-      const refCode = parseReferralCode(startParam);
-      if (refCode) {
-        try { await attachReferral(user, refCode); } catch { /* jim */ }
-      }
-    } else {
-      Object.assign(user, profileFields);
-      await user.save();
+    let result;
+    try {
+      result = await completeTelegramAuth(tgUser, {
+        platform: req.body.platform,
+        deviceId: req.body.deviceId,
+        startParam: req.body.startParam || req.body.start_param,
+      });
+    } catch (e) {
+      if (e.status) return res.status(e.status).json({ error: e.message });
+      throw e;
     }
 
-    // 2.1) BLOCKED foydalanuvchi — autentifikatsiya rad etiladi.
-    // Access token qisqa umrli (1 soat) bo'lgani uchun bu yerda
-    // tekshirish yetarli: har oddiy so'rovda emas, faqat har yangi
-    // token olishda (login/refresh) — bloklash amalda tez ta'sir
-    // qiladi, lekin har so'rovda qo'shimcha DB query kerak emas.
-    if (user.status === 'BLOCKED') {
-      return res.status(403).json({ error: 'Akkauntingiz bloklangan' });
+    res.json(result);
+  }),
+
+  // POST /api/auth/telegram-web — browser orqali kirish (Telegram
+  // Login Widget). Mini App emas — https://lokma.uz da "Telegram
+  // orqali kirish" tugmasi bosilganda Telegram bergan ma'lumot.
+  // Body: Login Widget obyektining o'zi + { platform?, deviceId? }
+  telegramWeb: asyncHandler(async (req, res) => {
+    const { platform, deviceId, ...widgetData } = req.body;
+    if (!widgetData.id || !widgetData.hash) {
+      return res.status(400).json({ error: 'Telegram widget ma’lumoti to‘liq emas' });
     }
 
-    // 2.2) AuthIdentity bog'lash — YANGI foydalanuvchi uchun ham,
-    // ESKI (bu commit'dan oldin yaratilgan, hali AuthIdentity'ga
-    // ega bo'lmagan) foydalanuvchi uchun ham ishlaydi (LAZY
-    // MIGRATSIYA — alohida skript shart emas, lekin bir martalik
-    // migratsiya skripti ham mavjud, pastga qarang: scripts/).
-    // upsert — parallel so'rovlarda ham xavfsiz (unique index bor).
-    await AuthIdentity.findOneAndUpdate(
-      { provider: 'telegram', providerUserId: telegramId },
-      { $setOnInsert: { userId: user._id, provider: 'telegram', providerUserId: telegramId } },
-      { upsert: true, setDefaultsOnInsert: true },
-    );
+    const data = verifyTelegramLoginWidget(widgetData);
+    if (!data) return res.status(401).json({ error: 'Telegram tekshiruvi muvaffaqiyatsiz' });
 
-    // 3) Referal bonusини tekshirish (obuna bo'lган bo'lsa beramiz)
-    if (user.referredBy && !user.referralRewarded) {
-      try { await rewardReferralIfSubscribed(user); } catch { /* jim */ }
+    let result;
+    try {
+      result = await completeTelegramAuth(data, { platform: platform || 'web', deviceId });
+    } catch (e) {
+      if (e.status) return res.status(e.status).json({ error: e.message });
+      throw e;
     }
 
-    // 4) Token qaytarish.
-    //
-    // `token` — ESKI, uzoq muddatli (30 kun) JWT. Orqaga moslik
-    // uchun SAQLANADI: hozirgi client shu maydonni o'qiydi va
-    // localStorage'da saqlaydi, refresh oqimini hali bilmaydi.
-    // Client yangilanganda shu maydonni asta-sekin olib tashlash
-    // mumkin bo'ladi.
-    //
-    // `accessToken` + `refreshToken` — YANGI, qisqa/uzoq juftlik
-    // (Session sifatida DB'da hash holida saqlanadi, rotatsiya
-    // bilan). Yangilangan client shularni ishlatadi.
-    const token = signToken(String(user._id), user.role ?? 'customer');
-    const accessToken = signAccessToken(String(user._id), user.role ?? 'customer');
-
-    const refreshToken = generateRefreshToken();
-    await Session.create({
-      userId: user._id,
-      refreshTokenHash: hashRefreshToken(refreshToken),
-      deviceId: req.body.deviceId || '',
-      platform: ['telegram', 'web', 'android', 'ios'].includes(req.body.platform) ? req.body.platform : 'telegram',
-      expiresAt: refreshTokenExpiry(),
-    });
-
-    res.json({ token, accessToken, refreshToken, user, isNewUser });
+    res.json(result);
   }),
 
   // POST /api/auth/refresh

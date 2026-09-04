@@ -81,6 +81,52 @@ export function verifyTelegramInitData(initData) {
   return Object.fromEntries(params.entries());
 }
 
+/*
+ * Telegram LOGIN WIDGET'ni tekshirish (browser orqali kirish —
+ * https://core.telegram.org/widgets/login#checking-authorization).
+ *
+ * MUHIM: bu verifyTelegramInitData'DAN TEXNIK JIHATDAN FARQLI
+ * algoritm — chalkashtirib bo'lmaydi:
+ *   - initData (Mini App, Telegram ichida): secret_key =
+ *     HMAC-SHA256("WebAppData", bot_token)
+ *   - Login Widget (browser, lokma.uz): secret_key =
+ *     SHA256(bot_token) — ODDIY SHA256, HMAC EMAS
+ * Ikkalasida ham keyingi qadam bir xil: hash = HMAC-SHA256(secret_key,
+ * data_check_string), timing-safe solishtirish, auth_date eskirish
+ * tekshiruvi.
+ *
+ * Kirish shakli ham farqli: Login Widget JS orqali <script> tegi
+ * chaqiradigan callback'ga TO'G'RIDAN-TO'G'RI OBYEKT beradi
+ * ({id, first_name, ..., hash}) — URL-encoded querystring emas,
+ * shuning uchun `data` bu yerda allaqachon parse qilingan obyekt.
+ */
+export function verifyTelegramLoginWidget(data) {
+  if (!config.telegramBotToken) return null;
+  if (!data || typeof data !== 'object' || !data.hash) return null;
+
+  const { hash, ...rest } = data;
+  const dataCheckString = Object.entries(rest)
+    .filter(([, v]) => v !== undefined && v !== null)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([k, v]) => `${k}=${v}`)
+    .join('\n');
+
+  const secretKey = crypto.createHash('sha256').update(config.telegramBotToken).digest();
+  const computed = crypto.createHmac('sha256', secretKey).update(dataCheckString).digest('hex');
+
+  const computedBuf = Buffer.from(computed, 'hex');
+  let hashBuf;
+  try { hashBuf = Buffer.from(hash, 'hex'); } catch { return null; }
+  if (computedBuf.length !== hashBuf.length) return null;
+  if (!crypto.timingSafeEqual(computedBuf, hashBuf)) return null;
+
+  const authDate = Number(data.auth_date);
+  const MAX_AGE_SEC = 24 * 60 * 60;
+  if (!authDate || Date.now() / 1000 - authDate > MAX_AGE_SEC) return null;
+
+  return data;
+}
+
 export function signToken(userId, role, restaurantId = null, department = null) {
   return jwt.sign({ userId, role, restaurantId, department }, config.jwtSecret, { expiresIn: '30d' });
 }
