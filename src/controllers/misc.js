@@ -1,6 +1,9 @@
 import { z } from 'zod';
 import { asyncHandler } from '../middleware/error.js';
-import { signToken, verifyTelegramInitData } from '../middleware/auth.js';
+import {
+  signToken, verifyTelegramInitData, verifyTelegramLoginWidget,
+  signAccessToken, generateRefreshToken, hashRefreshToken, refreshTokenExpiry,
+} from '../middleware/auth.js';
 import { Banner } from '../models/User.js';
 import { Restaurant } from '../models/Restaurant.js';
 import { Dish } from '../models/Dish.js';
@@ -9,6 +12,8 @@ import { isRestaurantOpen as isOpenTz } from '../services/restaurantTime.js';
 import { quoteDelivery } from '../services/deliveryEngine.js';
 import { applyPromotion, markPromotionUsed } from '../services/promotions.js';
 import { User } from '../models/User.js';
+import { linkIdentity } from '../services/authIdentity.js';
+import { Session } from '../models/Session.js';
 import { Order } from '../models/Order.js';
 import { getIO } from '../sockets/io.js';
 import { notify } from '../services/notifications.js';
@@ -51,58 +56,235 @@ export const bannerController = {
 
 
 
+/*
+ * Telegram orqali autentifikatsiyani YAKUNLAYDI — User topish/
+ * yaratish, BLOCKED tekshiruvi, AuthIdentity bog'lash, referal,
+ * Session + tokenlar. Mini App (initData) va Login Widget (browser)
+ * IKKALASI HAM shu funksiyaga kelib qo'shiladi — faqat DASTLABKI
+ * VALIDATSIYA farqli (tepada authController.telegram va
+ * authController.telegramWeb'ga qarang).
+ *
+ * tgUser maydonlari: id (majburiy), first_name, last_name,
+ * username, language_code (FAQAT Mini App'da bor), is_premium
+ * (FAQAT Mini App'da bor), photo_url.
+ *
+ * MUHIM: language_code/is_premium kabi FAQAT Mini App orqali
+ * keladigan maydonlar undefined bo'lsa, profileFields'ga UMUMAN
+ * QO'SHILMAYDI — aks holda foydalanuvchi avval Mini App'da
+ * o'rnatgan qiymat (masalan languageCode:'uz'), keyin Login
+ * Widget orqali kirganda undefined bilan ustidan yozilib
+ * o'chib qolardi (Object.assign undefined'ni ham qo'llaydi).
+ */
+async function completeTelegramAuth(tgUser, { platform, deviceId, startParam } = {}) {
+  const telegramId = String(tgUser.id);
+  const profileFields = { lastLoginAt: new Date() };
+  if (tgUser.first_name !== undefined) profileFields.firstName = tgUser.first_name;
+  if (tgUser.last_name !== undefined) profileFields.lastName = tgUser.last_name;
+  if (tgUser.username !== undefined) profileFields.username = tgUser.username;
+  if (tgUser.language_code !== undefined) profileFields.languageCode = tgUser.language_code;
+  if (tgUser.is_premium !== undefined) profileFields.isPremium = Boolean(tgUser.is_premium);
+  if (tgUser.photo_url !== undefined) profileFields.photoUrl = tgUser.photo_url;
+
+  let user = await User.findOne({ telegramId });
+  let isNewUser = false;
+  if (!user) {
+    isNewUser = true;
+    user = await User.create({ telegramId, ...profileFields });
+
+    const refCode = parseReferralCode(startParam);
+    if (refCode) {
+      try { await attachReferral(user, refCode); } catch { /* jim */ }
+    }
+  } else {
+    Object.assign(user, profileFields);
+    await user.save();
+  }
+
+  if (user.status === 'BLOCKED') {
+    const err = new Error('Akkauntingiz bloklangan');
+    err.status = 403;
+    throw err;
+  }
+
+  /*
+   * AuthIdentity bog'lash — linkIdentity() orqali (services/authIdentity.js,
+   * Auth 3-bosqich fundamenti). Bu YANGI foydalanuvchi uchun ham,
+   * ESKI (AuthIdentity'ga hali ega bo'lmagan, lazy migratsiya)
+   * foydalanuvchi uchun ham ishlaydi. Xato (IDENTITY_ALREADY_LINKED)
+   * amalda deyarli imkonsiz — user allaqachon telegramId orqali
+   * topilgan, demak shu telegramId'ga bog'langan identity, agar
+   * mavjud bo'lsa, mantiqan shu userga tegishli bo'lishi kerak.
+   * Faqat ma'lumotlar bazasi nomuvofiqligi holatida yuz beradi —
+   * bunday holatda ham LOGIN MUVAFFAQIYATSIZ bo'lmasligi kerak
+   * (foydalanuvchi tajribasi ustuvor), shuning uchun log qilinadi,
+   * lekin otilmaydi.
+   */
+  try {
+    await linkIdentity(user._id, 'telegram', telegramId);
+  } catch (e) {
+    console.error('[auth] linkIdentity nomuvofiqlik:', e.message);
+  }
+
+  if (user.referredBy && !user.referralRewarded) {
+    try { await rewardReferralIfSubscribed(user); } catch { /* jim */ }
+  }
+
+  const token = signToken(String(user._id), user.role ?? 'customer');
+  const accessToken = signAccessToken(String(user._id), user.role ?? 'customer');
+
+  const refreshToken = generateRefreshToken();
+  await Session.create({
+    userId: user._id,
+    refreshTokenHash: hashRefreshToken(refreshToken),
+    deviceId: deviceId || '',
+    platform: ['telegram', 'web', 'android', 'ios'].includes(platform) ? platform : 'telegram',
+    expiresAt: refreshTokenExpiry(),
+  });
+
+  return { token, accessToken, refreshToken, user, isNewUser };
+}
+
 export const authController = {
-  // POST /api/auth/telegram
-  // Body: { initData } — Telegram.WebApp.initData (server shu yerdan initDataUnsafe.user ni oladi va tasdiqlaydi)
+  // POST /api/auth/telegram — Telegram Mini App (initData)
+  // Body: { initData, platform?, deviceId? }
   telegram: asyncHandler(async (req, res) => {
     const { initData } = req.body;
     if (!initData) return res.status(400).json({ error: 'initData yo‘q' });
 
-    // 1) initData'ni Telegram Bot Token bilan HMAC-SHA256 orqali tasdiqlash
     const data = verifyTelegramInitData(initData);
     if (!data) return res.status(401).json({ error: 'Telegram tekshiruvi muvaffaqiyatsiz' });
 
     const tgUser = JSON.parse(data.user ?? '{}');
     if (!tgUser.id) return res.status(400).json({ error: 'Telegram user ma’lumoti topilmadi' });
 
-    const telegramId = String(tgUser.id);
-    const profileFields = {
-      firstName: tgUser.first_name,
-      lastName: tgUser.last_name,
-      username: tgUser.username,
-      languageCode: tgUser.language_code,
-      isPremium: Boolean(tgUser.is_premium),
-      photoUrl: tgUser.photo_url,
-      lastLoginAt: new Date()
-    };
-
-    // 2) telegramId bo'yicha qidirish — topilmasa yaratish, topilsa yangilash
-    let user = await User.findOne({ telegramId });
-    let isNewUser = false;
-    if (!user) {
-      isNewUser = true;
-      user = await User.create({ telegramId, ...profileFields });
-
-      // Yangi foydalanuvchи referal havola bilan kelган bo'lsa — bog'laymiz
-      const startParam = req.body.startParam || req.body.start_param;
-      const refCode = parseReferralCode(startParam);
-      if (refCode) {
-        try { await attachReferral(user, refCode); } catch { /* jim */ }
-      }
-    } else {
-      Object.assign(user, profileFields);
-      await user.save();
+    let result;
+    try {
+      result = await completeTelegramAuth(tgUser, {
+        platform: req.body.platform,
+        deviceId: req.body.deviceId,
+        startParam: req.body.startParam || req.body.start_param,
+      });
+    } catch (e) {
+      if (e.status) return res.status(e.status).json({ error: e.message });
+      throw e;
     }
 
-    // 3) Referal bonusини tekshirish (obuna bo'lган bo'lsa beramiz)
-    if (user.referredBy && !user.referralRewarded) {
-      try { await rewardReferralIfSubscribed(user); } catch { /* jim */ }
+    res.json(result);
+  }),
+
+  // POST /api/auth/telegram-web — browser orqali kirish (Telegram
+  // Login Widget). Mini App emas — https://lokma.uz da "Telegram
+  // orqali kirish" tugmasi bosilganda Telegram bergan ma'lumot.
+  // Body: Login Widget obyektining o'zi + { platform?, deviceId? }
+  telegramWeb: asyncHandler(async (req, res) => {
+    const { platform, deviceId, ...widgetData } = req.body;
+    if (!widgetData.id || !widgetData.hash) {
+      return res.status(400).json({ error: 'Telegram widget ma’lumoti to‘liq emas' });
     }
 
-    // 4) JWT qaytarish
-    const token = signToken(String(user._id), user.role ?? 'customer');
-    res.json({ token, user, isNewUser });
-  })
+    const data = verifyTelegramLoginWidget(widgetData);
+    if (!data) return res.status(401).json({ error: 'Telegram tekshiruvi muvaffaqiyatsiz' });
+
+    let result;
+    try {
+      result = await completeTelegramAuth(data, { platform: platform || 'web', deviceId });
+    } catch (e) {
+      if (e.status) return res.status(e.status).json({ error: e.message });
+      throw e;
+    }
+
+    res.json(result);
+  }),
+
+  // POST /api/auth/refresh
+  // Body: { refreshToken }
+  // Eski Session revoke qilinadi, yangisi yaratiladi (rotatsiya) —
+  // o'g'irlangan eski refresh token qayta ishlatilsa rad etiladi.
+  refresh: asyncHandler(async (req, res) => {
+    const { refreshToken } = req.body;
+    if (!refreshToken) return res.status(400).json({ error: 'refreshToken yo‘q' });
+
+    const tokenHash = hashRefreshToken(refreshToken);
+    const session = await Session.findOne({ refreshTokenHash: tokenHash });
+
+    if (!session || session.revokedAt || session.expiresAt < new Date()) {
+      return res.status(401).json({ error: 'Sessiya yaroqsiz — qayta kiring' });
+    }
+
+    const user = await User.findById(session.userId);
+    if (!user || user.status === 'BLOCKED') {
+      session.revokedAt = new Date();
+      await session.save();
+      return res.status(403).json({ error: 'Akkauntingiz bloklangan' });
+    }
+
+    // Rotatsiya: eski sessiya bekor qilinadi, yangisi yaratiladi
+    session.revokedAt = new Date();
+    await session.save();
+
+    const newRefreshToken = generateRefreshToken();
+    await Session.create({
+      userId: user._id,
+      refreshTokenHash: hashRefreshToken(newRefreshToken),
+      deviceId: session.deviceId,
+      platform: session.platform,
+      expiresAt: refreshTokenExpiry(),
+    });
+
+    const accessToken = signAccessToken(String(user._id), user.role ?? 'customer');
+    res.json({ accessToken, refreshToken: newRefreshToken });
+  }),
+
+  // POST /api/auth/logout
+  // Body: { refreshToken }
+  logout: asyncHandler(async (req, res) => {
+    const { refreshToken } = req.body;
+    if (refreshToken) {
+      await Session.updateOne(
+        { refreshTokenHash: hashRefreshToken(refreshToken), revokedAt: null },
+        { revokedAt: new Date() },
+      );
+    }
+    res.json({ ok: true });
+  }),
+
+  /*
+   * ===== 3-BOSQICH: Session nazorati (device/session management) =====
+   *
+   * Android/iOS qo'shilganda bitta foydalanuvchi bir vaqtning
+   * o'zida bir nechta faol sessiyaga ega bo'ladi (telegram + web +
+   * android + ios). Bu ikkita endpoint HOZIROQ real va foydali —
+   * yangi provayder yoki fake ma'lumot talab qilmaydi, faqat
+   * mavjud Session kolleksiyasi ustidan ishlaydi.
+   */
+
+  // GET /api/auth/sessions — joriy foydalanuvchining barcha FAOL
+  // (bekor qilinmagan, muddati o'tmagan) sessiyalari. refreshTokenHash
+  // HECH QACHON qaytarilmaydi — faqat qurilma/platforma/vaqt ma'lumoti.
+  listSessions: asyncHandler(async (req, res) => {
+    const sessions = await Session.find({
+      userId: req.userId,
+      revokedAt: null,
+      expiresAt: { $gt: new Date() },
+    })
+      .select('platform deviceId createdAt expiresAt')
+      .sort({ createdAt: -1 })
+      .lean();
+    res.json({ sessions });
+  }),
+
+  // DELETE /api/auth/sessions/:id — bitta qurilmadagi sessiyani
+  // bekor qiladi ("boshqa qurilmada chiqish"). Faqat O'ZINING
+  // sessiyasini bekor qila oladi — userId bo'yicha tekshiriladi,
+  // aks holda boshqa foydalanuvchi sessiyasini bekor qilish mumkin
+  // bo'lib qolardi (IDOR — Insecure Direct Object Reference).
+  revokeSession: asyncHandler(async (req, res) => {
+    const session = await Session.findOne({ _id: req.params.id, userId: req.userId });
+    if (!session) return res.status(404).json({ error: 'Sessiya topilmadi' });
+    session.revokedAt = new Date();
+    await session.save();
+    res.json({ ok: true });
+  }),
 };
 
 // MongoDB ObjectId formatи (24 belgili hex)

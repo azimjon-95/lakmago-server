@@ -81,8 +81,89 @@ export function verifyTelegramInitData(initData) {
   return Object.fromEntries(params.entries());
 }
 
+/*
+ * Telegram LOGIN WIDGET'ni tekshirish (browser orqali kirish —
+ * https://core.telegram.org/widgets/login#checking-authorization).
+ *
+ * MUHIM: bu verifyTelegramInitData'DAN TEXNIK JIHATDAN FARQLI
+ * algoritm — chalkashtirib bo'lmaydi:
+ *   - initData (Mini App, Telegram ichida): secret_key =
+ *     HMAC-SHA256("WebAppData", bot_token)
+ *   - Login Widget (browser, lokma.uz): secret_key =
+ *     SHA256(bot_token) — ODDIY SHA256, HMAC EMAS
+ * Ikkalasida ham keyingi qadam bir xil: hash = HMAC-SHA256(secret_key,
+ * data_check_string), timing-safe solishtirish, auth_date eskirish
+ * tekshiruvi.
+ *
+ * Kirish shakli ham farqli: Login Widget JS orqali <script> tegi
+ * chaqiradigan callback'ga TO'G'RIDAN-TO'G'RI OBYEKT beradi
+ * ({id, first_name, ..., hash}) — URL-encoded querystring emas,
+ * shuning uchun `data` bu yerda allaqachon parse qilingan obyekt.
+ */
+export function verifyTelegramLoginWidget(data) {
+  if (!config.telegramBotToken) return null;
+  if (!data || typeof data !== 'object' || !data.hash) return null;
+
+  const { hash, ...rest } = data;
+  const dataCheckString = Object.entries(rest)
+    .filter(([, v]) => v !== undefined && v !== null)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([k, v]) => `${k}=${v}`)
+    .join('\n');
+
+  const secretKey = crypto.createHash('sha256').update(config.telegramBotToken).digest();
+  const computed = crypto.createHmac('sha256', secretKey).update(dataCheckString).digest('hex');
+
+  const computedBuf = Buffer.from(computed, 'hex');
+  let hashBuf;
+  try { hashBuf = Buffer.from(hash, 'hex'); } catch { return null; }
+  if (computedBuf.length !== hashBuf.length) return null;
+  if (!crypto.timingSafeEqual(computedBuf, hashBuf)) return null;
+
+  const authDate = Number(data.auth_date);
+  const MAX_AGE_SEC = 24 * 60 * 60;
+  if (!authDate || Date.now() / 1000 - authDate > MAX_AGE_SEC) return null;
+
+  return data;
+}
+
 export function signToken(userId, role, restaurantId = null, department = null) {
   return jwt.sign({ userId, role, restaurantId, department }, config.jwtSecret, { expiresIn: '30d' });
+}
+
+/*
+ * ===== AUTH FUNDAMENTI (Telegram Mini App + kelajakdagi Web/Android/iOS) =====
+ *
+ * signToken() (yuqorida) admin/restoran/xodim panellarida ishlatiladi
+ * — ularga TEGILMADI, hali ham 30 kunlik yagona token bilan ishlaydi
+ * (panelda refresh oqimi yo'q, uni o'zgartirish alohida ish).
+ *
+ * Quyidagilar FAQAT customer (Telegram Mini App) auth oqimi uchun —
+ * access token QISQA muddatli (bloklash tezda ta'sir qilishi uchun),
+ * refresh token esa UZOQ muddatli va Session sifatida DB'da HASH
+ * holida saqlanadi (xom holda hech qachon emas).
+ */
+const ACCESS_TOKEN_TTL = '1h';
+const REFRESH_TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 kun
+
+export function signAccessToken(userId, role = 'customer') {
+  return jwt.sign({ userId, role, type: 'access' }, config.jwtSecret, { expiresIn: ACCESS_TOKEN_TTL });
+}
+
+// Xavfsiz tasodifiy refresh token — JWT EMAS (imzo tekshirish shart
+// emas, faqat DB'dagi hash bilan solishtiriladi — shuning uchun
+// istalgan payt Session'ni revoke qilib bekor qilsa bo'ladi, JWT
+// singari muddati tugagunga qadar kutish shart emas)
+export function generateRefreshToken() {
+  return crypto.randomBytes(48).toString('hex');
+}
+
+export function hashRefreshToken(token) {
+  return crypto.createHash('sha256').update(token).digest('hex');
+}
+
+export function refreshTokenExpiry() {
+  return new Date(Date.now() + REFRESH_TOKEN_TTL_MS);
 }
 
 /**
