@@ -59,7 +59,7 @@ Settings → Environment Variables:
 ```
 VITE_API_URL     = https://api.SIZNING-DOMEN.uz/api
 VITE_SOCKET_URL  = https://api.SIZNING-DOMEN.uz
-VITE_BOT_USERNAME = lokmaGobot   # DIQQAT: "lokma", "lakma" EMAS
+VITE_BOT_USERNAME = lakmagobot
 VITE_WEBAPP_NAME  =            (bo'sh — t.me/bot?startapp ishlasa)
 VITE_SHARE_BASE   = https://api.SIZNING-DOMEN.uz
 ```

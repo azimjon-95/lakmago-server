@@ -93,24 +93,9 @@ export async function clickPrepare(body) {
       amount: Math.round(Number(body.amount) * 100),
       state: 1,
       clickPaydocId: String(body.click_paydoc_id || ''),
+      // Prepare ID — Complete bosqichida shu bilan tekshiriladi
+      clickPrepareId: Date.now() % 1_000_000_000,
     });
-
-    /*
-     * Prepare ID — Complete bosqichida shu bilan tekshiriladi.
-     *
-     * ILGARI: Date.now() % 1e9 — bir millisekundda yaratilgan ikki
-     * tranzaksiya BIR XIL id olardi. Ehtimolligi past, lekin
-     * to'qnashuv yuz bersa Complete bosqichida NOTO'G'RI
-     * tranzaksiya tasdiqlanishi mumkin edi.
-     *
-     * ENDI: MongoDB _id ning oxirgi 4 bayti (hisoblagich + tasodif)
-     * dan olinadi. U tranzaksiyaning O'ZIGA bog'langan, vaqtga
-     * emas — shuning uchun bir millisekundda nechta yaratilishidan
-     * qat'i nazar takrorlanmaydi. Natija 10 xonadan oshmaydi,
-     * Click talabiga mos.
-     */
-    tx.clickPrepareId = parseInt(String(tx._id).slice(-8), 16);
-    await tx.save();
   }
 
   return {
@@ -136,6 +121,8 @@ export async function clickComplete(body) {
     return fail(ClickError.TransactionNotFound);
   }
 
+  // Allaqachon to'langan
+  if (tx.state === 2) return fail(ClickError.AlreadyPaid);
   // Allaqachon bekor qilingan
   if (tx.state < 0) return fail(ClickError.TransactionCancelled);
 
@@ -150,33 +137,11 @@ export async function clickComplete(body) {
 
   const order = await Order.findById(tx.orderId);
   if (!order) return fail(ClickError.UserNotFound);
-
-  /*
-   * ═══ "ALLAQACHON TO'LANGAN" TEKSHIRUVI — IKKI SHART ═══
-   *
-   * ILGARI bu yerda faqat `tx.state === 2` tekshirilardi va bu
-   * JIDDIY XATOGA olib kelardi:
-   *
-   *   tx.state = 2 pastdagi yon ta'sirlardan (moliyaviy yozuv,
-   *   buyurtmani faollashtirish, billing) OLDIN saqlanardi. Agar
-   *   o'sha qadamlarning birida xato chiqsa (baza uzildi, timeout),
-   *   webhook 500 qaytarardi va Click QAYTA YUBORARDI — lekin
-   *   qayta so'rov shu yerda "allaqachon to'langan" deb rad
-   *   etilardi. Click boshqa urinmasdi.
-   *
-   *   Natija: PUL MIJOZDAN YECHILGAN, buyurtma esa abadiy
-   *   'awaiting_payment' da qolib, restoranga hech qachon
-   *   chiqmasdi.
-   *
-   * ENDI: to'lov faqat buyurtmaning O'ZI ham to'langan bo'lsagina
-   * yakunlangan hisoblanadi. Yarim qolgan holatda takroriy
-   * webhook pastdagi ishni oxiriga yetkazadi — recordSuccess ham,
-   * recordPayment ham idempotent, shuning uchun ikki marta
-   * bajarilib ketmaydi.
-   */
-  if (tx.state === 2 && order.isPaid) return fail(ClickError.AlreadyPaid);
-
   if (!sameAmount(body.amount, order.total)) return fail(ClickError.IncorrectAmount);
+
+  tx.state = 2;
+  tx.performTime = Date.now();
+  await tx.save();
 
   /*
    * Buyurtmani oshxonaga chiqarish va moliyaviy yozuvni yaratish
@@ -199,34 +164,16 @@ export async function clickComplete(body) {
     tx.orderId,
     {
       isPaid: true,
-      // paidAt FAQAT birinchi marta yoziladi — takroriy webhook
-      // to'lov vaqtini keyingi sanaga surib yubormasin
-      ...(order.paidAt ? {} : { paidAt: new Date() }),
+      paidAt: new Date(),
       paymentMethod: 'click',
-      /*
-       * Endi restoranga ko'rinadi. Agar buyurtma allaqachon
-       * oldinga siljigan bo'lsa (masalan 'preparing'), uni
-       * 'pending' ga QAYTARMAYMIZ — takroriy webhook oshxonadagi
-       * ishni orqaga tashlab yuborishi mumkin edi.
-       */
-      ...(order.status === 'awaiting_payment' ? { status: 'pending' } : {}),
+      // Endi restoranga ko'rinadi
+      status: 'pending',
     },
     { new: true },
   );
 
   const { recordPayment } = await import('./billing.js');
   await recordPayment(updated, 'click', tx._id);
-
-  /*
-   * ═══ TRANZAKSIYA ENG OXIRIDA YAKUNLANADI ═══
-   * Yuqoridagi hamma narsa muvaffaqiyatli tugagandan KEYIN.
-   * Shu tartib tufayli yarim bajarilgan holat qolmaydi: xato
-   * chiqsa tx.state 1 da qoladi va Click qayta yuborganda
-   * jarayon oxiriga yetadi.
-   */
-  tx.state = 2;
-  tx.performTime = Date.now();
-  await tx.save();
 
   const io = getIO();
   io?.to(`order:${tx.orderId}`).emit('order:paid', { orderId: String(tx.orderId) });

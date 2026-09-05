@@ -11,7 +11,6 @@ import { restaurantPanelController } from '../controllers/restaurantPanel.js';
 import { uploadController } from '../controllers/upload.js';
 import { referralController } from '../controllers/referralController.js';
 import { addressController } from '../controllers/address.js';
-import { userProfileController } from '../controllers/userProfile.js';
 import { supportController } from '../controllers/support.js';
 import { cardController } from '../controllers/cards.js';
 import { cardPaymentController } from '../controllers/cardPayment.js';
@@ -58,14 +57,9 @@ const R = [auth, requireRole('restaurant')];   // Restoran paneli
 const AS = (page) => [auth, requireRole('admin', 'staff'), requirePage(page)];
 
 // ===== Autentifikatsiya =====
-router.post('/auth/telegram', loginLimiter, authController.telegram); // mijoz (webapp)
-router.post('/auth/telegram-web', loginLimiter, authController.telegramWeb); // mijoz — browser (Telegram Login Widget)
-router.post('/auth/refresh', loginLimiter, authController.refresh);   // mijoz — refresh token rotatsiyasi
-router.post('/auth/logout', authController.logout);                  // mijoz — sessiyani bekor qilish
-router.get('/auth/sessions', auth, authController.listSessions);     // mijoz — faol sessiyalar ro'yxati (3-bosqich: device nazorati)
-router.delete('/auth/sessions/:id', auth, authController.revokeSession); // mijoz — bitta qurilmada chiqish
-router.post('/auth/login', loginLimiter, panelAuthController.login);  // admin/restoran (panel)
-router.get('/auth/me', auth, panelAuthController.me);                 // umumiy — role bo'yicha ajratiladi
+router.post('/auth/telegram', loginLimiter, authController.telegram);       // mijoz (webapp)
+router.post('/auth/login', loginLimiter, panelAuthController.login);         // admin/restoran (panel)
+router.get('/auth/me', auth, panelAuthController.me);
 
 // ===== Ochiq katalog (mijoz webapp) =====
 router.get('/banners', bannerController.list);
@@ -154,21 +148,6 @@ router.post('/addresses', auth, addressController.create);
 router.patch('/addresses/:id', auth, addressController.update);
 router.delete('/addresses/:id', auth, addressController.remove);
 router.patch('/addresses/:id/default', auth, addressController.setDefault);
-
-/*
- * ===== Foydalanuvchi profili + Address (Auth fundamenti, 2-bosqich) =====
- *
- * YANGI, alohida Address kolleksiyasiga asoslangan API. Yuqoridagi
- * /addresses (User.addresses embedded array) BUZILMAGAN va client
- * hozircha o'shani ishlatadi — bu yerdagilar PARALLEL fundament,
- * kelajakda client shu API'ga o'tkazilishi mumkin.
- */
-router.get('/users/me', auth, userProfileController.me);
-router.patch('/users/me', auth, userProfileController.updateMe);
-router.get('/users/me/addresses', auth, userProfileController.listAddresses);
-router.post('/users/me/addresses', auth, userProfileController.createAddress);
-router.patch('/users/me/addresses/:id', auth, userProfileController.updateAddress);
-router.delete('/users/me/addresses/:id', auth, userProfileController.removeAddress);
 
 // ===== DINE-IN =====
 // Mijoz: login TALAB QILINMAYDI
