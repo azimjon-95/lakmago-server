@@ -382,6 +382,23 @@ async function main() {
     setInterval(() => deactivateExpired().catch(() => {}), 60 * 60_000);
   }
 
+  /*
+   * Tashlab ketilgan to'lovlarni tozalash — soatiga bir marta.
+   *
+   * 24 soatdan oshgan, to'lanmagan va boshlangan tranzaksiyasi
+   * bo'lmagan 'awaiting_payment' buyurtmalar 'cancelled' ga
+   * o'tkaziladi. Batafsil xavfsizlik shartlari:
+   * services/abandonedOrders.js
+   */
+  {
+    const { cancelAbandonedPayments } = await import('./services/abandonedOrders.js');
+    const run = () => cancelAbandonedPayments()
+      .then((r) => { if (r.cancelled) console.log(`Tashlab ketilgan to'lov: ${r.cancelled} ta bekor qilindi`); })
+      .catch((e) => console.error('Tashlab ketilgan to\'lov:', e.message));
+    setTimeout(run, 90_000);
+    setInterval(run, 60 * 60_000);
+  }
+
   // Kunlik guruh tekshiruvi (reklama yuborilganmi + pin qilinganmi)
   // Server ishga tushганда 1 marta, keyin har 24 soatda.
   if (config.telegramBotToken) {
