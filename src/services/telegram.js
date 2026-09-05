@@ -57,6 +57,22 @@ async function getBotUsername() {
  * ko'rsatilmasa ham to'g'ri Web App'ni avtomatik ochadi —
  * so'ralgan aniq format shu.
  *
+ * TO'LIQ EKRAN — `mode=fullscreen`
+ * Telegram hujjati (core.telegram.org/api/bots/webapps): Mini App
+ * havolasidagi `mode` parametri compact/fullscreen bo'lsa, klient
+ * ilovani AYNAN SHU rejimda ochadi. Bu runtime'dagi
+ * requestFullscreen() dan MUHIM FARQ QILADI:
+ *
+ *   requestFullscreen() — ilova ALLAQACHON ochilgandan keyin
+ *     rejimni o'zgartirishni SO'RAYDI. Telegram uni rad etishi
+ *     yoki e'tiborsiz qoldirishi mumkin (bizda aynan shunday
+ *     bo'ldi), va hatto ishlaganda ham foydalanuvchi avval
+ *     oddiy oynani, keyin sakrashni ko'radi.
+ *
+ *   mode=fullscreen — rejim OCHILISHDAN OLDIN, klient darajasida
+ *     belgilanadi. Ilova birinchi kadrdanoq (splash paytidayoq)
+ *     to'liq ekranda chiziladi, hech qanday sakrash yo'q.
+ *
  * @param {string} [startParam] - ixtiyoriy: qaysi ekran/taom
  *   bilan ochilsin (masalan 'food_123'). Berilmasa ilova
  *   oddiy bosh sahifadan ochiladi.
@@ -64,7 +80,8 @@ async function getBotUsername() {
 export async function buildMiniAppLink(startParam) {
   const username = await getBotUsername();
   const base = `https://t.me/${username}`;
-  return startParam ? `${base}?startapp=${startParam}` : `${base}?startapp`;
+  const start = startParam ? `?startapp=${startParam}` : '?startapp';
+  return `${base}${start}&mode=fullscreen`;
 }
 
 // Foydalanuvchiga push xabar yuborish (buyurtma statusi, bron tasdiqi)
