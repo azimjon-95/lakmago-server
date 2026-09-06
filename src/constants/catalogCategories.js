@@ -23,6 +23,32 @@
 // Muassasalarga (restoran/kafe/oshxona/choyxona) ko'rinadigan yagona kategoriya
 export const DRINKS_CATEGORY = 'ichimliklar';
 
+/*
+ * ═══ MUASSASALARGA KO'RINADIGAN BARCHA ICHIMLIK KATEGORIYALARI ═══
+ *
+ * ILGARI faqat DRINKS_CATEGORY ('ichimliklar') ko'rsatilardi va bu
+ * XATOGA olib keldi: katalogda ichimliklar bir nechta ANIQ
+ * kategoriyaga bo'lingan (mineral suv, gazli, sharbat, choy...).
+ * Admin "CHORTOQ" ni mineral_suv, "COCA-COLA" ni gazli_ichimliklar
+ * deb kiritganda, ular restoran panelida UMUMAN ko'rinmasdi —
+ * "Katalog hali to'ldirilmagan" degan xabar chiqardi, garchi
+ * katalog to'la bo'lsa ham.
+ *
+ * Bu ro'yxatga faqat ICHIB BO'LADIGAN mahsulotlar kiradi. Oziq-ovqat
+ * kategoriyalari (guruch, go'sht, sabzavot...) faqat do'konlarga
+ * ko'rinadi — restoran menyusiga ular kerak emas.
+ */
+export const RESTAURANT_VISIBLE_CATEGORIES = [
+  DRINKS_CATEGORY,
+  'mineral_suv',
+  'sharbatlar',
+  'gazli_ichimliklar',
+  'energetik_ichimliklar',
+  'choy',
+  'qahva',
+  'kakao',
+];
+
 export const CATALOG_CATEGORIES = [
   { value: 'guruch_don', label: 'Guruch va don mahsulotlari' },
   { value: 'un_mahsulotlari', label: 'Un va un mahsulotlari' },

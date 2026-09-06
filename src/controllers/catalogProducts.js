@@ -3,7 +3,7 @@ import { asyncHandler } from '../middleware/error.js';
 import { CatalogProduct } from '../models/CatalogProduct.js';
 import { Dish } from '../models/Dish.js';
 import { Restaurant } from '../models/Restaurant.js';
-import { CATALOG_CATEGORY_VALUES, DRINKS_CATEGORY } from '../constants/catalogCategories.js';
+import { CATALOG_CATEGORY_VALUES, DRINKS_CATEGORY, RESTAURANT_VISIBLE_CATEGORIES } from '../constants/catalogCategories.js';
 
 const productSchema = z.object({
   name: z.string().min(2).max(120),
@@ -37,7 +37,16 @@ const productSchema = z.object({
  * shishib ketardi.
  */
 function toDishCategory(catalogCategory) {
-  return catalogCategory === DRINKS_CATEGORY ? 'salqin' : 'magazin_oziq';
+  /*
+   * ILGARI faqat 'ichimliklar' 'salqin' ga xaritalanardi. Natijada
+   * mineral suv yoki Coca-Cola menyuga qo'shilsa, mijoz ilovasida
+   * "Do'kon mahsuloti" bo'lib chiqardi — ichimlik kategoriyasida
+   * ko'rinmasdi. Endi barcha ichimlik kategoriyalari 'salqin' ga
+   * tushadi.
+   */
+  return RESTAURANT_VISIBLE_CATEGORIES.includes(catalogCategory)
+    ? 'salqin'
+    : 'magazin_oziq';
 }
 
 export const catalogProductController = {
@@ -132,9 +141,29 @@ export const catalogProductController = {
 
     const filter = { isActive: true };
     if (isShop) {
+      // Do'kon barcha kategoriyalarni ko'radi
       if (req.query.category) filter.category = req.query.category;
     } else {
-      filter.category = DRINKS_CATEGORY;
+      /*
+       * Muassasa (restoran/kafe/choyxona) — faqat ichimliklar.
+       *
+       * ILGARI bu yerda `filter.category = DRINKS_CATEGORY` edi,
+       * ya'ni FAQAT 'ichimliklar' kategoriyasi. Lekin katalogda
+       * ichimliklar aniqroq bo'lingan: mineral_suv,
+       * gazli_ichimliklar, sharbatlar, choy... Admin CHORTOQ ni
+       * mineral suv deb kiritsa, restoran uni umuman ko'rmasdi va
+       * panel "Katalog hali to'ldirilmagan" deb yozardi.
+       *
+       * Endi barcha ichimlik kategoriyalari ko'rinadi. Restoran
+       * xohlasa ular orasidan bittasini tanlab ham filtrlashi
+       * mumkin — lekin faqat RUXSAT ETILGAN ro'yxat ichidan,
+       * aks holda so'rov orqali oziq-ovqat kategoriyalarini
+       * ochib olish mumkin bo'lardi.
+       */
+      const requested = req.query.category;
+      filter.category = RESTAURANT_VISIBLE_CATEGORIES.includes(requested)
+        ? requested
+        : { $in: RESTAURANT_VISIBLE_CATEGORIES };
     }
     if (req.query.q) {
       filter.$or = [
