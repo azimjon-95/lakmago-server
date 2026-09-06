@@ -47,6 +47,24 @@ export const RESTAURANT_VISIBLE_CATEGORIES = [
   'choy',
   'qahva',
   'kakao',
+
+  /*
+   * ─── ESKI (LEGACY) NOMLAR ───
+   * Bazadagi ba'zi mahsulotlar kategoriya ro'yxati hozirgi holatga
+   * keltirilishidan OLDIN kiritilgan va ular boshqa nom bilan
+   * saqlangan. Buni admin panelida ko'rish mumkin: guruh sarlavhasi
+   * "Ichimliklar" emas, xom "salqin" ko'rinishida chiqadi —
+   * catalogCategoryLabel() mos yorliq topolmay qiymatning o'zini
+   * qaytaradi.
+   *
+   * Bu qiymatlarni ro'yxatga qo'shmasak, eski mahsulotlar restoran
+   * panelida abadiy ko'rinmay qolardi. Bazani ko'chirish (migration)
+   * ham mumkin edi, lekin bu ro'yxat xavfsizroq: mavjud ma'lumotga
+   * tegilmaydi va yangi yozuvlar baribir to'g'ri nom bilan kiradi.
+   */
+  'salqin',
+  'ichimlik',
+  'koffe',
 ];
 
 export const CATALOG_CATEGORIES = [
