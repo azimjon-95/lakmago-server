@@ -411,10 +411,79 @@ export async function getRestaurantOrderStats(restaurantId, from, to) {
   const cash = rows.find((r) => r._id === 'cash') || { count: 0, total: 0 };
   const card = rows.find((r) => r._id === 'card') || { count: 0, total: 0 };
 
+  const ordersTotal = cash.count + card.count;
+  const revenue = cash.total + card.total;
+
+  /*
+   * ═══ QO'SHIMCHA KO'RSATKICHLAR ═══
+   *
+   * Ilgari hisobot faqat "nechta buyurtma, qancha pul" ni
+   * ko'rsatardi. Restoran uchun bu yetarli emas — u savdosini
+   * BOSHQARISHI kerak, shunchaki kuzatishi emas. Quyidagilar
+   * qo'shildi:
+   *
+   *   • o'rtacha chek — narx siyosati va aksiyalar ta'sirini
+   *     ko'rsatadigan eng muhim raqam
+   *   • bekor qilinganlar — muammo signali (oshxona ulgurmayaptimi,
+   *     taom tugaganmi)
+   *   • yetkazish/olib ketish — logistika yuklamasini tushunish
+   *   • eng ko'p sotilgan taomlar — menyuni qisqartirish yoki
+   *     aksiya tanlashda asos
+   *
+   * Hammasi BITTA vaqt oralig'i uchun va parallel hisoblanadi,
+   * shuning uchun qo'shimcha kechikish deyarli yo'q.
+   */
+  const [cancelledRows, deliveryRows, topDishes] = await Promise.all([
+    Order.countDocuments({
+      restaurantId,
+      status: 'cancelled',
+      updatedAt: { $gte: start, $lte: end },
+    }),
+
+    Order.aggregate([
+      { $match: { restaurantId, status: 'delivered', updatedAt: { $gte: start, $lte: end } } },
+      {
+        $group: {
+          // Model maydoni 'fulfillment': delivery | pickup | dinein
+          _id: '$fulfillment',
+          count: { $sum: 1 },
+        },
+      },
+    ]),
+
+    Order.aggregate([
+      { $match: { restaurantId, status: 'delivered', updatedAt: { $gte: start, $lte: end } } },
+      { $unwind: '$items' },
+      {
+        $group: {
+          _id: '$items.name',
+          qty: { $sum: '$items.quantity' },
+          // Model maydoni 'unitPrice' (item.price EMAS)
+          amount: { $sum: { $multiply: ['$items.unitPrice', '$items.quantity'] } },
+        },
+      },
+      { $sort: { qty: -1 } },
+      { $limit: 5 },
+      { $project: { _id: 0, name: '$_id', qty: 1, amount: 1 } },
+    ]),
+  ]);
+
+  const pickup = deliveryRows.find((r) => r._id === 'pickup')?.count || 0;
+  const delivery = deliveryRows.find((r) => r._id === 'delivery')?.count || 0;
+  const dinein = deliveryRows.find((r) => r._id === 'dinein')?.count || 0;
+
   return {
     from: start,
     to: end,
-    ordersTotal: cash.count + card.count,
+    ordersTotal,
+    revenue,
+    // Buyurtma bo'lmasa 0 — bo'lishda NaN chiqmasligi uchun
+    avgCheck: ordersTotal ? Math.round(revenue / ordersTotal) : 0,
+    cancelled: cancelledRows,
+    delivery,
+    pickup,
+    dinein,
+    topDishes,
     cash: { count: cash.count, amount: cash.total },
     card: { count: card.count, amount: card.total },
   };
