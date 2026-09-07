@@ -165,6 +165,20 @@ async function releaseOrderToKitchen(orderId, provider) {
     return;
   }
 
+  /*
+   * Kunlik raqam AYNAN SHU YERDA beriladi.
+   *
+   * Karta bilan to'lanadigan buyurtma yaratilganda
+   * 'awaiting_payment' bo'ladi va restoranga ko'rinmaydi —
+   * shuning uchun o'shanda raqam berilmagan. Endi pul keldi,
+   * buyurtma oshxonaga chiqmoqda, demak raqam kerak.
+   *
+   * Bu tartib raqamlar ketma-ketligini ham to'g'ri saqlaydi:
+   * to'lanmay qolgan buyurtmalar raqam "yeb qo'ymaydi".
+   */
+  const { assignDailyNumber } = await import('./orderNumber.js');
+  await assignDailyNumber(order).catch((e) => console.error('[orderNumber]', e.message));
+
   const io = getIO();
   io?.to(`order:${orderId}`).emit('order:paid', { orderId: String(orderId) });
   io?.to(`restaurant:${order.restaurantId}`).emit('order:new', order);

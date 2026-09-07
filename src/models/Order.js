@@ -134,6 +134,28 @@ const orderSchema = new Schema(
     // Zal buyurtmasi raqami — #A-124
     dineInNumber: { type: String, default: '' },
 
+    /*
+     * ═══ KUNLIK BUYURTMA RAQAMI ═══
+     *
+     * Restoran uchun mo'ljallangan qisqa raqam: #42.
+     *
+     * NIMA UCHUN KERAK: ilgari buyurtmani faqat MongoDB _id
+     * bilan ko'rsatish mumkin edi (6a9c20dda4a900e603d2e079).
+     * Telefon orqali "oltmish-a-to'qqiz-be..." deb aytib
+     * bo'lmaydi. Telegram botda va oshxona chekida qisqa
+     * raqam kerak.
+     *
+     * NIMA UCHUN KUNLIK, GLOBAL EMAS: restoran "bugungi
+     * 42-buyurtma" deb gapiradi, "1042-buyurtma" deb emas.
+     * Har kuni 1 dan boshlanadi va shu kun ichida noyob.
+     *
+     * Faqat restoranga ko'rinadigan buyurtmalarga beriladi
+     * (awaiting_payment holatidagi to'lanmagan buyurtma raqam
+     * olmaydi — aks holda raqamlar orasida bo'shliq qolardi).
+     */
+    dailyNumber: { type: Number, default: null },
+    dailyNumberDate: { type: String, default: '' }, // 'YYYY-MM-DD'
+
     // Manzil — yetkazishda majburiy, olib ketishda bo'sh bo'lishi mumkin
     address: { type: String, default: '' },
     // Yetkazish nuqtasi — kuryer xaritada ko'radi
@@ -214,6 +236,22 @@ const orderSchema = new Schema(
     deliveredAt: { type: Date },
   },
   { timestamps: true },
+);
+
+/*
+ * Kunlik raqam shu restoran + shu kun ichida NOYOB bo'lishi shart.
+ *
+ * `partialFilterExpression` MUHIM: raqami yo'q buyurtmalar
+ * (dailyNumber: null) indeksga umuman kirmaydi. Busiz barcha
+ * null qiymatlar bir-biri bilan to'qnashib, ikkinchi
+ * to'lanmagan buyurtma yaratib bo'lmasdi.
+ */
+orderSchema.index(
+  { restaurantId: 1, dailyNumberDate: 1, dailyNumber: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { dailyNumber: { $type: 'number' } },
+  },
 );
 
 export const Order = model('Order', orderSchema);

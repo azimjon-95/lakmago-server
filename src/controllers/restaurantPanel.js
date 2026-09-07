@@ -4,9 +4,9 @@ import { asyncHandler } from '../middleware/error.js';
 import { Restaurant } from '../models/Restaurant.js';
 import { Dish } from '../models/Dish.js';
 import { Order } from '../models/Order.js';
-import { Banner, User } from '../models/User.js';
+import { Banner } from '../models/User.js';
 import { getIO } from '../sockets/io.js';
-import { notifyUser } from '../services/telegram.js';
+import { changeOrderStatus, OrderFlowError } from '../services/orderFlow.js';
 
 // Restoran token'idagi restaurantId'ni oladi (auth middleware qo'ygan)
 function rid(req) {
@@ -237,84 +237,32 @@ export const restaurantPanelController = {
   }),
 
   // PATCH /api/panel/orders/:id/status  { status }
-  // Restoran oqimi: pending → accepted → preparing → ready → delivering
+  /*
+   * Restoran oqimi: pending -> accepted -> preparing -> ready -> delivering
+   *
+   * MANTIQ BU YERDA EMAS. U services/orderFlow.js ga ko'chirildi,
+   * chunki AYNAN shu mantiq Telegram botga ham kerak (TZ 23-band:
+   * "Telegram uchun parallel order logic yaratish taqiqlanadi").
+   *
+   * Bu kontroller endi faqat HTTP qatlami: so'rovni o'qiydi,
+   * service'ni chaqiradi, xatoni HTTP kodiga aylantiradi.
+   */
   updateOrderStatus: asyncHandler(async (req, res) => {
-    const { status } = req.body;
-    const allowed = ['accepted', 'preparing', 'ready', 'delivering', 'cancelled'];
-    if (!allowed.includes(status)) {
-      return res.status(400).json({ error: 'Noto‘g‘ri status' });
+    try {
+      const { order } = await changeOrderStatus({
+        orderId: req.params.id,
+        restaurantId: rid(req),
+        status: req.body.status,
+      });
+      return res.json(order);
+    } catch (e) {
+      if (e instanceof OrderFlowError) {
+        // NOT_FOUND -> 404, qolgani -> 400 (mijoz xatosi)
+        const code = e.code === 'NOT_FOUND' ? 404 : 400;
+        return res.status(code).json({ error: e.message });
+      }
+      throw e;
     }
-
-    const update = { status };
-    if (status === 'accepted') update.acceptedAt = new Date();
-    if (status === 'ready') update.readyAt = new Date();
-
-    // Avvalgi holatni olamiz — bir xil bo'lsa xabar takrorlanmasin
-    const before = await Order.findOne({ _id: req.params.id, restaurantId: rid(req) })
-      .select('status').lean();
-    if (!before) return res.status(404).json({ error: 'Buyurtma topilmadi' });
-
-    const statusChanged = before.status !== status;
-
-    const order = await Order.findOneAndUpdate(
-      { _id: req.params.id, restaurantId: rid(req) },
-      update,
-      { new: true },
-    ).populate('userId');
-    if (!order) return res.status(404).json({ error: 'Buyurtma topilmadi' });
-
-    // Bekor qilinса — ishlatilган bonusни mijozга qaytaramiz (adolatli)
-    if (status === 'cancelled' && order.bonusUsed > 0) {
-      await User.updateOne({ _id: order.userId._id || order.userId }, { $inc: { bonusBalance: order.bonusUsed } });
-    }
-
-    const io = getIO();
-    // Mijozga real-time status (buyurtma kuzatuvi shu yerdan yangilanadi)
-    io?.to(`order:${order._id}`).emit('order:status', { orderId: String(order._id), status: order.status });
-    // Admin global nazorati
-    io?.to('admin').emit('order:update', order);
-
-    // Telegram push
-    const user = order.userId;
-    const statusText = {
-      accepted: '✅ Buyurtmangiz qabul qilindi',
-      preparing: '\ud83d\udc68\u200d\ud83c\udf73 Buyurtmangiz tayyorlanmoqda',
-      ready: '\ud83c\udf7d Buyurtmangiz tayyor',
-      // Talab bo'yicha aniq matn: "yo'lga chiqdi, tez orada yetib keladi"
-      delivering: '\ud83d\udeb4 Buyurtmangiz yo‘lga chiqdi, tez orada yetib keladi',
-      // Yetkazildi xabari yo'q edi — mijoz oxirgi holatni bilmasdi
-      delivered: '✅ Buyurtmangiz yetkazildi. Yoqimli ishtaha!',
-      cancelled: '\u274c Buyurtmangiz bekor qilindi',
-    };
-    // ===== HISOB-KITOB =====
-    // Yetkazildi → restoran ulushi balansga qo'shiladi
-    if (statusChanged && status === 'delivered') {
-      const { settleOrder } = await import('../services/billing.js');
-      await settleOrder(order._id).catch((e) =>
-        console.error('[billing] settleOrder:', e.message));
-
-      // Baho so'raymiz. Avval bu faqat mijoz botda "Oldim" ni
-      // bosganda ishlardi; restoran o'zi yetkazildi deb
-      // belgilaganda (odatdagi yo'l) hech narsa so'ralmasdi.
-      const { askRatingForOrder } = await import('../services/deliveryCheck.js');
-      askRatingForOrder(order).catch((e) =>
-        console.error('[rating] askRatingForOrder:', e.message));
-    }
-
-    // Bekor qilindi → to'langan bo'lsa pul qaytariladi
-    if (statusChanged && status === 'cancelled' && order.isPaid) {
-      const { recordRefund } = await import('../services/billing.js');
-      await recordRefund(order, order.paymentMethod).catch((e) =>
-        console.error('[billing] recordRefund:', e.message));
-    }
-
-    // Faqat holat HAQIQATAN o'zgarganda xabar yuboramiz.
-    // Tugma ikki marta bosilsa ham mijozga bitta xabar boradi.
-    if (statusChanged && user?.telegramId && statusText[status]) {
-      notifyUser(user.telegramId, statusText[status]);
-    }
-
-    res.json(order);
   }),
 
   // ===== RESTORAN BANNERI =====

@@ -15,6 +15,7 @@ import { User } from '../models/User.js';
 import { linkIdentity } from '../services/authIdentity.js';
 import { Session } from '../models/Session.js';
 import { Order } from '../models/Order.js';
+import { assignDailyNumber } from '../services/orderNumber.js';
 import { getIO } from '../sockets/io.js';
 import { notify } from '../services/notifications.js';
 import { notifyUser } from '../services/telegram.js';
@@ -604,6 +605,21 @@ export const orderController = {
         ...(isPickup ? {} : { courierName: COURIERS[Math.floor(Math.random() * COURIERS.length)] }),
       });
       created.push(doc);
+
+      /*
+       * Kunlik raqam (#42) — restoran va Telegram bot uchun.
+       *
+       * FAQAT restoranga KO'RINADIGAN buyurtmaga beriladi.
+       * 'awaiting_payment' — karta to'lovi kutilayotgan buyurtma,
+       * u restoranga ko'rinmaydi va ko'pincha umuman to'lanmaydi.
+       * Unga raqam bersak, restoran raqamlari orasida bo'shliq
+       * qolardi (#41, #43, #44...) va "42-buyurtma qani?" degan
+       * savol tug'ilardi. Raqam to'lov o'tgach beriladi.
+       */
+      if (doc.status !== 'awaiting_payment') {
+        await assignDailyNumber(doc).catch((e) =>
+          console.error('[orderNumber]', e.message));
+      }
 
       // Aksiya ishlatildi — hisob va limit yangilanadi
       if (o._promo) {
