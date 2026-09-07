@@ -66,12 +66,12 @@ export class PaynetError extends Error {
 const ERR = {
   CLIENT_NOT_FOUND: () => new PaynetError(302, 'Mijoz topilmadi'),
   SERVICE_NOT_FOUND: () => new PaynetError(305, 'Xizmat topilmadi'),
-  WRONG_AMOUNT: () => new PaynetError(413, 'Noto\u2018g\u2018ri summa'),
-  MISSING_PARAMS: () => new PaynetError(411, 'Bitta yoki bir nechta majburiy parametrlar ko\u2018rsatilmagan'),
+  WRONG_AMOUNT: () => new PaynetError(413, 'Noto‘g‘ri summa'),
+  MISSING_PARAMS: () => new PaynetError(411, 'Bitta yoki bir nechta majburiy parametrlar ko‘rsatilmagan'),
   TX_EXISTS: () => new PaynetError(201, 'Tranzaksiya allaqachon mavjud'),
   TX_ALREADY_CANCELLED: () => new PaynetError(202, 'Tranzaksiya allaqachon bekor qilingan'),
   TX_NOT_FOUND: () => new PaynetError(203, 'Tranzaksiya topilmadi'),
-  CANCEL_INSUFFICIENT: () => new PaynetError(77, 'Bekor qilish uchun mablag\u2018 yetarli emas'),
+  CANCEL_INSUFFICIENT: () => new PaynetError(77, 'Bekor qilish uchun mablag‘ yetarli emas'),
 };
 
 // ─────────────────────────────────────────────────────────
@@ -320,7 +320,7 @@ async function handleGetStatement(params) {
 
   const from = parseStandardDate(dateFrom);
   const to = parseStandardDate(dateTo);
-  if (!from || !to) throw new PaynetError(414, 'Sana va vaqt formati noto\u2018g\u2018ri');
+  if (!from || !to) throw new PaynetError(414, 'Sana va vaqt formati noto‘g‘ri');
 
   // FAQAT muvaffaqiyatli (state=2) — bekor qilinganlar KIRITILMAYDI
   const rows = await Transaction.find({
@@ -362,7 +362,7 @@ export async function handlePaynetRpc(body) {
   const { jsonrpc, method, id, params } = body || {};
 
   if (jsonrpc !== '2.0' || typeof method !== 'string') {
-    return { jsonrpc: '2.0', id: id ?? null, error: { code: -32600, message: 'Noto\u2018g\u2018ri so\u2018rov' } };
+    return { jsonrpc: '2.0', id: id ?? null, error: { code: -32600, message: 'Noto‘g‘ri so‘rov' } };
   }
 
   const handler = HANDLERS[method];

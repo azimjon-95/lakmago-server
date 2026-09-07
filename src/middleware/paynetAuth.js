@@ -47,7 +47,7 @@ export function paynetIpWhitelist(req, res, next) {
   const allowed = PAYNET_CIDRS.some((cidr) => inCidr(ip, cidr));
 
   if (!allowed) {
-    console.warn(`[paynet:ip] ruxsat etilmagan manzildan so\u2018rov: ${ip}`);
+    console.warn(`[paynet:ip] ruxsat etilmagan manzildan so‘rov: ${ip}`);
     return res.status(403).json({ error: 'IP ruxsat etilmagan' });
   }
   return next();
