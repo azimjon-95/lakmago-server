@@ -78,6 +78,14 @@ export const reservationController = {
     });
     getIO()?.to('admin').emit('reservation:new', { reservationId: String(reservation._id) });
 
+    /*
+     * Telegram bot — restoranning ulangan xodimlariga (TZ 17).
+     * `await` yo'q: mijoz bron yaratilishini kutib qolmasin.
+     */
+    import('../services/restaurantBotOrders.js')
+      .then((m) => m.notifyNewReservation(reservation._id))
+      .catch((e) => console.error('[restaurantBot] bron:', e.message));
+
     notify({
       notificationId: `reservation:${reservation._id}`,
       audience: 'restaurant',
@@ -196,6 +204,16 @@ export const reservationController = {
     io?.to('admin').emit('reservation:update', {
       reservationId: String(reservation._id), status,
     });
+
+    /*
+     * Telegram xabarlarini yangilash (TZ 17).
+     * Paneldan bron ko'rib chiqilsa, xodimlarning Telegram
+     * xabaridagi tugmalar ham yo'qoladi — aks holda ular
+     * allaqachon hal qilingan bronni qayta bosishga urinardi.
+     */
+    import('../services/restaurantBotOrders.js')
+      .then((m) => m.refreshReservationMessages(reservation._id))
+      .catch((e) => console.error('[restaurantBot] bron:', e.message));
 
     res.json(reservation);
   })

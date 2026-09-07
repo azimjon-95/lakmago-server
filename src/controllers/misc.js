@@ -631,6 +631,18 @@ export const orderController = {
       io?.to(`restaurant:${o.restaurantId}`).emit('order:new', doc);
       io?.to('admin').emit('order:new', doc);
 
+      /*
+       * Telegram bot — ulangan xodimlarga.
+       *
+       * `await` YO'Q: Telegram sekin javob bersa mijoz
+       * buyurtma yaratilishini kutib qolmasligi kerak.
+       * Bot ichida to'lanmagan karta buyurtmasi va dine-in
+       * o'zi filtrlanadi.
+       */
+      import('../services/restaurantBotOrders.js')
+        .then((m) => m.notifyNewOrder(doc._id))
+        .catch((e) => console.error('[restaurantBot]', e.message));
+
       // Markaziy bildirishnoma — bazaga yoziladi, socket uzilsa
       // qayta ulanганda yo'qolmaydi
       notify({

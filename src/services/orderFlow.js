@@ -145,6 +145,30 @@ export async function changeOrderStatus({ orderId, restaurantId, status, actorNa
   await runSideEffects(order, status);
   broadcast(order);
 
+  /*
+   * ═══ TELEGRAM XABARLARINI YANGILASH ═══
+   *
+   * TZ 12-band: status QAYERDAN o'zgarishidan qat'i nazar,
+   * boshqa interfeys ham yangilanishi kerak.
+   *
+   * Bu chaqiruv aynan shu joyda turgani uchun ikki yo'nalish
+   * ham avtomatik ishlaydi:
+   *   • paneldan o'zgartirilsa -> xodimlarning Telegram
+   *     xabaridagi tugmalar yangilanadi
+   *   • botdan o'zgartirilsa -> broadcast() panelni yangilaydi
+   *     va shu qator qolgan xodimlarning xabarini yangilaydi
+   *
+   * Dinamik import — aylanma bog'liqlikning oldini oladi
+   * (restaurantBotOrders o'z navbatida shu faylni chaqiradi).
+   *
+   * `await` YO'Q: Telegram sekin javob bersa, panel javobi
+   * kutib qolmasligi kerak. Xato bo'lsa ham status o'zgarishi
+   * bekor qilinmaydi.
+   */
+  import('./restaurantBotOrders.js')
+    .then((m) => m.refreshOrderMessages(order._id, actorName))
+    .catch((e) => console.error('[restaurantBot] refresh:', e.message));
+
   return { order, changed: true };
 }
 

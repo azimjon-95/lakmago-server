@@ -182,6 +182,16 @@ async function releaseOrderToKitchen(orderId, provider) {
   const io = getIO();
   io?.to(`order:${orderId}`).emit('order:paid', { orderId: String(orderId) });
   io?.to(`restaurant:${order.restaurantId}`).emit('order:new', order);
+
+  /*
+   * Karta bilan to'langan buyurtma endi restoranga ko'rinadi —
+   * demak Telegram xodimlariga ham yuboriladi. Yaratilish
+   * paytida yuborilmagan edi, chunki u 'awaiting_payment'
+   * holatida edi va to'lanmasligi ham mumkin edi.
+   */
+  import('./restaurantBotOrders.js')
+    .then((m) => m.notifyNewOrder(order._id))
+    .catch((e) => console.error('[restaurantBot]', e.message));
   io?.to('admin').emit('order:new', order);
 }
 

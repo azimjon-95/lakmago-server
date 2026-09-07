@@ -82,7 +82,7 @@ export async function editStaffMessage(chatId, messageId, text, replyMarkup = nu
 }
 
 /** Tugma bosilganini tasdiqlash — bosilgandagi "soat" belgisini o'chiradi. */
-async function answerCallback(callbackId, text = '') {
+export async function answerCallback(callbackId, text = '') {
   if (!isRestaurantBotEnabled()) return;
   try {
     await fetch(`${TG()}/answerCallbackQuery`, {
@@ -259,8 +259,27 @@ export async function handleRestaurantBotUpdate(update) {
 
     if (update.callback_query) {
       const data = String(update.callback_query.data || '');
+
       if (data.startsWith('connect:')) {
         await handleConnectCallback(update.callback_query);
+        return;
+      }
+
+      /*
+       * Buyurtma tugmalari alohida faylda — bu yerda faqat
+       * yo'naltirish. Dinamik import: restaurantBotOrders
+       * o'z navbatida orderFlow'ni chaqiradi, statik import
+       * bo'lsa aylanma bog'liqlik paydo bo'lardi.
+       */
+      if (data.startsWith('o:')) {
+        const { handleOrderCallback } = await import('./restaurantBotOrders.js');
+        await handleOrderCallback(update.callback_query);
+        return;
+      }
+
+      if (data.startsWith('r:')) {
+        const { handleReservationCallback } = await import('./restaurantBotOrders.js');
+        await handleReservationCallback(update.callback_query);
       }
     }
   } catch (e) {
