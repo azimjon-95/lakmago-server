@@ -12,6 +12,7 @@ import { uploadController } from '../controllers/upload.js';
 import { referralController } from '../controllers/referralController.js';
 import { addressController } from '../controllers/address.js';
 import { userProfileController } from '../controllers/userProfile.js';
+import { restaurantTelegramController } from '../controllers/restaurantTelegram.js';
 import { supportController } from '../controllers/support.js';
 import { cardController } from '../controllers/cards.js';
 import { cardPaymentController } from '../controllers/cardPayment.js';
@@ -133,6 +134,16 @@ router.patch('/panel/dishes/:id/stop', auth, requireRole('restaurant'), restaura
 router.delete('/panel/dishes/:id', auth, requireRole('restaurant'), restaurantPanelController.deleteDish);
 router.get('/panel/orders', auth, requireRole('restaurant'), restaurantPanelController.orders);
 router.patch('/panel/orders/:id/status', auth, requireRole('restaurant'), restaurantPanelController.updateOrderStatus);
+/*
+ * ═══ SOZLAMALAR -> TELEGRAM ═══
+ * Restoran o'z xodimlarining Telegram akkauntlarini boshqaradi.
+ * restaurantId token'dan olinadi, so'rov tanasidan emas.
+ */
+router.get('/panel/telegram-staff', auth, requireRole('restaurant'), restaurantTelegramController.list);
+router.post('/panel/telegram-staff', auth, requireRole('restaurant'), restaurantTelegramController.add);
+router.post('/panel/telegram-staff/:id/link', auth, requireRole('restaurant'), restaurantTelegramController.link);
+router.delete('/panel/telegram-staff/:id', auth, requireRole('restaurant'), restaurantTelegramController.disconnect);
+
 router.get('/panel/reservations', auth, requireRole('restaurant'), reservationController.forRestaurantSelf);
 router.patch('/panel/reservations/:id/status', auth, requireRole('restaurant'), reservationController.updateStatus);
 router.patch('/panel/orders/:id/paid', auth, requireRole('restaurant'), restaurantPanelController.markPaid);

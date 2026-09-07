@@ -10,6 +10,7 @@ import { errorHandler, notFound } from './middleware/error.js';
 import { initSocket } from './sockets/io.js';
 import { initCache } from './services/cache.js';
 import { handleBotUpdate } from './services/telegram.js';
+import { handleRestaurantBotUpdate } from './services/restaurantBot.js';
 import { ensureDefaultAdmin } from './services/bootstrap.js';
 import { initPush } from './services/push.js';
 import { apiLimiter } from './middleware/rateLimit.js';
@@ -316,6 +317,21 @@ async function main() {
     handleBotUpdate(req.body || {}).catch((e) => {
       console.error('[bot] webhook XATOSI:', e.message);
       console.error(e.stack);
+    });
+  });
+
+  /*
+   * Restoran boti webhook'i — mijoz botidan ALOHIDA manzil.
+   *
+   * Ikkisi bitta manzilda bo'lsa, qaysi botdan kelganini
+   * ajratish uchun qo'shimcha mantiq kerak bo'lardi va
+   * xatolik ehtimoli oshardi. Alohida manzil soddaroq va
+   * xavfsizroq.
+   */
+  app.post('/restaurant-bot/webhook', (req, res) => {
+    res.sendStatus(200);
+    handleRestaurantBotUpdate(req.body || {}).catch((e) => {
+      console.error('[restaurantBot] webhook XATOSI:', e.message);
     });
   });
 

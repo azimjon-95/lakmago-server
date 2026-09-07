@@ -90,6 +90,22 @@ export const config = {
   telegramBotToken: process.env.TELEGRAM_BOT_TOKEN ?? '',
 
   /*
+   * RESTORAN BOTI — mijoz botidan ALOHIDA.
+   *
+   * Nima uchun ikkinchi bot: mijoz boti (@lokmaGobot) ommaviy,
+   * uni istalgan odam ochadi. Restoran boti esa faqat xodimlar
+   * uchun va u buyurtmani qabul qilish, bekor qilish kabi
+   * jiddiy amallarni bajaradi. Ikkisini bitta botga
+   * birlashtirish xavfli: mijoz tasodifan xodim tugmasini
+   * bosib qolishi yoki bot mijozga xodim menyusini
+   * ko'rsatib yuborishi mumkin.
+   *
+   * Bo'sh bo'lsa restoran boti umuman ishga tushmaydi —
+   * mavjud tizimga hech qanday ta'sir qilmaydi.
+   */
+  restaurantBotToken: process.env.RESTAURANT_BOT_TOKEN ?? '',
+
+  /*
    * Kuryer sahifasi manzili — alohida lokma-courier loyihasi.
    *
    * DEFAULT — HAQIQIY DOMEN, MUHITGA BOG'LIQ EMAS.
