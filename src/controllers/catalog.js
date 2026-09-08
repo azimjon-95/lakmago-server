@@ -107,9 +107,40 @@ export const restaurantController = {
       .limit(limit + 1)
       .lean());
 
+    /*
+     * ═══ RESTORAN QAYSI KATEGORIYALARDA TAOMGA EGA ═══
+     *
+     * MUAMMO: bosh sahifada "Issiq taomlar" tanlanganda menyusida
+     * 19 ta issiq taom bor restoran ham chiqmasdi. Sabab —
+     * filtrlash faqat restoranning O'Z turi bo'yicha edi
+     * (r.category), menyusi hisobga olinmasdi.
+     *
+     * Mijoz uchun bu mantiqsiz: u TAOM qidiryapti, restoran
+     * qanday belgilangani uni qiziqtirmaydi.
+     *
+     * NIMA UCHUN MIJOZ TOMONIDA HAL QILINMADI: mijoz /dishes/all
+     * dan foydalanardi, u esa SAHIFALANGAN (default 20 ta).
+     * Restoranning taomlari o'sha 20 talikka tushmasa, filtr
+     * baribir ishlamasdi. Shuning uchun ro'yxat serverda
+     * tayyorlanadi — u to'liq va aniq.
+     *
+     * NARXI: bitta aggregate so'rovi, keshlangan ro'yxat uchun.
+     * Natija restoran ob'ektiga qo'shiladi va mijoz uni
+     * to'g'ridan-to'g'ri ishlatadi.
+     */
+    const pageIds = restaurants.map((r) => r._id);
+    const catRows = pageIds.length
+      ? await Dish.aggregate([
+        { $match: { restaurantId: { $in: pageIds }, isAvailable: true } },
+        { $group: { _id: '$restaurantId', categories: { $addToSet: '$category' } } },
+      ])
+      : [];
+    const catMap = new Map(catRows.map((r) => [String(r._id), r.categories.filter(Boolean)]));
+
     // Keyingi sahifa bormi?
     const hasMore = restaurants.length > limit;
     const items = (hasMore ? restaurants.slice(0, limit) : restaurants)
+      .map((r) => ({ ...r, dishCategories: catMap.get(String(r._id)) || [] }))
       // isOpen — DOIM Toshkent (yoki restoranning o'z) vaqt
       // mintaqasidan hisoblanadi, mijoz qurilmasi qaysi davlatda
       // bo'lishidan qat'i nazar bir xil natija. Mijoz o'zi
