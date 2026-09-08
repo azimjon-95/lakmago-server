@@ -415,6 +415,23 @@ async function main() {
     setInterval(run, 60 * 60_000);
   }
 
+  /*
+   * Restoran boti webhook'i — MIJOZ BOTIDAN MUSTAQIL.
+   *
+   * Ataylab alohida shartda: restoran boti mijoz boti
+   * sozlanmagan bo'lsa ham ishlashi kerak. Ilgari webhook
+   * qo'lda o'rnatilardi va aynan shu qadam unutilgani uchun
+   * bot /start ga javob bermayotgan edi.
+   *
+   * Funksiya token haqiqiyligini ham tekshiradi va bot
+   * username'ini logga yozadi — noto'g'ri token eng ko'p
+   * uchraydigan sabab.
+   */
+  if (config.restaurantBotToken) {
+    const { ensureRestaurantWebhook } = await import('./services/webhookSetup.js');
+    ensureRestaurantWebhook().catch((e) => console.error('Restoran bot webhook:', e.message));
+  }
+
   // Kunlik guruh tekshiruvi (reklama yuborilganmi + pin qilinganmi)
   // Server ishga tushганда 1 marta, keyin har 24 soatda.
   if (config.telegramBotToken) {

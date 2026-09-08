@@ -139,23 +139,48 @@ export async function handleStart(msg, token) {
   const tgUserId = String(from.id);
   const username = (from.username || '').toLowerCase();
 
-  // Token yo'q — oddiy /start. Jim.
-  if (!token) return;
+  /*
+   * ═══ DIAGNOSTIKA ═══
+   * Foydalanuvchiga HECH NARSA ko'rsatilmaydi (TZ 6-band),
+   * lekin server logida sabab yoziladi. Busiz "bot javob
+   * bermayapti" muammosini topib bo'lmaydi — hamma yo'l
+   * jim `return` bilan tugaydi va qaysi biri ishlagani
+   * noma'lum qoladi.
+   */
+  const skip = (why) => console.log(`[restaurantBot] /start e'tiborsiz: ${why} (@${username || '—'}, id=${tgUserId})`);
+
+  // Token yo'q — oddiy /start (botni qidiruvdan topib bosgan). Jim.
+  if (!token) { skip('token yo‘q — havolasiz ochilgan'); return; }
 
   const staff = await RestaurantTelegramStaff.findOne({
     connectToken: token,
     connectTokenExpiresAt: { $gt: new Date() },
   });
 
-  // Token noto'g'ri yoki muddati o'tgan — jim.
-  if (!staff) return;
+  if (!staff) {
+    /*
+     * Ikki xil holatni ajratamiz: token umuman yo'qmi yoki
+     * muddati o'tganmi. Ikkinchisi tez-tez uchraydi va
+     * yechimi boshqacha — panelda yangi havola olish.
+     */
+    const expired = await RestaurantTelegramStaff.findOne({ connectToken: token }).lean();
+    skip(expired ? 'havola muddati tugagan (24 soat)' : 'token topilmadi');
+    return;
+  }
 
   /*
    * IKKINCHI QATLAM: token to'g'ri bo'lsa ham, username mos
    * kelishi shart. Link boshqa odamga yuborilgan bo'lishi
    * mumkin — o'shanda u ulanib olmasligi kerak.
    */
-  if (!username || username !== staff.username) return;
+  if (!username) {
+    skip('Telegram akkauntida username yo‘q — avval Telegram sozlamalarida qo‘ying');
+    return;
+  }
+  if (username !== staff.username) {
+    skip(`username mos emas: panelda "@${staff.username}", kelgan "@${username}"`);
+    return;
+  }
 
   // Bu Telegram akkaunt boshqa restoranga ulanganmi (TZ 20-band)
   const taken = await RestaurantTelegramStaff.findOne({
