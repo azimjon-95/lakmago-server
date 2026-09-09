@@ -387,8 +387,11 @@ export const dishController = {
     const restIds = visibleRestaurants.map((r) => r._id);
 
     const filter = { restaurantId: { $in: restIds }, isAvailable: true };
+    if (req.query.category && req.query.category !== 'all') {
+      filter.category = req.query.category;
+    }
     if (req.query.cursor) filter.createdAt = { $lt: new Date(req.query.cursor) };
-    const limit = Math.min(Number(req.query.limit) || 20, 50);
+    const limit = Math.min(Number(req.query.limit) || 50, 50);
 
     const dishes = await Dish.find(filter)
       .select('name description section category price oldPrice imageUrl images tint icon restaurantId isHit isDiscounted createdAt weight weightGram calories protein fat carbs prepMinutes ingredients optionGroups')

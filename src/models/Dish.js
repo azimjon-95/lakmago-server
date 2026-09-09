@@ -41,7 +41,7 @@ const dishSchema = new Schema(
         'zavtroki', 'obed',
         'fastfood', 'lavash', 'burger', 'tovuq', 'pitsa',
         'sushi', 'evropa', 'turetskaya',
-        'koffe', 'shirinlik', 'salqin', 'magazin_oziq',
+        'koffe', 'shirinlik', 'salqin', 'sous', 'boks', 'non',
         // eski qiymatlar mosligi uchun
         'issiq', 'shorva', 'salat', 'sovuq', 'grill', 'garnir',
         'nonushta', 'nonvoyxona', 'ichimlik', 'alkogol', 'boshqa',

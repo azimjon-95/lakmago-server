@@ -12,7 +12,7 @@ const CATEGORIES = [
   'milliy', 'osh', 'shashlik', 'sup', 'salat', 'choyxona',
   'zavtroki', 'obed', 'fastfood', 'lavash', 'burger', 'tovuq',
   'pitsa', 'sushi', 'evropa', 'turetskaya', 'koffe',
-  'shirinlik', 'salqin', 'magazin_oziq',
+  'shirinlik', 'salqin', 'sous', 'boks', 'non',
 ];
 
 // ===== AKSIYALAR =====
