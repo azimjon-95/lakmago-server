@@ -393,6 +393,29 @@ export const dishController = {
     if (req.query.cursor) filter.createdAt = { $lt: new Date(req.query.cursor) };
     const limit = Math.min(Number(req.query.limit) || 50, 50);
 
+    /*
+     * ═══ "BARCHASI" SAHIFASI UCHUN — CHEGIRMA FILTRI ═══
+     *
+     * Bosh sahifadagi "Super Chegirmalar" va "Tavsiya qilamiz"
+     * qatorlari cheklangan (aralashtirib ko'rsatiladi). Mijoz
+     * "Barchasi" bossa, chinakam TO'LIQ ro'yxat kerak — shuning
+     * uchun shu ENDPOINT filtri kengaytirildi, alohida yangi
+     * endpoint ochish o'rniga (cursor sahifalash allaqachon bor,
+     * uni qayta ishlatamiz).
+     *
+     * `isDiscounted` — Dish modelida SAQLANADIGAN va INDEKSLANGAN
+     * maydon (chegirma admin panelda belgilanganda o'rnatiladi).
+     * `oldPrice > price` ni har safar solishtirish o'rniga shuni
+     * ishlatish tezroq va bazadagi haqiqiy holatga mos.
+     *
+     * Parametr YO'Q bo'lsa xulq ILGARIGIDEK — mavjud chaqiruvchilar
+     * (HomePage, Splash prefetch) hech narsa sezmaydi.
+     */
+    if (req.query.discounted === '1') filter.isDiscounted = true;
+    else if (req.query.discounted === '0') filter.isDiscounted = { $ne: true };
+
+
+
     const dishes = await Dish.find(filter)
       .select('name description section category price oldPrice imageUrl images tint icon restaurantId isHit isDiscounted createdAt weight weightGram calories protein fat carbs prepMinutes ingredients optionGroups')
       .sort({ createdAt: -1 })
