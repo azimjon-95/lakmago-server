@@ -414,8 +414,6 @@ export const dishController = {
     if (req.query.discounted === '1') filter.isDiscounted = true;
     else if (req.query.discounted === '0') filter.isDiscounted = { $ne: true };
 
-
-
     const dishes = await Dish.find(filter)
       .select('name description section category price oldPrice imageUrl images tint icon restaurantId isHit isDiscounted createdAt weight weightGram calories protein fat carbs prepMinutes ingredients optionGroups')
       .sort({ createdAt: -1 })
