@@ -197,3 +197,44 @@ export async function setStatus(notificationId, status) {
 
   return toPayload(doc);
 }
+
+/**
+ * Hodisa HAL QILINGANDA bildirishnomani yopish — qayerda hal
+ * qilinganidan qat'i nazar (panel, Telegram bot, mijoz).
+ *
+ * AVVAL: bildirishnomani faqat panel o'zi PATCH qilardi. Buyurtma
+ * Telegram botda qabul qilinsa yoki mijoz bekor qilsa, panelda
+ * bildirishnoma "javobsiz" qolib, ovoz qayta-qayta chalinardi va
+ * har kirishda "kutilayotgan" bo'lib yuklanardi.
+ *
+ * setStatus yakuniy holatdan orqaga qaytmaydi va socket orqali
+ * `notification:status` yuboradi — ochiq panellarda ovoz darhol
+ * to'xtaydi. Xato asosiy oqimni to'xtatmaydi.
+ */
+export async function resolveNotification(notificationId, status = 'ACCEPTED') {
+  try {
+    return await setStatus(notificationId, status);
+  } catch (e) {
+    console.error('[notify] yopish:', notificationId, e.message);
+    return null;
+  }
+}
+
+/** Bron holati o'zgarganda uning bildirishnomasini yopish. */
+export function resolveReservationNotification(reservation) {
+  if (!reservation?._id || reservation.status === 'pending') return Promise.resolve(null);
+  const cancelled = ['rejected', 'cancelled', 'not_coming'].includes(reservation.status);
+  return resolveNotification(`reservation:${reservation._id}`, cancelled ? 'CANCELLED' : 'ACCEPTED');
+}
+
+/**
+ * Shu doiradagi eng so'nggi seq — panel sessiyasi CHEGARASI.
+ * Panel undan keyin kelgan bildirishnomalarnigina "yangi" deb
+ * ovoz bilan chaladi; oldingilari faqat ro'yxatda ko'rinadi.
+ */
+export async function headSeq({ audience, restaurantId }) {
+  const filter = { audience };
+  if (audience === 'restaurant') filter.restaurantId = restaurantId;
+  const doc = await Notification.findOne(filter).sort({ seq: -1 }).select('seq').lean();
+  return doc?.seq || 0;
+}

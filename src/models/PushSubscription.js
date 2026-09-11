@@ -31,7 +31,9 @@ const pushSubscriptionSchema = new Schema(
     // Yaroqsiz obunani darhol o'chirmaymiz — vaqtincha xato
     // bo'lishi mumkin. Uch marta ketma-ket xato bo'lsa o'chadi.
     failCount: { type: Number, default: 0 },
-    lastSeen: { type: Date, default: Date.now, index: true },
+    // Indeks pastda (TTL) — bu yerda `index: true` qo'yilmaydi, aks holda
+    // Mongoose "Duplicate schema index" ogohlantiradi
+    lastSeen: { type: Date, default: Date.now },
   },
   { timestamps: true },
 );

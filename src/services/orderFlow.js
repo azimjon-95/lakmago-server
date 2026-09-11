@@ -184,6 +184,15 @@ export async function changeOrderStatus({ orderId, restaurantId, status, actorNa
     .then((m) => m.refreshOrderMessages(order._id, actorName))
     .catch((e) => console.error('[restaurantBot] refresh:', e.message));
 
+  /*
+   * Panel bildirishnomasi yopiladi — buyurtma botda qabul qilinsa
+   * ham paneldagi ovoz darhol to'xtaydi va keyingi kirishda
+   * "javobsiz" bo'lib chiqmaydi.
+   */
+  import('./notifications.js')
+    .then((m) => m.resolveNotification(`order:${order._id}`, status === 'cancelled' ? 'CANCELLED' : 'ACCEPTED'))
+    .catch(() => {});
+
   return { order, changed: true };
 }
 

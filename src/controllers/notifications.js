@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { asyncHandler } from '../middleware/error.js';
-import { listSince, listPending, setStatus } from '../services/notifications.js';
+import { listSince, listPending, setStatus, headSeq } from '../services/notifications.js';
 import { Notification } from '../models/Notification.js';
 import { PushSubscription } from '../models/PushSubscription.js';
 import { config } from '../config/index.js';
@@ -37,7 +37,14 @@ export const notificationController = {
     // Mijoz keyingi safar shu seq'dan so'raydi
     const lastSeq = items.length ? items[items.length - 1].seq : Number(after) || 0;
 
-    res.json({ items, lastSeq });
+    /*
+     * Birinchi yuklanishda (after yo'q) — sessiya chegarasi. Panel
+     * shundan KEYINGI bildirishnomalarnigina ovoz bilan chaladi.
+     */
+    const isInitial = after === undefined || after === '';
+    const head = isInitial ? await headSeq(scope) : undefined;
+
+    res.json({ items, lastSeq, ...(isInitial ? { headSeq: Math.max(head, lastSeq) } : {}) });
   }),
 
   /**

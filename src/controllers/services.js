@@ -170,6 +170,9 @@ export const reservationController = {
     import('../services/restaurantBotOrders.js')
       .then((m) => m.notifyReservationChangedByCustomer(reservation._id))
       .catch((e) => console.error('[restaurantBot] bron bekor:', e.message));
+    import('../services/notifications.js')
+      .then((m) => m.resolveReservationNotification(reservation))
+      .catch(() => {});
 
     // Restoranga real-time xabar
     getIO()?.to(`restaurant:${reservation.restaurantId}`).emit('reservation:update', {
@@ -226,6 +229,9 @@ export const reservationController = {
     import('../services/restaurantBotOrders.js')
       .then((m) => m.refreshReservationMessages(reservation._id))
       .catch((e) => console.error('[restaurantBot] bron:', e.message));
+    import('../services/notifications.js')
+      .then((m) => m.resolveReservationNotification(reservation))
+      .catch(() => {});
 
     res.json(reservation);
   })

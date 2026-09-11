@@ -222,6 +222,10 @@ export async function handleReservationResponse(callbackQuery) {
     });
   }
 
+  import('./notifications.js')
+    .then((m) => m.resolveReservationNotification(reservation))
+    .catch(() => {});
+
   // Restoran botidagi xodimlar kartasi yangilanadi ("bora olmaymiz" — alohida xabar ham)
   import('./restaurantBotOrders.js')
     .then((m) => m.notifyReservationChangedByCustomer(reservation._id))

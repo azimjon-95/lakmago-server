@@ -19,7 +19,7 @@ import { assignDailyNumber } from '../services/orderNumber.js';
 import { getIO } from '../sockets/io.js';
 import { notify } from '../services/notifications.js';
 import { notifyUser } from '../services/telegram.js';
-import { parseReferralCode, attachReferral, rewardReferralIfSubscribed, checkChannelSubscription, buildReferralLink } from '../services/referral.js';
+import { parseReferralCode, attachReferral, rewardReferralIfSubscribed } from '../services/referral.js';
 
 export const bannerController = {
   // GET /api/banners — mijozга ko'rinadigan bannerlar
@@ -715,6 +715,14 @@ export const orderController = {
       orderId: String(order._id), status: 'cancelled',
     });
     io?.to('admin').emit('order:update', order);
+
+    // Panel bildirishnomasi yopiladi (ovoz to'xtaydi), bot kartasi yangilanadi
+    import('../services/notifications.js')
+      .then((m) => m.resolveNotification(`order:${order._id}`, 'CANCELLED'))
+      .catch(() => {});
+    import('../services/restaurantBotOrders.js')
+      .then((m) => m.refreshOrderMessages(order._id))
+      .catch((e) => console.error('[restaurantBot] mijoz bekor:', e.message));
 
     res.json(order);
   }),

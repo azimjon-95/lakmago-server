@@ -765,6 +765,11 @@ export async function handleReservationCallback(cq) {
     }
   }
 
+  // Panel bildirishnomasi yopiladi — paneldagi ovoz to'xtaydi
+  import('./notifications.js')
+    .then((m) => m.resolveReservationNotification(updated))
+    .catch(() => {});
+
   // Panel, admin va mijoz ilovasi real-time yangilanadi
   const io = getIO();
   const payload = { reservationId: String(updated._id), status: updated.status };
