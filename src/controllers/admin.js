@@ -75,9 +75,14 @@ export const adminController = {
       },
     ]);
 
-    const settings = await getSettings();
-    const pct = settings.commissionMode === 'none' ? 0 : settings.commissionPercent;
-
+    /*
+     * `commissionPercent` maydoni OLIB TASHLANDI — restoranlar
+     * turli foizlarga ega bo'lgani uchun "platforma komissiyasi
+     * X%" degan YAGONA raqam endi mavjud emas va noto'g'ri
+     * taassurot berardi. Yuqoridagi `commission` (haqiqiy summa,
+     * Ledger'dan) o'zgarishsiz qoladi — u har bir restoranning
+     * O'Z foizi bilan to'g'ri hisoblangan.
+     */
     const [todayAgg, yesterdayAgg, byRestaurant] = await Promise.all([
       Order.aggregate(dayShape(startOfDay)),
       Order.aggregate(dayShape(startOfYesterday, startOfDay)),
@@ -124,7 +129,6 @@ export const adminController = {
       todayOrders: t.orders,
       totalRevenue,
       commission,
-      commissionPercent: pct,
 
       today: {
         orders: t.orders,
@@ -352,68 +356,93 @@ export const adminController = {
     res.json(restaurant);
   }),
 
-  // ===== KOMISSIYA SOZLAMASI =====
+  // ===== SOZLAMALAR =====
   // GET /api/admin/settings
+  //
+  // ═══ KOMISSIYA MAYDONLARI OLIB TASHLANDI ═══
+  // Ilgari shu yerda GLOBAL commissionPercent/commissionMode
+  // qaytarilardi va admin panelda tahrirlanardi. Bu chalg'ituvchi
+  // edi: har bir restoran O'Z alohida foiziga ega
+  // (Restaurant.commissionPercent, billingController.setCommission
+  // orqali belgilanadi), global qiymat esa faqat restoran hech
+  // narsa belgilamagan holatdagi ZAXIRA (resolveCommission(),
+  // services/billing.js) — uni bu yerdan tahrirlash "hammaga
+  // ta'sir qiladi" degan noto'g'ri taassurot berardi va odamlar
+  // buni aynan RESTORAN foizi deb adashishardi.
+  //
+  // Zaxira qiymatning o'zi (Settings modelida) ishlashda davom
+  // etadi — faqat uni shu ekrandan O'ZGARTIRISH imkoniyati
+  // olib tashlandi.
   getSettingsData: asyncHandler(async (_req, res) => {
     const s = await getSettings();
-    res.json({ commissionPercent: s.commissionPercent, commissionMode: s.commissionMode });
+    res.json({ referralEnabled: s.referralEnabled !== false });
   }),
 
-  // PATCH /api/admin/settings  { commissionPercent, commissionMode }
+  // PATCH /api/admin/settings  { referralEnabled }
   updateSettings: asyncHandler(async (req, res) => {
     const schema = z.object({
-      commissionPercent: z.number().min(0).max(100).optional(),
-      commissionMode: z.enum(['markup', 'deduct', 'none']).optional(),
       referralEnabled: z.boolean().optional(),
     });
     const parsed = schema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: 'Noto‘g‘ri qiymat' });
 
     const s = await getSettings();
-    if ('commissionPercent' in parsed.data) s.commissionPercent = parsed.data.commissionPercent;
-    if ('commissionMode' in parsed.data) s.commissionMode = parsed.data.commissionMode;
     if ('referralEnabled' in parsed.data) s.referralEnabled = parsed.data.referralEnabled;
     await s.save();
-    res.json({ commissionPercent: s.commissionPercent, commissionMode: s.commissionMode });
+    res.json({ referralEnabled: s.referralEnabled });
   }),
 
   // ===== DAROMAD HISOBI =====
   // GET /api/admin/revenue — har muassasa bo'yicha daromad + platforma daromadi
   revenue: asyncHandler(async (_req, res) => {
-    const settings = await getSettings();
-    const pct = settings.commissionMode === 'none' ? 0 : settings.commissionPercent;
+    /*
+     * ═══ TUZATILDI ═══
+     *
+     * ILGARI: BARCHA restoranlarga bitta GLOBAL foiz
+     * (Settings.commissionPercent/commissionMode) qo'llanardi —
+     * restoranning o'ziga individual belgilangan foizi (masalan
+     * 5%, 7%, 15%) butunlay e'tiborsiz qoldirilardi. Har bir
+     * qatordagi "Bizga" summasi haqiqiy emas edi.
+     *
+     * ENDI: har bir restoran uchun `resolveCommission()` —
+     * services/billing.js dagi, YAGONA, restoran o'z qiymatiga
+     * ega bo'lsa o'sha, bo'lmasa umumiy standartga tushadigan
+     * funksiya (xuddi buyurtma hisob-kitobida ishlatiladigani).
+     * Ikkita alohida formula endi yo'q.
+     */
+    const { resolveCommission, calcCommission } = await import('../services/billing.js');
 
-    // Yetkazilgan buyurtmalar bo'yicha restoran daromadi
     const byRestaurant = await Order.aggregate([
       { $match: { status: 'delivered' } },
       { $group: { _id: '$restaurantId', name: { $first: '$restaurantName' }, orders: { $sum: 1 }, gross: { $sum: '$subtotal' } } },
       { $sort: { gross: -1 } },
     ]);
 
-    // Har muassasa uchun: restoran daromadi va platforma komissiyasini hisoblaymiz
-    const rows = byRestaurant.map((r) => {
-      const gross = r.gross;
-      let platformIncome = 0;
-      let restaurantIncome = gross;
-      if (settings.commissionMode === 'markup') {
-        // Mijoz narx ustiga +pct to'ladi → platforma o'sha ustamani oladi
-        platformIncome = Math.round(gross * (pct / 100));
-        restaurantIncome = gross; // restoran to'liq oladi
-      } else if (settings.commissionMode === 'deduct') {
-        // Restoran narxidan −pct olamiz
-        platformIncome = Math.round(gross * (pct / 100));
-        restaurantIncome = gross - platformIncome;
-      }
-      return { restaurantId: r._id, name: r.name, orders: r.orders, gross, restaurantIncome, platformIncome };
-    });
+    const restaurants = await Restaurant.find({ _id: { $in: byRestaurant.map((r) => r._id) } })
+      .select('commissionPercent commissionMode').lean();
+    const restMap = new Map(restaurants.map((r) => [String(r._id), r]));
+
+    const rows = await Promise.all(byRestaurant.map(async (r) => {
+      const restaurant = restMap.get(String(r._id)) || {};
+      const { percent, mode } = await resolveCommission(restaurant);
+      const { commission, restaurantShare } = calcCommission(r.gross, percent, mode);
+      return {
+        restaurantId: r._id,
+        name: r.name,
+        orders: r.orders,
+        gross: r.gross,
+        restaurantIncome: restaurantShare,
+        platformIncome: commission,
+        commissionPercent: percent,
+        commissionMode: mode,
+      };
+    }));
 
     const totalGross = rows.reduce((s, r) => s + r.gross, 0);
     const totalPlatform = rows.reduce((s, r) => s + r.platformIncome, 0);
     const totalRestaurant = rows.reduce((s, r) => s + r.restaurantIncome, 0);
 
     res.json({
-      commissionPercent: pct,
-      commissionMode: settings.commissionMode,
       rows,
       totals: { gross: totalGross, platform: totalPlatform, restaurant: totalRestaurant },
     });
