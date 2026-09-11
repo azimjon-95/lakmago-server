@@ -63,18 +63,18 @@ export async function rewardReferralIfSubscribed(user) {
   const subscribed = await checkChannelSubscription(user.telegramId);
   if (!subscribed) return;
 
-  // Yangi kelganга xush kelibsiz bonusи
+  // Yangi kelganга xush kelibsiz ball
   user.referralRewarded = true;
   user.isSubscribed = true;
   user.subscribedAt = new Date();
-  user.bonusBalance = (user.bonusBalance || 0) + config.referralWelcomeBonus;
+  user.referralPoints = (user.referralPoints || 0) + config.referralWelcomeBonus;
   await user.save();
 
-  // Taklif qiluvchига bonus + referal soni
+  // Taklif qiluvchига ball + referal soni
   const referrer = await User.findById(user.referredBy);
   if (referrer) {
     referrer.referralCount = (referrer.referralCount || 0) + 1;
-    referrer.bonusBalance = (referrer.bonusBalance || 0) + config.referralReward;
+    referrer.referralPoints = (referrer.referralPoints || 0) + config.referralReward;
     await referrer.save();
 
     // Xabar beramiz
@@ -83,7 +83,7 @@ export async function rewardReferralIfSubscribed(user) {
       notifyUser(
         referrer.telegramId,
         `🎉 <b>${name}</b> sizning taklifingiz bilan qo‘shildi!\n\n` +
-        `💰 +${config.referralReward.toLocaleString('ru-RU')} so‘m bonus hisobingizga qo‘shildi.\n` +
+        `⭐ +${config.referralReward.toLocaleString('ru-RU')} ball hisobingizga qo‘shildi.\n` +
         `👥 Jami takliflaringiz: ${referrer.referralCount}`,
       );
     }

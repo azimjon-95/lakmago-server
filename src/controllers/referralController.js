@@ -7,7 +7,7 @@ import { checkChannelSubscription, rewardReferralIfSubscribed, buildReferralLink
 export const referralController = {
   // GET /api/referral/me — foydalanuvchi referal statistikasi (havola, soni, bonus)
   me: asyncHandler(async (req, res) => {
-    const user = await User.findById(req.userId).select('referralCount bonusBalance isSubscribed').lean();
+    const user = await User.findById(req.userId).select('referralCount bonusBalance referralPoints isSubscribed').lean();
     if (!user) return res.status(404).json({ error: 'Foydalanuvchi topilmadi' });
 
     // Admin panelda o'chirilgan bo'lsa mijozga karta ko'rsatilmaydi
@@ -17,6 +17,11 @@ export const referralController = {
       enabled: settings.referralEnabled !== false,
       referralLink: buildReferralLink(req.userId),
       referralCount: user.referralCount || 0,
+      // Taklif mukofoti endi BALL (referralPoints), pul emas.
+      // `bonusBalance` shu javobda qoladi — u boshqa manbalardan
+      // (masalan aksiyalar) kelishi mumkin, referral bilan
+      // ALOQASI yo'q endi.
+      referralPoints: user.referralPoints || 0,
       bonusBalance: user.bonusBalance || 0,
       reward: config.referralReward,
       welcomeBonus: config.referralWelcomeBonus,

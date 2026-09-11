@@ -159,8 +159,20 @@ export const config = {
   botUsername: process.env.BOT_USERNAME ?? 'LokmaGoBot', // referal havola uchun
   webappName: process.env.WEBAPP_NAME ?? 'app', // Mini App qisqa nomi (startapp deep-link uchun)
   // Referal bonusи (so'mда): taklif qiluvchiga va yangi kelganga
-  referralReward: Number(process.env.REFERRAL_REWARD ?? 5000),      // taklif qiluvchiga
-  referralWelcomeBonus: Number(process.env.REFERRAL_WELCOME ?? 3000), // yangi kelganga
+  /*
+   * ═══ TAKLIF TIZIMI — BALL, PUL EMAS ═══
+   *
+   * Qiymatlar: taklif qiluvchi 100 ball, yangi qo'shilgan 50 ball
+   * (oldingi pul mukofotlaridagi 5000/3000 nisbatiga mos —
+   * taklif qiluvchi ikki barobar ko'proq oladi, chunki u faol
+   * ish qilgan: havolani tarqatgan).
+   *
+   * Nega 1 emas: ball tizimi psixologik jihatdan "to'planyapti"
+   * hissini berishi kerak (aviakompaniya mili kabi). 1 ball —
+   * juda kichik, o'yin qiziqarli bo'lmaydi.
+   */
+  referralReward: Number(process.env.REFERRAL_REWARD_POINTS ?? 100),      // taklif qiluvchiga (ball)
+  referralWelcomeBonus: Number(process.env.REFERRAL_WELCOME_POINTS ?? 50), // yangi kelganga (ball)
 
   // ===== TO'LOV TIZIMLARI =====
   // Kabinetdan olinadi, .env ga yoziladi

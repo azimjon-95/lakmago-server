@@ -102,6 +102,23 @@ const userSchema = new Schema(
     referralCount: { type: Number, default: 0 },
     // Bonus balans (so'mда) — buyurtmада ishlatiladi
     bonusBalance: { type: Number, default: 0 },
+    /*
+     * ═══ TAKLIF BALLARI — PULDAN BUTUNLAY ALOHIDA ═══
+     *
+     * Referral mukofoti endi PUL emas, BALL. Farqi muhim:
+     * `bonusBalance` buyurtmada ishlatiladi (chegirma sifatida),
+     * `referralPoints` esa HOZIRCHA hech narsaga sarflanmaydi —
+     * faqat to'planadi (TonCoin kabi). Shuning uchun bu ikkisi
+     * qasddan ALOHIDA maydonlarda: agar bittasida saqlansa,
+     * kimdir keyin uni buyurtmada ishlatib qo'yishi (yoki order
+     * discount logikasi uni tasodifan sarflashi) xavfi bo'lardi.
+     *
+     * Kelajakda LokmaGo administratsiyasi ballarning pul
+     * qiymatini e'lon qilganda, shu maydondagi son asosida
+     * (masalan `referralPoints * kurs`) haqiqiy pulga
+     * aylantiriladi — bu ALOHIDA, keyingi bosqich vazifasi.
+     */
+    referralPoints: { type: Number, default: 0 },
     // Referal orqali kelib, hali bonusи berilmagan (obunani kutayapti) — takroriy bonusning oldини oladi
     referralRewarded: { type: Boolean, default: false },
     // Asosiy kanал/guruhга obuna bo'lganmi (webapp ochilishi uchun shart)

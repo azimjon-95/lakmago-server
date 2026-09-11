@@ -122,23 +122,35 @@ async function showReservations(chatId, user) {
   });
 }
 
-// ===== BONUS VA DO'STLAR =====
+// ===== BALL VA DO'STLAR =====
 async function showBonus(chatId, user) {
   const link = `https://t.me/${config.botUsername}?start=ref_${user._id}`;
   const count = user.referralCount || 0;
-  const balance = user.bonusBalance || 0;
+  /*
+   * `referralPoints` ko'rsatiladi, `bonusBalance` EMAS.
+   *
+   * ILGARI shu yerda `bonusBalance` ko'rsatilardi, chunki
+   * referral mukofoti O'SHA yerga yozilardi. Endi mukofot
+   * `referralPoints`ga yoziladi (services/referral.js) -
+   * `bonusBalance` esa endi referralga aloqasi yo'q, boshqa
+   * manbalardan (aksiyalar) kelishi mumkin. Eski kodni shu
+   * yerda qoldirsak, mijoz o'z TAKLIF ballarini emas, umuman
+   * boshqa (yoki 0) raqamni ko'rardi.
+   */
+  const points = user.referralPoints || 0;
 
   return tg('sendMessage', {
     chat_id: chatId,
     text:
-      '💰 <b>Bonus va do‘stlar</b>\n\n' +
-      `Hisobingiz: <b>${som(balance)} so'm</b>\n` +
+      '⭐ <b>Ball va do‘stlar</b>\n\n' +
+      `Ballaringiz: <b>${som(points)}</b>\n` +
       `Taklif qilganlar: <b>${count} ta</b>\n\n` +
-      `Do'stingiz sizning havolangiz orqali qo'shilса:\n` +
-      `• Siz — <b>+${som(config.referralReward)} so'm</b>\n` +
-      `• Do'stingiz — <b>+${som(config.referralWelcomeBonus)} so'm</b>\n\n` +
+      `Do'stingiz sizning havolangiz orqali qo'shilsa:\n` +
+      `• Siz — <b>+${som(config.referralReward)} ball</b>\n` +
+      `• Do'stingiz — <b>+${som(config.referralWelcomeBonus)} ball</b>\n\n` +
       `🔗 Havolangiz:\n<code>${link}</code>\n\n` +
-      'Bonusni buyurtmada ishlatishingiz mumkin.',
+      'Ballar hozircha to‘planadi. Keyinchalik pul qiymati e’lon qilinadi.',
+
     parse_mode: 'HTML',
     reply_markup: {
       inline_keyboard: [
