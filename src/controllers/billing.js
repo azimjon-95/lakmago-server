@@ -126,6 +126,13 @@ export const billingController = {
       restaurantId: z.string().length(24),
       amount: z.number().positive(),
       note: z.string().max(200).optional(),
+      /*
+       * Majburiy — TZ 16-band: takroriy yuborishdan himoya.
+       * Mijoz (admin.jsx) buni so'rov yuborilishidan oldin bir
+       * marta generatsiya qiladi. Backend uni Payout hujjatining
+       * unique kalitiga aylantiradi.
+       */
+      idempotencyKey: z.string().min(8).max(100),
     });
     const parsed = schema.safeParse(req.body);
     if (!parsed.success) {
@@ -138,6 +145,7 @@ export const billingController = {
         parsed.data.amount,
         req.userId,
         parsed.data.note,
+        parsed.data.idempotencyKey,
       );
       res.json(result);
     } catch (e) {

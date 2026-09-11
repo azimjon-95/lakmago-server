@@ -128,6 +128,58 @@ const restaurantSchema = new Schema(
     contractNumber: { type: String, default: '' },
     contractDate: { type: Date, default: null },
 
+    /*
+     * ═══════════════════════════════════════════════════════════
+     * TO'LOV OLISH REKVIZITLARI (Moliya moduli)
+     * ═══════════════════════════════════════════════════════════
+     *
+     * Bu — buxgalter pulni QO'LDA qaysi hisobga/kartaga
+     * o'tkazishi kerakligi. `RestaurantPaymentAccount` modelidan
+     * FARQLI: o'sha model to'lov SHLYUZI (Click/Paynet) hisob
+     * ma'lumotlarini saqlaydi (split uchun), bu yerdagi esa
+     * "buxgalter pulni qayerga jo'natadi" — butunlay boshqa
+     * maqsad, shuning uchun aralashtirilmadi.
+     *
+     * Faqat BITTASI asosiy bo'lishi mumkin — `method` shuni
+     * belgilaydi. Ikkalasining ma'lumoti ham saqlanishi mumkin
+     * (masalan restoran kartadan bankka o'tsa, eski karta
+     * ma'lumoti o'chirilmaydi — keyin qayta almashtirish oson
+     * bo'lsin uchun), lekin faqat `method` ko'rsatgani ishlatiladi.
+     *
+     * Karta raqami TO'LIQ holda saqlanmaydi — faqat oxirgi 4
+     * xona (`cardLast4`). To'liq raqam faqat YANGILASH paytida
+     * bir martalik qabul qilinadi va shu zahoti maskalanadi —
+     * mijoz/restoran API'lariga umuman chiqarilmaydi (2-band).
+     */
+    payout: {
+      // Qaysi usul asosiy — buxgalter pulni shu bo'yicha yuboradi
+      method: { type: String, enum: ['bank', 'card', null], default: null },
+
+      bank: {
+        accountNumber: { type: String, default: '' },
+        bankName: { type: String, default: '' },
+        mfo: { type: String, default: '' },
+        inn: { type: String, default: '' },         // STIR
+        holderName: { type: String, default: '' },  // hisob egasi / yuridik nomi
+      },
+
+      card: {
+        // Faqat oxirgi 4 xona ko'rinadi. To'liq raqam saqlanmaydi.
+        cardLast4: { type: String, default: '' },
+        holderName: { type: String, default: '' },
+        bankName: { type: String, default: '' },
+      },
+
+      status: {
+        type: String,
+        enum: ['unverified', 'verified', 'blocked'],
+        default: 'unverified',
+      },
+
+      updatedAt: { type: Date, default: null },
+      updatedBy: { type: Schema.Types.ObjectId, ref: 'Admin', default: null },
+    },
+
     // Hisob-kitob: restoranga qarzimiz (so'm)
     balance: { type: Number, default: 0 },
     // Jami to'langan

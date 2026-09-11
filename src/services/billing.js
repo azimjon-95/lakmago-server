@@ -1,6 +1,8 @@
+import { Types } from 'mongoose';
 import { Ledger } from '../models/Ledger.js';
 import { Order } from '../models/Order.js';
 import { Restaurant } from '../models/Restaurant.js';
+import { Payout } from '../models/Payout.js';
 import { getSettings } from '../models/Settings.js';
 import { getIO } from '../sockets/io.js';
 
@@ -21,6 +23,261 @@ import { getIO } from '../sockets/io.js';
  *   musbat  → biz restoranga qarzdormiz (karta to'lovlari)
  *   manfiy  → restoran bizga qarzdor (naqd to'lovlar komissiyasi)
  */
+
+/*
+ * ═══════════════════════════════════════════════════════════
+ * MOLIYA MODULI — KUNLIK HISOB-KITOB (barcha restoranlar)
+ * ═══════════════════════════════════════════════════════════
+ *
+ * Bu bo'lim ilgari `settlement.js` kontrollerida, `Payment`
+ * degan ALOHIDA (va hech kim to'ldirmaydigan) kolleksiyadan
+ * o'qirdi — natijada sahifa har doim BO'SH qaytardi. Endi
+ * xuddi shu ma'lumot yuqoridagi `Ledger` dan — ya'ni real
+ * pul harakati yozilayotgan YAGONA manbadan — hisoblanadi.
+ */
+
+/**
+ * Kalendar sananing O'zbekiston vaqti bo'yicha boshi/oxiri.
+ *
+ * NIMA UCHUN QATTIQ +05:00: Intl orqali "qaysi kun" ekanini
+ * to'g'ri aniqlash mumkin (restaurantTime.js dagi zoneNow shuni
+ * qiladi), lekin TESKARI yo'nalish — "shu kun boshi qaysi UTC
+ * onga to'g'ri keladi" — IANA zonalarida DST bo'lsa qiyin
+ * hisoblanadi. O'zbekiston 2016-yildan beri qishki vaqtga
+ * o'tmaydi va doim UTC+5 da turadi, shuning uchun qattiq
+ * offset xavfsiz va aniq — server qaysi mintaqada ishlashidan
+ * qat'i nazar. Server vaqtiga (`new Date().getHours()`) ISHONISH
+ * xato edi (TZ 25-band) — bu yerda serverning O'ZI umuman
+ * ishlatilmaydi.
+ */
+function uzDayRange(dateStr) {
+  const base = dateStr || new Date().toISOString().slice(0, 10); // 'YYYY-MM-DD'
+  const start = new Date(`${base}T00:00:00.000+05:00`);
+  const end = new Date(`${base}T23:59:59.999+05:00`);
+  return { start, end, dateStr: base };
+}
+
+/**
+ * Bitta restoran uchun bitta kunlik hisobot — Click/Paynet/Naqd
+ * alohida, TZ 9-band formulasi bo'yicha.
+ *
+ * MUHIM: bu FAQAT ko'rsatish (reporting) uchun. Haqiqiy
+ * "restoranga qancha to'lash kerak" — restaurant.balance (u
+ * kun bilan cheklanmagan, umumiy holat). Ikkalasi ataylab
+ * mos: netPayable shu kunning o'zgarishi emas, UMUMIY balans.
+ */
+export async function getRestaurantDailyBreakdown(restaurantId, dateStr) {
+  const { start, end } = uzDayRange(dateStr);
+
+  const rows = await Ledger.aggregate([
+    {
+      $match: {
+        restaurantId: new Types.ObjectId(String(restaurantId)),
+        createdAt: { $gte: start, $lte: end },
+        type: { $in: ['payment_in', 'commission', 'restaurant_due'] },
+      },
+    },
+    {
+      $group: {
+        _id: { type: '$type', provider: '$provider', isCash: '$isCash' },
+        total: { $sum: '$amount' },
+        count: { $sum: 1 },
+      },
+    },
+  ]);
+
+  const bucket = (name) => ({ count: 0, total: 0 });
+  const out = {
+    click: bucket(), paynet: bucket(), payme: bucket(), uzum: bucket(), cash: bucket(),
+    platformCommission: 0,
+    electronicCommission: 0,
+    cashCommissionDue: 0,
+    restaurantShare: 0, // elektron to'lovdan restoranga tegishli sof summa
+    ordersCount: 0,
+  };
+
+  for (const r of rows) {
+    const { type, provider, isCash } = r._id;
+    if (type === 'payment_in') {
+      const key = isCash ? 'cash' : (provider || 'click');
+      if (out[key]) { out[key].total += r.total; out[key].count += r.count; }
+      out.ordersCount += r.count;
+    } else if (type === 'commission') {
+      out.platformCommission += r.total;
+      if (isCash) out.cashCommissionDue += r.total;
+      else out.electronicCommission += r.total;
+    } else if (type === 'restaurant_due' && !isCash) {
+      // Faqat elektron buyurtmalarning restoranga tegishli qismi.
+      // Naqd uchun restaurant_due — komissiya QARZI (manfiy), u
+      // "restoranga tegishli elektron tushum" emas.
+      out.restaurantShare += r.total;
+    }
+  }
+
+  const grossSales = out.click.total + out.paynet.total + out.payme.total
+    + out.uzum.total + out.cash.total;
+
+  return {
+    restaurantId: String(restaurantId),
+    date: uzDayRange(dateStr).dateStr,
+    ordersCount: out.ordersCount,
+    click: out.click,
+    paynet: out.paynet,
+    cash: out.cash,
+    grossSales,
+    platformCommission: out.platformCommission,
+    cashCommissionDue: out.cashCommissionDue,
+    restaurantShare: out.restaurantShare,
+  };
+}
+
+/**
+ * Admin "Moliya → Kunlik hisob-kitob" sahifasi uchun — BARCHA
+ * faol restoranlar, bitta kun, bitta so'rovda (N+1 muammosi
+ * bo'lmasin).
+ *
+ * `netPayable` — restoranning HOZIRGI umumiy balansi
+ * (getRestaurantPendingPayout bilan bir xil manba). Bu shu
+ * kunning emas, umumiy holat — chunki to'lov aynan shu summaga
+ * qarab chiqariladi (eski qarz + bugungi o'zgarish − oldingi
+ * to'lovlar allaqachon balansda hisobga olingan).
+ */
+export async function getDailySettlementAllRestaurants(dateStr) {
+  const { start, end, dateStr: normalizedDate } = uzDayRange(dateStr);
+
+  const rows = await Ledger.aggregate([
+    {
+      $match: {
+        createdAt: { $gte: start, $lte: end },
+        type: { $in: ['payment_in', 'commission', 'restaurant_due'] },
+        restaurantId: { $ne: null },
+      },
+    },
+    {
+      $group: {
+        _id: {
+          restaurantId: '$restaurantId',
+          type: '$type',
+          provider: '$provider',
+          isCash: '$isCash',
+        },
+        total: { $sum: '$amount' },
+        count: { $sum: 1 },
+      },
+    },
+  ]);
+
+  const byRestaurant = new Map();
+  const ensure = (id) => {
+    if (!byRestaurant.has(id)) {
+      byRestaurant.set(id, {
+        click: { count: 0, total: 0 },
+        paynet: { count: 0, total: 0 },
+        cash: { count: 0, total: 0 },
+        platformCommission: 0,
+        cashCommissionDue: 0,
+        restaurantShare: 0,
+        ordersCount: 0,
+      });
+    }
+    return byRestaurant.get(id);
+  };
+
+  for (const r of rows) {
+    const { restaurantId, type, provider, isCash } = r._id;
+    const row = ensure(String(restaurantId));
+    if (type === 'payment_in') {
+      const key = isCash ? 'cash' : (provider === 'paynet' ? 'paynet' : 'click');
+      row[key].total += r.total;
+      row[key].count += r.count;
+      row.ordersCount += r.count;
+    } else if (type === 'commission') {
+      row.platformCommission += r.total;
+      if (isCash) row.cashCommissionDue += r.total;
+    } else if (type === 'restaurant_due' && !isCash) {
+      row.restaurantShare += r.total;
+    }
+  }
+
+  const restIds = [...byRestaurant.keys()];
+  const restaurants = await Restaurant.find({ _id: { $in: restIds } })
+    .select('name balance commissionPercent commissionMode').lean();
+
+  /*
+   * ═══ IKKI KOMISSIYA TIZIMI O'RTASIDAGI MOSLIK TEKSHIRUVI ═══
+   *
+   * Kod bazasida IKKI xil komissiya manbasi bor:
+   *   • Restaurant.commissionPercent — shu hisobot va
+   *     Restaurant.balance shundan hisoblanadi (naqdni ham
+   *     to'g'ri qamrab oladi)
+   *   • CommissionAgreement — Click/Paynet webhook orqali
+   *     Payment hujjatiga yoziladigan "gateway split" foizi
+   *     (faqat karta to'lovlari uchun, naqdni bilmaydi)
+   *
+   * Ikkalasi HAR DOIM bir xil bo'lishi kerak edi, lekin kodda
+   * ularni avtomatik sinxronlashtiruvchi hech narsa yo'q — biri
+   * admin panelda o'zgartirilsa, ikkinchisi ESKI qolib ketishi
+   * mumkin. Bu yerda ularni QIYOSLAYMIZ va farq bo'lsa admin
+   * ko'rishi uchun `commissionMismatch` bayrog'ini qo'shamiz.
+   *
+   * Bu — ikkala tizimni "kim g'olib" deb hal qilishning
+   * o'rniga, farqni KO'RINADIGAN qilish orqali xavfsizroq yechim:
+   * noto'g'ri taxmin bilan ikkalasini birlashtirib, aslida
+   * to'g'ri ishlayotgan narsani buzib qo'yishdan ko'ra.
+   */
+  const { activeAgreement } = await import('../models/CommissionAgreement.js');
+  const agreementChecks = await Promise.all(
+    restaurants.map(async (r) => {
+      const agreement = await activeAgreement(r._id);
+      if (!agreement) return [String(r._id), null];
+      const ledgerPercent = r.commissionPercent ?? null;
+      const agreementPercent = agreement.restaurantCommissionPercent;
+      const mismatch = ledgerPercent != null
+        && Math.abs(ledgerPercent - agreementPercent) > 0.01;
+      return [String(r._id), { agreementPercent, mismatch }];
+    }),
+  );
+  const agreementMap = new Map(agreementChecks);
+
+  const result = restaurants.map((r) => {
+    const row = byRestaurant.get(String(r._id));
+    const agreementInfo = agreementMap.get(String(r._id));
+    return {
+      restaurantId: String(r._id),
+      restaurantName: r.name,
+      click: row.click,
+      paynet: row.paynet,
+      cash: row.cash,
+      grossSales: row.click.total + row.paynet.total + row.cash.total,
+      ordersCount: row.ordersCount,
+      platformCommission: row.platformCommission,
+      cashCommissionDue: row.cashCommissionDue,
+      restaurantShare: row.restaurantShare,
+      // Shu kunning o'zgarishi emas — restoranning HOZIRGI umumiy
+      // balansi (yuqoridagi izohga qarang)
+      netPayable: Math.max(0, r.balance || 0),
+      currentBalance: r.balance || 0,
+      // Ikki komissiya tizimi orasidagi farq — yuqoridagi izohga qarang
+      commissionMismatch: agreementInfo?.mismatch || false,
+      agreementCommissionPercent: agreementInfo?.agreementPercent ?? null,
+    };
+  }).sort((a, b) => b.netPayable - a.netPayable);
+
+  const totals = result.reduce((acc, r) => {
+    acc.click.total += r.click.total;
+    acc.paynet.total += r.paynet.total;
+    acc.cash.total += r.cash.total;
+    acc.platformCommission += r.platformCommission;
+    acc.cashCommissionDue += r.cashCommissionDue;
+    acc.netPayable += r.netPayable;
+    return acc;
+  }, {
+    click: { total: 0 }, paynet: { total: 0 }, cash: { total: 0 },
+    platformCommission: 0, cashCommissionDue: 0, netPayable: 0,
+  });
+
+  return { date: normalizedDate, restaurants: result, totals };
+}
 
 /** Restoran uchun komissiya sozlamalari. */
 export async function resolveCommission(restaurant) {
@@ -77,6 +334,7 @@ export async function recordPayment(order, provider, transactionId = null) {
     restaurantId: order.restaurantId,
     userId: order.userId,
     provider,
+    isCash: provider === 'cash',
     transactionId,
     meta: { orderTotal: order.total, note: 'To‘lov qabul qilindi' },
   });
@@ -118,6 +376,13 @@ export async function settleOrder(orderId) {
   };
 
   const isCash = order.paymentMethod === 'cash';
+  /*
+   * "Moliya" hisobotida Click/Paynet alohida ko'rsatilishi kerak
+   * (TZ talabi). Order.paymentMethod allaqachon aniq qiymatga
+   * ega — uni Ledger yozuviga ham qo'shamiz, faqat HISOBOT UCHUN,
+   * hisob-kitob FORMULASI o'zgarmaydi.
+   */
+  const ledgerProvider = order.paymentMethod || null;
 
   // Komissiya yozuvi (bor bo'lsa)
   if (commission > 0) {
@@ -126,6 +391,8 @@ export async function settleOrder(orderId) {
       amount: commission,
       orderId: order._id,
       restaurantId: restaurant._id,
+      provider: ledgerProvider,
+      isCash,
       meta: { ...meta, note: `${percent}% · ${mode}${isCash ? ' · naqd' : ''}` },
     });
   }
@@ -139,6 +406,8 @@ export async function settleOrder(orderId) {
         amount: -commission,
         orderId: order._id,
         restaurantId: restaurant._id,
+        provider: ledgerProvider,
+        isCash,
         meta: { ...meta, note: 'Naqd to‘lov — komissiya qarzi' },
       });
       restaurant.balance = (restaurant.balance || 0) - commission;
@@ -149,6 +418,8 @@ export async function settleOrder(orderId) {
         amount: 0,
         orderId: order._id,
         restaurantId: restaurant._id,
+        provider: ledgerProvider,
+        isCash,
         meta: { ...meta, note: 'Naqd to‘lov — komissiyasiz' },
       });
     }
@@ -159,6 +430,8 @@ export async function settleOrder(orderId) {
       amount: restaurantShare,
       orderId: order._id,
       restaurantId: restaurant._id,
+      provider: ledgerProvider,
+      isCash,
       meta,
     });
     restaurant.balance = (restaurant.balance || 0) + restaurantShare;
@@ -228,52 +501,175 @@ export async function recordRefund(order, provider, transactionId = null) {
   return { refunded: order.total };
 }
 
-/** Restoranga pul o'tkazildi — admin qo'lda belgilaydi. */
-export async function recordPayout(restaurantId, amount, adminId, note = '') {
-  const restaurant = await Restaurant.findById(restaurantId);
-  if (!restaurant) throw new Error('Restoran topilmadi');
+/*
+ * Restoranga pul o'tkazildi — admin qo'lda belgilaydi.
+ *
+ * ═══ TZ 17-BAND: BIR VAQTDA IKKI SO'ROV MUAMMOSI ═══
+ *
+ * ILGARI: `Restaurant.findById()` bilan balans o'qilardi, tekshirilardi,
+ * keyin ALOHIDA `restaurant.save()` bilan yozilardi. Ikki so'rov
+ * orasida boshqa so'rov ham xuddi shu balansni o'qib ulgursa —
+ * IKKALASI HAM "balans yetarli" deb topib, ikkalasi ham to'lovni
+ * amalga oshirardi. Buxgalter ikki marta tugmani bosgan yoki
+ * ikkita SEKINDA bir vaqtda ishlagan bo'lsa — pul ikki marta
+ * "to'langan" deb yozilib qolardi.
+ *
+ * ENDI: bitta ATOMIK `findOneAndUpdate`. Filtrda `balance: { $gte: amount }`
+ * bor — MongoDB bitta hujjat ustidagi yozishlarni navbat bilan
+ * bajaradi, shuning uchun ikkinchi so'rov birinchisi allaqachon
+ * kamaytirgan balansga qarab tekshiriladi. Yetarli bo'lmasa
+ * natija `null` bo'ladi va xato qaytariladi — HECH QANDAY
+ * qo'shimcha qulf yoki tranzaksiya kerak emas.
+ *
+ * ═══ TZ 12-13-BAND: PAYOUT HUJJATI + REKVIZIT SNAPSHOT ═══
+ *
+ * ILGARI bu funksiya faqat Ledger yozuvi qo'shardi — "qaysi
+ * kartaga, kim tomonidan" degan alohida tarix yo'q edi. Endi
+ * har bir to'lov uchun `Payout` hujjati yaratiladi va restoran
+ * REKVIZITINING O'SHA PAYTDAGI holati (`destinationSnapshot`)
+ * ichiga nusxalanadi — keyin restoran kartasini almashtirsa ham,
+ * eski to'lov tarixi eski kartani ko'rsatib turaveradi.
+ *
+ * ═══ TZ 16-BAND: TAKRORIY YUBORISHDAN HIMOYA ═══
+ *
+ * `idempotencyKey` endi majburiy parametr. Uni chaqiruvchi
+ * (controller) generatsiya qiladi va DIQQAT — qayta urinishda
+ * (masalan tarmoq uzilib javob kelmasa) AYNAN O'SHA kalitni
+ * qayta yuboradi. `Payout.idempotencyKey` unique indeksga ega,
+ * shuning uchun bir xil kalit bilan ikkinchi urinish DB
+ * darajasida rad etiladi — frontenddagi "disabled tugma" ga
+ * ishonilmaydi (TZ 17-band aynan shuni talab qildi).
+ */
+export async function recordPayout(restaurantId, amount, adminId, note = '', idempotencyKey) {
+  if (!idempotencyKey) {
+    throw new Error('idempotencyKey majburiy — takroriy to‘lovdan himoya uchun');
+  }
   if (amount <= 0) throw new Error('Summa musbat bo‘lishi kerak');
-  if (amount > restaurant.balance) {
-    throw new Error(
-      `Balansda yetarli emas. Hozir: ${restaurant.balance} so‘m`,
-    );
-  }
 
-  // Mijozlarni jalb qilish qarzini ushlab qolamiz (sozlama yoqilgan bo'lsa).
-  // Ikki marta yechilmasligi uchun PromoBilling yozuvlari 'paid'
-  // bo'lib belgilanadi va Ledger bilan bog'lanadi.
-  const { deductFromSettlement } = await import('./promoBilling.js');
-  const deducted = await deductFromSettlement(restaurantId, amount);
-  const payoutAmount = amount - deducted;
+  const restaurant = await Restaurant.findById(restaurantId)
+    .select('name balance totalPaidOut payout').lean();
+  if (!restaurant) throw new Error('Restoran topilmadi');
 
-  if (payoutAmount > 0) {
-    await Ledger.create({
-      type: 'payout',
-      amount: -payoutAmount,
+  const destinationSnapshot = restaurant.payout?.method === 'card'
+    ? { method: 'card', card: restaurant.payout.card }
+    : restaurant.payout?.method === 'bank'
+      ? { method: 'bank', bank: restaurant.payout.bank }
+      : { method: null, note: 'Rekvizit belgilanmagan edi' };
+
+  /*
+   * ═══ KALITNI BIRINCHI NAVBATDA "BAND" QILISH ═══
+   *
+   * MUHIM TARTIB: `Payout.create()` BALANS TEKSHIRUVIDAN OLDIN
+   * chaqiriladi, keyin emas. Sabab — bir xil idempotencyKey bilan
+   * IKKITA so'rov chinakam bir vaqtda kelsa (masalan mijoz
+   * tugmani ikki marta bosib ulgursa, javob qaytmasdan turib):
+   *
+   *   Agar avval balansni tekshirib, KEYIN Payout yaratilsa —
+   *   ikkalasi ham "kalit hali yo'q" deb balansni kamaytirishga
+   *   ulgurishi mumkin edi, va faqat OXIRIDA, Payout.create()
+   *   bosqichida ikkinchisi rad etilardi — lekin balans ALLAQACHON
+   *   ikki marta kamaygan bo'lardi.
+   *
+   *   Endi: unique indeksga ega Payout hujjatini yaratish —
+   *   MongoDB darajasidagi ATOMIK "band qilish". Ikkala so'rovdan
+   *   faqat BITTASI bu yerdan muvaffaqiyatli o'tadi. G'olib bo'lgan
+   *   so'rovgina balansga tegadi.
+   */
+  let payout;
+  try {
+    payout = await Payout.create({
       restaurantId,
-      createdBy: adminId,
-      meta: {
-        note: note || 'Bank hisobiga o‘tkazildi',
-        ...(deducted > 0 ? { promoDebtDeducted: deducted } : {}),
-      },
+      amount, // dastlabki so'ralgan summa — pastda promo qarz chegirilsa yangilanadi
+      status: 'PROCESSING',
+      idempotencyKey,
+      bankProvider: 'manual',
+      snapshot: { ...destinationSnapshot, note, confirmedBy: adminId || null },
     });
+  } catch (e) {
+    if (e?.code === 11000) {
+      // Kalit band — bu YANGI to'lov emas, qayta urinish (yoki poyga yutqazgan so'rov)
+      const existing = await Payout.findOne({ idempotencyKey }).lean();
+      return {
+        alreadyExisted: true,
+        payoutId: existing?._id,
+        balance: null,
+        paidOut: existing?.amount ?? 0,
+      };
+    }
+    throw e;
   }
 
-  // Balansdan to'liq summa yechiladi (qarz + o'tkazma)
-  restaurant.balance -= amount;
-  restaurant.totalPaidOut = (restaurant.totalPaidOut || 0) + payoutAmount;
-  await restaurant.save();
+  try {
+    // Mijozlarni jalb qilish qarzini ushlab qolamiz (sozlama yoqilgan bo'lsa)
+    const { deductFromSettlement } = await import('./promoBilling.js');
+    const deducted = await deductFromSettlement(restaurantId, amount);
+    const payoutAmount = amount - deducted;
 
-  getIO()?.to('admin').emit('billing:update', {
-    restaurantId: String(restaurantId),
-    balance: restaurant.balance,
-  });
+    /*
+     * ATOMIK BALANS YECHISH. Filtrda `balance: { $gte: amount }`
+     * bor — TZ 17-band talab qilgan himoya: ikkinchi (BOSHQA
+     * kalit bilan, boshqa so'rov orqali kelgan) to'lov so'rovi
+     * shu restoran uchun deyarli bir vaqtda kelsa, MongoDB
+     * yozishlarni bitta hujjatda NAVBAT bilan bajaradi — ikkinchi
+     * so'rov birinchisi ALLAQACHON kamaytirgan balansga qarab
+     * tekshiriladi.
+     */
+    const updated = await Restaurant.findOneAndUpdate(
+      { _id: restaurantId, balance: { $gte: amount } },
+      { $inc: { balance: -amount, totalPaidOut: payoutAmount } },
+      { new: true },
+    ).select('balance').lean();
 
-  return {
-    balance: restaurant.balance,
-    paidOut: payoutAmount,
-    promoDebtDeducted: deducted,
-  };
+    if (!updated) {
+      payout.status = 'FAILED';
+      payout.lastError = 'Balansda yetarli emas';
+      await payout.save();
+      const fresh = await Restaurant.findById(restaurantId).select('balance').lean();
+      throw new Error(`Balansda yetarli emas. Hozir: ${fresh?.balance ?? 0} so‘m`);
+    }
+
+    if (payoutAmount > 0) {
+      await Ledger.create({
+        type: 'payout',
+        amount: -payoutAmount,
+        restaurantId,
+        createdBy: adminId,
+        meta: {
+          note: note || 'Bank hisobiga o‘tkazildi',
+          ...(deducted > 0 ? { promoDebtDeducted: deducted } : {}),
+        },
+      });
+    }
+
+    payout.amount = payoutAmount;
+    payout.status = 'SUCCESS';
+    payout.sentAt = new Date();
+    payout.confirmedAt = new Date();
+    payout.snapshot = { ...payout.snapshot, promoDebtDeducted: deducted };
+    await payout.save();
+
+    getIO()?.to('admin').emit('billing:update', {
+      restaurantId: String(restaurantId),
+      balance: updated.balance,
+    });
+
+    return {
+      payoutId: payout._id,
+      balance: updated.balance,
+      paidOut: payoutAmount,
+      promoDebtDeducted: deducted,
+    };
+  } catch (e) {
+    // Kutilmagan xato — Payout PENDING/PROCESSING holatida
+    // qolib ketmasin, aks holda keyingi tekshiruvda chalkashlik
+    // tug'diradi
+    if (payout.status === 'PROCESSING') {
+      payout.status = 'FAILED';
+      payout.lastError = e.message;
+      await payout.save().catch(() => {});
+    }
+    throw e;
+  }
 }
 
 /*

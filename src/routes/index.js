@@ -20,6 +20,7 @@ import { paymentController as gatewayController } from '../controllers/payments.
 import { paynetUwsController } from '../controllers/paynetUws.js';
 import { paynetIpWhitelist, paynetBasicAuth } from '../middleware/paynetAuth.js';
 import { billingController } from '../controllers/billing.js';
+import { restaurantPayoutController } from '../controllers/restaurantPayout.js';
 import { settlementController } from '../controllers/settlement.js';
 import { expenseController } from '../controllers/expense.js';
 import { staffController } from '../controllers/staff.js';
@@ -444,6 +445,16 @@ router.get('/admin/billing/overview', ...AS('billing'), billingController.overvi
 router.get('/admin/billing/restaurants', ...AS('billing'), billingController.byRestaurant);
 router.get('/admin/billing/ledger', ...AS('billing'), billingController.ledger);
 router.get('/admin/billing/restaurant/:id', ...AS('billing'), billingController.restaurantSummary);
+
+/*
+ * ═══ RESTORAN TO'LOV REKVIZITI (Moliya moduli) ═══
+ * Ataylab 'billing' ruxsati bilan — umumiy restoran tahrirlash
+ * huquqidan ALOHIDA, chunki bu maxfiy moliyaviy ma'lumot
+ * (TZ 2-band).
+ */
+router.get('/admin/restaurants/:id/payout', ...AS('billing'), restaurantPayoutController.get);
+router.patch('/admin/restaurants/:id/payout', ...AS('billing'), restaurantPayoutController.update);
+router.get('/admin/restaurants/:id/payout/audit', ...AS('billing'), restaurantPayoutController.audit);
 router.post('/admin/billing/payout', ...AS('billing'), billingController.payout);
 router.patch('/admin/restaurants/:id/commission', auth, requireRole('admin'), billingController.setCommission);
 

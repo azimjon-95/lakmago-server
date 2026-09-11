@@ -8,6 +8,7 @@ import { Dish } from '../models/Dish.js';
 import { Settings, getSettings } from '../models/Settings.js';
 import { GroupChat } from '../models/GroupChat.js';
 import { Reservation } from '../models/Reservation.js';
+import { Ledger } from '../models/Ledger.js';
 import { getIO } from '../sockets/io.js';
 
 export const adminController = {
@@ -25,7 +26,32 @@ export const adminController = {
       { $group: { _id: null, total: { $sum: '$total' } } },
     ]);
     const totalRevenue = revenueAgg[0]?.total ?? 0;
-    const commission = Math.round(totalRevenue * 0.12); // 12% platforma komissiyasi
+
+    /*
+     * ═══ TUZATILDI — TZ 23.1 BANDIDA KO'RSATILGAN XATO ═══
+     *
+     * ILGARI: `Math.round(totalRevenue * 0.12)` — HAR DOIM 12%,
+     * restoranning haqiqiy `commissionPercent` idan (5%, 7%, 10%,
+     * boshqa) qat'i nazar, va naqd/karta farqini, `markup`/`deduct`
+     * rejimini umuman hisobga olmasdan.
+     *
+     * Bu raqam `billingController.overview` dagi (Ledger'dan
+     * kelgan, HAQIQIY) komissiya bilan HECH QACHON mos kelmasdi —
+     * admin bir sahifada bitta, boshqasida boshqa "komissiya"
+     * ko'rardi, garchi ikkalasi ham xuddi shu nom bilan
+     * ko'rsatilsa ham.
+     *
+     * ENDI: `Ledger` dagi 'commission' turidagi yozuvlar yig'indisi
+     * — bu YAGONA, har bir buyurtmaning O'Z komissiya foizi va
+     * rejimi bo'yicha `calcCommission()` orqali hisoblangan,
+     * haqiqiy manba (services/billing.js). Boshqa hech qanday
+     * joyda komissiya QAYTA ixtiro qilinmaydi.
+     */
+    const commissionAgg = await Ledger.aggregate([
+      { $match: { type: 'commission' } },
+      { $group: { _id: null, total: { $sum: '$amount' } } },
+    ]);
+    const commission = commissionAgg[0]?.total ?? 0;
 
     // ===== BUGUN =====
     const startOfDay = new Date();

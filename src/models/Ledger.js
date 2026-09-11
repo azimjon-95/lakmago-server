@@ -34,9 +34,34 @@ const ledgerSchema = new Schema(
     restaurantId: { type: Schema.Types.ObjectId, ref: 'Restaurant', index: true },
     userId: { type: Schema.Types.ObjectId, ref: 'User', index: true },
 
-    // To'lov tizimi (payment_in va refund uchun)
-    provider: { type: String, enum: ['payme', 'click', 'cash', null], default: null },
+    /*
+     * To'lov tizimi (payment_in va refund uchun).
+     *
+     * ═══ TUZATILDI ═══ Ilgari faqat ['payme','click','cash',null]
+     * bo'lgan — 'paynet' YO'Q edi. Order.paymentMethod da esa
+     * 'paynet' (va 'uzum') allaqachon ruxsat etilgan qiymatlar.
+     * Ya'ni Paynet orqali birinchi haqiqiy to'lov kelganda,
+     * recordPayment() shu yerda Mongoose validatsiya xatosi bilan
+     * QULAB TUSHARDI — pul kelib, lekin jurnalga yozib
+     * bo'lmasdi. Endi Order modeli bilan bir xil to'liq ro'yxat.
+     */
+    provider: { type: String, enum: ['payme', 'click', 'paynet', 'uzum', 'cash', null], default: null },
     transactionId: { type: Schema.Types.ObjectId, ref: 'Transaction' },
+
+    /*
+     * Bu yozuv NAQD buyurtmaga tegishlimi.
+     *
+     * NIMA UCHUN QO'SHILDI: "Moliya" hisobotida (kunlik hisob-kitob)
+     * bitta restoranning bir kunlik KOMISSIYASI ikkiga bo'linishi
+     * kerak — elektron to'lovdan ushlab qolingan qism va naqd
+     * uchun QARZ qilingan qism (ular teskari yo'nalishda: birinchisi
+     * restoran ulushidan yechiladi, ikkinchisi qo'shimcha qarz
+     * bo'lib yoziladi). `provider` bu farqni ko'rsatmaydi (masalan
+     * `commission` yozuvida provider umuman yo'q). Shu bayroq
+     * bo'lmasa, har safar Order hujjatini alohida so'rab, naqd
+     * ekanini tekshirish kerak bo'lardi — sekin va keraksiz.
+     */
+    isCash: { type: Boolean, default: false, index: true },
 
     // Hisob-kitob tafsiloti — keyin tekshirish uchun saqlanadi
     meta: {
@@ -55,5 +80,13 @@ const ledgerSchema = new Schema(
 // Hisobotlar uchun
 ledgerSchema.index({ createdAt: -1 });
 ledgerSchema.index({ restaurantId: 1, type: 1, createdAt: -1 });
+
+/*
+ * Kunlik hisob-kitob hisoboti uchun (Moliya moduli). Restoran +
+ * kun oralig'i + turi bo'yicha tez guruhlash kerak bo'ladi —
+ * "Kunlik hisob-kitob" sahifasi har ochilishida shu so'rovni
+ * yuboradi, ko'p restoran bo'lganda sekin ishlamasligi kerak.
+ */
+ledgerSchema.index({ restaurantId: 1, createdAt: -1, type: 1, isCash: 1 });
 
 export const Ledger = model('Ledger', ledgerSchema);

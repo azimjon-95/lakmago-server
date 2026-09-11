@@ -22,7 +22,15 @@ const payoutSchema = new Schema(
 
     status: {
       type: String,
-      enum: ['PENDING', 'PROCESSING', 'SUCCESS', 'FAILED', 'RETRY_REQUIRED', 'CANCELLED'],
+      /*
+       * 'REVERSED' QO'SHILDI — TZ 12-band talab qilgan holat:
+       * to'lov keyinchalik xato deb topilsa (masalan noto'g'ri
+       * summa), uni SUCCESS holatidan o'zgartirib tashlamasdan,
+       * "bekor qilindi" deb belgilash kerak — tarix o'chirilmaydi
+       * (TZ 14-band). Qolgan qiymatlar o'zgarishsiz — mavjud
+       * yozuvlar va frontend bilan moslik saqlanadi.
+       */
+      enum: ['PENDING', 'PROCESSING', 'SUCCESS', 'FAILED', 'RETRY_REQUIRED', 'CANCELLED', 'REVERSED'],
       default: 'PENDING',
       index: true,
     },
