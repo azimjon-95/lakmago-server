@@ -1,4 +1,5 @@
 import { config } from '../config/index.js';
+import { restaurantWebhookSecret, markWebhookSecretActive } from './restaurantBotApi.js';
 
 // Bot to'g'ri ishlashi uchun ZARUR update turlari.
 // callback_query bo'lmasa — barcha tugmalar ishlamaydi.
@@ -128,20 +129,13 @@ export async function ensureRestaurantWebhook() {
 
     const info = await tgRestaurant('getWebhookInfo');
     const w = info.result || {};
-    const allowed = w.allowed_updates || [];
-    const missing = allowed.length === 0
-      ? RESTAURANT_REQUIRED
-      : RESTAURANT_REQUIRED.filter((u) => !allowed.includes(u));
 
     const base = resolveBase();
     const wanted = base ? `${base}/restaurant-bot/webhook` : '';
+    // WEBHOOK_BASE yo'q, lekin webhook qo'lda o'rnatilgan — o'shani himoyalaymiz
+    const target = wanted || w.url || '';
 
-    if (w.url === wanted && missing.length === 0) {
-      console.log('✓ Restoran boti webhook to‘g‘ri sozlangan');
-      return;
-    }
-
-    if (!wanted) {
+    if (!target) {
       console.warn(
         '⚠ Restoran boti webhook o‘rnatilmadi: WEBHOOK_BASE .env da yo‘q.\n'
         + '  Yechim: .env ga qo‘shing → WEBHOOK_BASE=https://api.domeningiz.uz',
@@ -149,16 +143,25 @@ export async function ensureRestaurantWebhook() {
       return;
     }
 
+    /*
+     * HAR ISHGA TUSHISHDA qayta o'rnatiladi: Telegram secret_token
+     * ni getWebhookInfo'da qaytarmaydi, ya'ni u o'rnatilganmi —
+     * bilib bo'lmaydi. setWebhook idempotent va arzon.
+     * Muvaffaqiyatli bo'lsagina qattiq tekshiruv yoqiladi
+     * (restaurantBotApi.verifyRestaurantWebhook).
+     */
     const set = await tgRestaurant('setWebhook', {
-      url: wanted,
+      url: target,
       allowed_updates: RESTAURANT_REQUIRED,
+      secret_token: restaurantWebhookSecret(),
       drop_pending_updates: false,
     });
 
     if (set.ok) {
-      console.log(`✓ Restoran boti webhook o‘rnatildi: ${wanted}`);
+      markWebhookSecretActive();
+      console.log(`✓ Restoran boti webhook himoyalangan holda o‘rnatildi: ${target}`);
     } else {
-      console.error(`✗ Restoran boti webhook xatosi: ${set.description}`);
+      console.error(`✗ Restoran boti webhook xatosi: ${set.description} — himoyasiz rejimda ishlaydi`);
     }
   } catch (e) {
     console.error('✗ Restoran boti webhook tekshiruvi:', e.message);

@@ -49,7 +49,9 @@ const restaurantTelegramStaffSchema = new Schema(
     username: { type: String, required: true, lowercase: true, trim: true },
 
     // Bot beradi. Ulanmaguncha null.
-    telegramUserId: { type: String, default: null, index: true },
+    // Indeks pastda (unique + partial) — bu yerda `index: true`
+    // qo'yilmaydi, aks holda Mongoose "Duplicate schema index" ogohlantiradi
+    telegramUserId: { type: String, default: null },
 
     // Ko'rsatish uchun — bot /start da oladi
     firstName: { type: String, default: '' },
@@ -81,6 +83,14 @@ const restaurantTelegramStaffSchema = new Schema(
 
     connectedAt: { type: Date, default: null },
     lastActionAt: { type: Date, default: null },
+
+    /*
+     * Pastki menyu (reply keyboard) versiyasi. Menyu o'zgarganda
+     * MENU_VERSION oshiriladi va server ishga tushganda barcha
+     * faol xodimlarga yangi menyu BIR MARTA yuboriladi
+     * (restaurantBotMenu.ensureStaffMenus).
+     */
+    menuVersion: { type: Number, default: 0 },
   },
   { timestamps: true },
 );

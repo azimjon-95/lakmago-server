@@ -44,6 +44,9 @@ const reservationSchema = new Schema(
       h60: { sent: { type: Boolean, default: false }, sentAt: Date },  // 1 soat
       m30: { sent: { type: Boolean, default: false }, sentAt: Date },  // 30 daqiqa
       arrival: { sent: { type: Boolean, default: false }, sentAt: Date }, // vaqt keldi
+      // Restoran xodimlariga: bron kuni, ish boshlanishida "qo'ng'iroq
+      // qilib aniqlashtiring" eslatmasi (restaurantBotMenu.js)
+      staffMorning: { sent: { type: Boolean, default: false }, sentAt: Date },
     },
 
     // Mijoz javobi tarixi (kim qachon nima bosdi)
@@ -55,5 +58,8 @@ const reservationSchema = new Schema(
   { timestamps: true }
 );
 
+
+// Restoran botidagi "Faol bronlar" va ertalabki eslatma so'rovlari uchun
+reservationSchema.index({ restaurantId: 1, date: 1, status: 1 });
 
 export const Reservation = model('Reservation', reservationSchema);

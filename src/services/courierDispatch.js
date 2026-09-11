@@ -154,6 +154,18 @@ export async function getShareView(token, secret) {
  * @returns {{ ok, secret? , error? }}
  */
 export async function acceptShare(token) {
+  /*
+   * Buyurtma hali ham kuryerga muhtojmi — bekor qilingan yoki
+   * yakunlangan buyurtmani kuryer "qabul qilib" olmasin (avval
+   * bekor qilingan buyurtma ham 'delivering' ga qaytib ketardi).
+   */
+  const pre = await DeliveryAssignment.findOne({ token }).select('orderId status').lean();
+  if (!pre) return { ok: false, error: 'Havola topilmadi' };
+  const orderBefore = await Order.findById(pre.orderId).select('status').lean();
+  if (!orderBefore || !['accepted', 'preparing', 'ready'].includes(orderBefore.status)) {
+    return { ok: false, error: 'Bu buyurtma endi mavjud emas yoki yakunlangan' };
+  }
+
   const secret = randomToken();
 
   const won = await DeliveryAssignment.findOneAndUpdate(
@@ -166,11 +178,33 @@ export async function acceptShare(token) {
     return { ok: false, error: 'Bu buyurtmani boshqa kuryer allaqachon oldi' };
   }
 
-  await Order.findByIdAndUpdate(won.orderId, { status: 'delivering' });
+  // Shu buyurtmaning boshqa ochiq havolalari yopiladi — ikkinchi kuryer kelmasin
+  await DeliveryAssignment.updateMany(
+    { orderId: won.orderId, _id: { $ne: won._id }, status: 'searching' },
+    { status: 'expired' },
+  );
 
-  getIO()?.to('admin').emit('order:update', { _id: won.orderId, status: 'delivering' });
-  getIO()?.to(`restaurant:${won.restaurantId}`).emit('order:update', { _id: won.orderId, status: 'delivering' });
+  /*
+   * Kuryer taom TAYYOR bo'lmasdan oldin ham qabul qilishi mumkin
+   * (restoran uni pishirish paytida chaqiradi — bot "Kuryerga
+   * ulashish"). O'shanda buyurtma 'delivering' ga O'TKAZILMAYDI:
+   * oshxona hali ishlayapti. Restoran "Kuryerga topshirildi"
+   * bosganda yo'lga chiqadi. Tayyor bo'lsa — avvalgidek darhol.
+   */
+  const moved = await Order.findOneAndUpdate(
+    { _id: won.orderId, status: 'ready' },
+    { status: 'delivering' },
+    { new: true },
+  ).populate('userId', 'telegramId');
 
+  if (moved) {
+    getIO()?.to('admin').emit('order:update', { _id: won.orderId, status: 'delivering' });
+    getIO()?.to(`restaurant:${won.restaurantId}`).emit('order:update', { _id: won.orderId, status: 'delivering' });
+    getIO()?.to(`order:${won.orderId}`).emit('order:status', { orderId: String(won.orderId), status: 'delivering' });
+    notifyCustomer(moved.userId?.telegramId, '🚴 Buyurtmangiz yo‘lga chiqdi, tez orada yetib keladi');
+  }
+
+  refreshBotMessages(won.orderId);
   return { ok: true, secret };
 }
 
@@ -193,12 +227,45 @@ export async function deliverShare(token, secret) {
   );
   if (!updated) return { ok: false, error: 'Holat allaqachon o‘zgargan' };
 
-  await Order.findByIdAndUpdate(assignment.orderId, { status: 'delivered', deliveredAt: new Date() });
+  const order = await Order.findOneAndUpdate(
+    { _id: assignment.orderId, status: { $nin: ['delivered', 'cancelled'] } },
+    { status: 'delivered', deliveredAt: new Date() },
+    { new: true },
+  ).populate('userId', 'telegramId');
 
   getIO()?.to('admin').emit('order:update', { _id: assignment.orderId, status: 'delivered' });
   getIO()?.to(`restaurant:${assignment.restaurantId}`).emit('order:update', { _id: assignment.orderId, status: 'delivered' });
+  getIO()?.to(`order:${assignment.orderId}`).emit('order:status', { orderId: String(assignment.orderId), status: 'delivered' });
 
+  if (order) {
+    /*
+     * HISOB-KITOB — avval kuryer "Topshirdim" bosganda restoran
+     * bilan hisob (komissiya, restoran ulushi) UMUMAN yozilmasdi:
+     * settleOrder faqat panel/bot status o'zgarishida chaqirilardi.
+     * settleOrder takroriy yozuvdan o'zi himoyalangan.
+     */
+    import('./billing.js')
+      .then((m) => m.settleOrder(order._id))
+      .catch((e) => console.error('[billing] settleOrder (kuryer):', e.message));
+    notifyCustomer(order.userId?.telegramId, '✅ Buyurtmangiz yetkazildi. Yoqimli ishtaha!');
+  }
+
+  refreshBotMessages(assignment.orderId);
   return { ok: true };
+}
+
+/* Restoran botidagi kartalar yangilanadi (dinamik — aylanma import yo'q) */
+function refreshBotMessages(orderId) {
+  import('./restaurantBotOrders.js')
+    .then((m) => m.refreshOrderMessages(orderId))
+    .catch((e) => console.error('[restaurantBot] refresh (kuryer):', e.message));
+}
+
+function notifyCustomer(telegramId, text) {
+  if (!telegramId) return;
+  import('./telegram.js')
+    .then((m) => m.notifyUser(telegramId, text))
+    .catch(() => {});
 }
 
 const money = (n) => Number(n || 0).toLocaleString('ru-RU').replace(/\u00a0/g, ' ');

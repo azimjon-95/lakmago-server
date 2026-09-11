@@ -4,8 +4,9 @@ import { Reservation } from '../models/Reservation.js';
 import { Order } from '../models/Order.js';
 import { getIO } from '../sockets/io.js';
 import { notify } from '../services/notifications.js';
-import { notifyUser } from '../services/telegram.js';
 import { getDineInMenu } from '../services/dineInPricing.js';
+import { Restaurant } from '../models/Restaurant.js';
+import { zonedToUtc } from '../services/restaurantTime.js';
 
 const reservationSchema = z.object({
   restaurantId: z.string(),
@@ -56,13 +57,19 @@ export const reservationController = {
     if (!parsed.success) {
       return res.status(400).json({ error: 'Ma‘lumot noto‘g‘ri', details: parsed.error.issues });
     }
-    // Sana va vaqtni bitta Date ga birlashtiramiz (eslatmalar shu bo'yicha ishlaydi)
-    const scheduledAt = new Date(`${parsed.data.date}T${parsed.data.time}:00`);
+    /*
+     * Sana + vaqt → bitta Date, RESTORAN vaqt zonasida.
+     * Avval `new Date('YYYY-MM-DDTHH:mm:00')` server zonasida
+     * talqin qilinardi: UTC serverda Toshkentning 10:00 i 15:00
+     * bo'lib yozilar va mijozga eslatmalar 5 soat kech ketardi.
+     */
+    const rest = await Restaurant.findById(parsed.data.restaurantId).select('timezone').lean().catch(() => null);
+    const scheduledAt = zonedToUtc(parsed.data.date, parsed.data.time, rest?.timezone || 'Asia/Tashkent');
 
     const reservation = await Reservation.create({
       ...parsed.data,
       userId: req.userId,
-      scheduledAt: isNaN(scheduledAt.getTime()) ? undefined : scheduledAt,
+      scheduledAt: scheduledAt || undefined,
     });
 
     // Restoranga real-time xabar (to'liq ma'lumot bilan)
@@ -158,6 +165,11 @@ export const reservationController = {
     }
     reservation.status = 'cancelled';
     await reservation.save();
+
+    // Restoran botidagi xodimlar — karta yangilanadi va alohida xabar keladi
+    import('../services/restaurantBotOrders.js')
+      .then((m) => m.notifyReservationChangedByCustomer(reservation._id))
+      .catch((e) => console.error('[restaurantBot] bron bekor:', e.message));
 
     // Restoranga real-time xabar
     getIO()?.to(`restaurant:${reservation.restaurantId}`).emit('reservation:update', {

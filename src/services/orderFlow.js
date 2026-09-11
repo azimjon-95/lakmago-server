@@ -49,7 +49,14 @@ export const RESTAURANT_STATUSES = ['accepted', 'preparing', 'ready', 'deliverin
 const REQUIRED_PREVIOUS = {
   accepted: ['pending'],
   preparing: ['accepted'],
-  ready: ['preparing'],
+  /*
+   * 'accepted' dan ham — admin panel ("Taom tayyor") va bot
+   * ("✅ Tayyor") qabul qilingan buyurtmani TO'G'RIDAN-TO'G'RI
+   * tayyorga o'tkazadi. Avval faqat 'preparing' ruxsat etilgani
+   * uchun paneldagi tugma "allaqachon accepted holatida" xatosini
+   * berardi. Eski buyurtmalar uchun 'preparing' ham qoladi.
+   */
+  ready: ['accepted', 'preparing'],
   delivering: ['ready'],
   // Bekor qilish yakunlanmagan har qanday holatdan mumkin
   cancelled: ['pending', 'accepted', 'preparing', 'ready'],
@@ -84,7 +91,7 @@ const STATUS_TEXT = {
  *   xodimi ismi). Xabarlarda ko'rsatiladi.
  * @returns {Promise<{order: object, changed: boolean}>}
  */
-export async function changeOrderStatus({ orderId, restaurantId, status, actorName = '' }) {
+export async function changeOrderStatus({ orderId, restaurantId, status, actorName = '', cancelReason }) {
   if (!RESTAURANT_STATUSES.includes(status)) {
     throw new OrderFlowError('INVALID_STATUS', 'Noto‘g‘ri status');
   }
@@ -112,6 +119,14 @@ export async function changeOrderStatus({ orderId, restaurantId, status, actorNa
   if (status === 'accepted') update.acceptedAt = new Date();
   if (status === 'ready') update.readyAt = new Date();
   if (status === 'cancelled') update.cancelledAt = new Date();
+  /*
+   * Rad etish sababi status bilan BITTA atomik yozuvda — avval
+   * alohida updateOne bilan keyin yozilardi va xodimlarning
+   * Telegram xabari sababsiz yangilanib qolardi.
+   */
+  if (status === 'cancelled' && typeof cancelReason === 'string' && cancelReason.trim()) {
+    update.cancelReason = cancelReason.trim().slice(0, 200);
+  }
   /*
    * actorName ATAYLAB bazaga yozilmaydi — Order modelida bunday
    * maydon yo'q va uni faqat log uchun qo'shish sxemani

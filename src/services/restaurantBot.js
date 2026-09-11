@@ -1,7 +1,15 @@
 import crypto from 'node:crypto';
-import { config } from '../config/index.js';
 import { RestaurantTelegramStaff } from '../models/RestaurantTelegramStaff.js';
 import { Restaurant } from '../models/Restaurant.js';
+import {
+  isRestaurantBotEnabled,
+  tgCall,
+  sendToStaff,
+  editStaffMessage,
+  answerCallback,
+  esc,
+  btn,
+} from './restaurantBotApi.js';
 
 /*
  * ═══════════════════════════════════════════════════════════
@@ -15,12 +23,13 @@ import { Restaurant } from '../models/Restaurant.js';
  * bo'ladi — shunda bu yerdagi mantiq sodda qoladi.
  */
 
-const TG = () => `https://api.telegram.org/bot${config.restaurantBotToken}`;
-
-/** Bot sozlanganmi. Sozlanmagan bo'lsa hech narsa qilinmaydi. */
-export function isRestaurantBotEnabled() {
-  return Boolean(config.restaurantBotToken);
-}
+/*
+ * Telegram transporti (xabar yuborish/tahrirlash/callback javobi)
+ * restaurantBotApi.js ga ko'chirildi — bot fayllari orasida
+ * aylanma bog'liqlik bo'lmasligi uchun. Eski importlar buzilmasin
+ * deb shu yerdan qayta eksport qilinadi.
+ */
+export { isRestaurantBotEnabled, sendToStaff, editStaffMessage, answerCallback };
 
 let cachedUsername = null;
 
@@ -28,69 +37,9 @@ let cachedUsername = null;
 export async function getRestaurantBotUsername() {
   if (cachedUsername) return cachedUsername;
   if (!isRestaurantBotEnabled()) return null;
-  try {
-    const r = await fetch(`${TG()}/getMe`);
-    const j = await r.json();
-    cachedUsername = j?.result?.username || null;
-    return cachedUsername;
-  } catch {
-    return null;
-  }
-}
-
-/** Telegram'ga xabar yuborish. Xato bo'lsa jimgina o'tadi. */
-export async function sendToStaff(chatId, text, replyMarkup = null) {
-  if (!isRestaurantBotEnabled()) return null;
-  try {
-    const r = await fetch(`${TG()}/sendMessage`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        chat_id: chatId,
-        text,
-        parse_mode: 'HTML',
-        ...(replyMarkup ? { reply_markup: replyMarkup } : {}),
-      }),
-    });
-    return await r.json();
-  } catch (e) {
-    console.error('[restaurantBot] sendMessage:', e.message);
-    return null;
-  }
-}
-
-/** Mavjud xabarni tahrirlash — tugma bosilgach holatni yangilash uchun. */
-export async function editStaffMessage(chatId, messageId, text, replyMarkup = null) {
-  if (!isRestaurantBotEnabled()) return null;
-  try {
-    const r = await fetch(`${TG()}/editMessageText`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        chat_id: chatId,
-        message_id: messageId,
-        text,
-        parse_mode: 'HTML',
-        ...(replyMarkup ? { reply_markup: replyMarkup } : {}),
-      }),
-    });
-    return await r.json();
-  } catch (e) {
-    console.error('[restaurantBot] editMessageText:', e.message);
-    return null;
-  }
-}
-
-/** Tugma bosilganini tasdiqlash — bosilgandagi "soat" belgisini o'chiradi. */
-export async function answerCallback(callbackId, text = '') {
-  if (!isRestaurantBotEnabled()) return;
-  try {
-    await fetch(`${TG()}/answerCallbackQuery`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ callback_query_id: callbackId, text }),
-    });
-  } catch { /* muhim emas */ }
+  const j = await tgCall('getMe', {});
+  cachedUsername = j?.result?.username || null;
+  return cachedUsername;
 }
 
 /*
@@ -208,12 +157,12 @@ export async function handleStart(msg, token) {
 
   await sendToStaff(
     tgUserId,
-    `👋 Assalomu alaykum, ${from.first_name || username}!\n\n`
-    + `🏪 Siz <b>${restaurant.name}</b> restorani xodimisiz?`,
+    `👋 Assalomu alaykum, ${esc(from.first_name || username)}!\n\n`
+    + `🏪 Siz <b>${esc(restaurant.name)}</b> restorani xodimisiz?`,
     {
       inline_keyboard: [[
-        { text: '✅ Ha', callback_data: `connect:yes:${staff._id}` },
-        { text: '❌ Yo‘q', callback_data: `connect:no:${staff._id}` },
+        btn('✅ Ha', `connect:yes:${staff._id}`, 'success'),
+        btn('❌ Yo‘q', `connect:no:${staff._id}`, 'danger'),
       ]],
     },
   );
@@ -226,9 +175,18 @@ export async function handleConnectCallback(cq) {
   const [, answer, staffId] = String(cq.data || '').split(':');
   const tgUserId = String(cq.from?.id);
 
+  if (!/^[a-f\d]{24}$/i.test(staffId || '')) {
+    await answerCallback(cq.id);
+    return;
+  }
   const staff = await RestaurantTelegramStaff.findById(staffId);
   if (!staff || staff.telegramUserId !== tgUserId) {
-    await answerCallback(cq.id);
+    await answerCallback(cq.id, 'Havola eskirgan — paneldan yangisini oling', { alert: true });
+    return;
+  }
+  // Allaqachon tasdiqlangan (tugma ikki marta bosildi) — qayta ishlanmaydi
+  if (staff.isActive && staff.connectedAt && !staff.connectToken) {
+    await answerCallback(cq.id, '✅ Allaqachon ulangansiz');
     return;
   }
 
@@ -239,7 +197,7 @@ export async function handleConnectCallback(cq) {
     await staff.save();
 
     await answerCallback(cq.id, 'Bekor qilindi');
-    await editStaffMessage(tgUserId, cq.message.message_id, 'Ulanish bekor qilindi.');
+    await editStaffMessage(tgUserId, cq.message?.message_id, 'Ulanish bekor qilindi.');
     return;
   }
 
@@ -253,61 +211,94 @@ export async function handleConnectCallback(cq) {
   staff.connectTokenExpiresAt = null;
   staff.isActive = true;
   staff.connectedAt = new Date();
+  const { MENU_VERSION, sendMainMenu } = await import('./restaurantBotMenu.js');
+  staff.menuVersion = MENU_VERSION;
   await staff.save();
 
-  await answerCallback(cq.id, 'Ulandi');
+  await answerCallback(cq.id, '✅ Ulandi');
   await editStaffMessage(
     tgUserId,
-    cq.message.message_id,
-    `✅ Telegram akkauntingiz <b>${restaurant?.name || ''}</b> restoraniga ulandi.\n\n`
+    cq.message?.message_id,
+    `✅ Telegram akkauntingiz <b>${esc(restaurant?.name || '')}</b> restoraniga ulandi.\n\n`
     + 'Endi bu restoranga keladigan buyurtmalar shu bot orqali sizga yuboriladi.',
   );
+  // Pastki menyu (Faol bronlar / Bugungi dostavkalar)
+  await sendMainMenu(tgUserId, { restaurantName: restaurant?.name });
 }
 
 /*
  * ═══ WEBHOOK KIRISH NUQTASI ═══
  *
- * Faqat ulanish bilan bog'liq yangilanishlarni qayta ishlaydi.
- * Buyurtma tugmalari keyingi bosqichda shu yerga qo'shiladi.
+ * Marshrutlar:
+ *   /start <token>    — xodimni ulash
+ *   /start, matn      — ulangan xodimga menyu (begonaga — JIM, TZ 6)
+ *   connect:*         — ulanishni tasdiqlash
+ *   o:*               — buyurtma tugmalari
+ *   r:*               — bron tugmalari
+ *   m:*               — menyu ro'yxatlarini yangilash
+ *
+ * Bot faqat SHAXSIY chatda ishlaydi — guruhga qo'shib qo'yilsa
+ * u yerdagi xabarlarga javob bermaydi.
  */
 export async function handleRestaurantBotUpdate(update) {
+  const cq = update?.callback_query;
   try {
-    if (update.message?.text) {
-      const text = update.message.text.trim();
+    const msg = update?.message;
+    if (msg) {
+      if (msg.chat?.type && msg.chat.type !== 'private') return;
+      const text = String(msg.text || '').trim();
+
       if (text.startsWith('/start')) {
         const token = text.split(/\s+/)[1] || '';
-        await handleStart(update.message, token);
+        if (token) {
+          await handleStart(msg, token);
+          return;
+        }
       }
-      // Boshqa har qanday matnga javob bermaymiz (TZ 6-band)
+      if (!text) return;
+
+      // Ulangan xodim — menyu; begona — jim (TZ 6-band)
+      const { handleStaffMessage } = await import('./restaurantBotMenu.js');
+      const handled = await handleStaffMessage(msg);
+      if (!handled && text.startsWith('/start')) {
+        console.log(`[restaurantBot] /start e'tiborsiz: token yo‘q, xodim emas (id=${msg.from?.id})`);
+      }
       return;
     }
 
-    if (update.callback_query) {
-      const data = String(update.callback_query.data || '');
+    if (cq) {
+      const data = String(cq.data || '');
 
       if (data.startsWith('connect:')) {
-        await handleConnectCallback(update.callback_query);
+        await handleConnectCallback(cq);
         return;
       }
-
       /*
-       * Buyurtma tugmalari alohida faylda — bu yerda faqat
-       * yo'naltirish. Dinamik import: restaurantBotOrders
-       * o'z navbatida orderFlow'ni chaqiradi, statik import
-       * bo'lsa aylanma bog'liqlik paydo bo'lardi.
+       * Dinamik import: restaurantBotOrders orderFlow'ni chaqiradi,
+       * orderFlow esa restaurantBotOrders'ni — statik import
+       * aylanma bog'liqlik hosil qilardi.
        */
       if (data.startsWith('o:')) {
         const { handleOrderCallback } = await import('./restaurantBotOrders.js');
-        await handleOrderCallback(update.callback_query);
+        await handleOrderCallback(cq);
         return;
       }
-
       if (data.startsWith('r:')) {
         const { handleReservationCallback } = await import('./restaurantBotOrders.js');
-        await handleReservationCallback(update.callback_query);
+        await handleReservationCallback(cq);
+        return;
       }
+      if (data.startsWith('m:')) {
+        const { handleMenuCallback } = await import('./restaurantBotMenu.js');
+        await handleMenuCallback(cq);
+        return;
+      }
+      // Noma'lum tugma (juda eski xabar) — "soat" belgisi qotib qolmasin
+      await answerCallback(cq.id);
     }
   } catch (e) {
     console.error('[restaurantBot] update:', e.message);
+    // Xato bo'lsa ham xodim tugma bosilganini sezsin
+    if (cq?.id) await answerCallback(cq.id, '⚠️ Xatolik yuz berdi, qayta urinib ko‘ring', { alert: true });
   }
 }

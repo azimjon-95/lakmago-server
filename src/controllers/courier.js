@@ -67,10 +67,27 @@ export const courierAdminController = {
     const order = await Order.findOne({ _id: req.params.id, restaurantId: rid(req) }).lean();
     if (!order) return res.status(404).json({ error: 'Buyurtma topilmadi' });
 
-    const { token, snapshot } = await createShareLink(order._id);
+    /*
+     * Bot va panel BIR XIL havolani ishlatadi: ochiq (hali hech kim
+     * olmagan) havola bo'lsa — o'sha qaytariladi. Aks holda bitta
+     * buyurtmaga bir nechta havola tarqab, ikki kuryer kelishi
+     * mumkin edi. Kuryer allaqachon topilgan bo'lsa — yangi havola
+     * berilmaydi.
+     */
+    const { DeliveryAssignment } = await import('../models/DeliveryAssignment.js');
+    const open = await DeliveryAssignment.findOne({ orderId: order._id, status: { $in: ['searching', 'assigned'] } })
+      .sort({ createdAt: -1 })
+      .lean();
+    if (open?.status === 'assigned') {
+      return res.status(409).json({ error: 'Bu buyurtmaga kuryer allaqachon topilgan' });
+    }
+
+    const { token, snapshot } = open
+      ? { token: open.token, snapshot: open.deliverySnapshot }
+      : await createShareLink(order._id);
     const urls = buildShareUrls(token, snapshot);
 
-    res.status(201).json(urls);
+    res.status(open ? 200 : 201).json(urls);
   }),
 
   // GET /panel/orders/:id/dispatch-status — kuzatish uchun (ixtiyoriy)

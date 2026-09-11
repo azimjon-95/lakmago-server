@@ -1,6 +1,8 @@
 import { config } from '../config/index.js';
 import { Reservation } from '../models/Reservation.js';
 import { User } from '../models/User.js';
+import { Restaurant } from '../models/Restaurant.js';
+import { zonedToUtc } from './restaurantTime.js';
 import { getIO } from '../sockets/io.js';
 
 const TG_API = `https://api.telegram.org/bot${config.telegramBotToken}`;
@@ -33,12 +35,19 @@ const fmtTime = (d) => {
   }
 };
 
+/*
+ * Bron vaqti — mijoz tanlagan soat (restoran vaqti) matn sifatida.
+ * scheduledAt ni server zonasida formatlash noto'g'ri soat
+ * ko'rsatardi (UTC serverda 10:00 o'rniga 05:00).
+ */
+const resTime = (r) => r.time || fmtTime(r.scheduledAt);
+
 // ===== ESLATMA TURLARI =====
 // Har biri o'z matni va tugmalari bilan
 const REMINDERS = {
   h90: {
     minutes: 90,
-    text: (r) => `⏰ <b>Eslatma</b>\n\n${r.restaurantName} restoranida bronigizga <b>1.5 soat</b> qoldi.\n\n📅 Vaqt: ${fmtTime(r.scheduledAt)}\n👥 Mehmonlar: ${r.guests} kishi\n\nRejangiz o'zgarmadimi?`,
+    text: (r) => `⏰ <b>Eslatma</b>\n\n${r.restaurantName} restoranida bronigizga <b>1.5 soat</b> qoldi.\n\n📅 Vaqt: ${resTime(r)}\n👥 Mehmonlar: ${r.guests} kishi\n\nRejangiz o'zgarmadimi?`,
     buttons: (id) => [[
       { text: '✅ Boramiz', callback_data: `resv_coming_${id}` },
       { text: '❌ Bora olmaymiz', callback_data: `resv_not_coming_${id}` },
@@ -46,7 +55,7 @@ const REMINDERS = {
   },
   h60: {
     minutes: 60,
-    text: (r) => `⏰ <b>Eslatma</b>\n\n${r.restaurantName} — bronigizga <b>1 soat</b> qoldi.\n\n📅 Vaqt: ${fmtTime(r.scheduledAt)}\n👥 Mehmonlar: ${r.guests} kishi`,
+    text: (r) => `⏰ <b>Eslatma</b>\n\n${r.restaurantName} — bronigizga <b>1 soat</b> qoldi.\n\n📅 Vaqt: ${resTime(r)}\n👥 Mehmonlar: ${r.guests} kishi`,
     buttons: (id) => [[
       { text: '✅ Boramiz', callback_data: `resv_coming_${id}` },
       { text: '❌ Bora olmaymiz', callback_data: `resv_not_coming_${id}` },
@@ -54,7 +63,7 @@ const REMINDERS = {
   },
   m30: {
     minutes: 30,
-    text: (r) => `🔔 <b>Tez orada!</b>\n\n${r.restaurantName} — bronigizga <b>30 daqiqa</b> qoldi.\n\n📅 Vaqt: ${fmtTime(r.scheduledAt)}\n\nStolingiz tayyorlanmoqda.`,
+    text: (r) => `🔔 <b>Tez orada!</b>\n\n${r.restaurantName} — bronigizga <b>30 daqiqa</b> qoldi.\n\n📅 Vaqt: ${resTime(r)}\n\nStolingiz tayyorlanmoqda.`,
     buttons: (id) => [[
       { text: '🚗 Yo‘ldamiz', callback_data: `resv_on_way_${id}` },
       { text: '❌ Bora olmaymiz', callback_data: `resv_not_coming_${id}` },
@@ -62,7 +71,7 @@ const REMINDERS = {
   },
   arrival: {
     minutes: 0,
-    text: (r) => `🍽 <b>Bron vaqti keldi!</b>\n\n${r.restaurantName} sizni kutmoqda.\n\n📅 ${fmtTime(r.scheduledAt)}\n👥 ${r.guests} kishi`,
+    text: (r) => `🍽 <b>Bron vaqti keldi!</b>\n\n${r.restaurantName} sizni kutmoqda.\n\n📅 ${resTime(r)}\n👥 ${r.guests} kishi`,
     buttons: (id) => [[
       { text: '🚗 Yo‘ldamiz', callback_data: `resv_on_way_${id}` },
       { text: '✅ Keldik', callback_data: `resv_arrived_${id}` },
@@ -102,15 +111,24 @@ export async function checkReservationReminders() {
   const now = Date.now();
   let sent = 0;
 
-  // Faqat faol bronlar (rad etilgan/bekor qilinganlar emas)
+  /*
+   * Faqat faol bronlar. Oyna ATAYLAB keng (±14 soat): eski bronlarda
+   * scheduledAt server zonasida xato yozilgan bo'lishi mumkin —
+   * haqiqiy vaqt pastda date + time + restoran zonasidan hisoblanadi.
+   */
   const active = await Reservation.find({
-    scheduledAt: { $gte: new Date(now - 30 * 60_000), $lte: new Date(now + 2 * 60 * 60_000) },
+    scheduledAt: { $gte: new Date(now - 14 * 60 * 60_000), $lte: new Date(now + 16 * 60 * 60_000) },
     status: { $in: ['pending', 'confirmed', 'coming', 'on_way'] },
   });
 
+  const restIds = [...new Set(active.map((r) => String(r.restaurantId)))];
+  const tzMap = new Map((await Restaurant.find({ _id: { $in: restIds } }).select('timezone').lean())
+    .map((x) => [String(x._id), x.timezone || 'Asia/Tashkent']));
+
   for (const r of active) {
-    if (!r.scheduledAt) continue;
-    const minutesLeft = Math.round((new Date(r.scheduledAt).getTime() - now) / 60_000);
+    const trueAt = zonedToUtc(r.date, r.time, tzMap.get(String(r.restaurantId)) || 'Asia/Tashkent') || r.scheduledAt;
+    if (!trueAt) continue;
+    const minutesLeft = Math.round((new Date(trueAt).getTime() - now) / 60_000);
 
     for (const [key, meta] of Object.entries(REMINDERS)) {
       if (r.reminders?.[key]?.sent) continue;
@@ -140,12 +158,34 @@ export async function handleReservationResponse(callbackQuery) {
 
   const [, action, reservationId] = m;
   const telegramId = String(callbackQuery.from.id);
+  if (!/^[a-f\d]{24}$/i.test(reservationId)) return false;
 
   const reservation = await Reservation.findById(reservationId);
   if (!reservation) {
     await tg('answerCallbackQuery', {
       callback_query_id: callbackQuery.id,
       text: 'Bron topilmadi',
+      show_alert: true,
+    });
+    return true;
+  }
+
+  // Faqat bron EGASI javob bera oladi (telegramId avval o'qilib, tekshirilmasdi)
+  const owner = await User.findById(reservation.userId).select('telegramId').lean();
+  if (!owner?.telegramId || String(owner.telegramId) !== telegramId) {
+    await tg('answerCallbackQuery', {
+      callback_query_id: callbackQuery.id,
+      text: 'Bu bron sizga tegishli emas',
+      show_alert: true,
+    });
+    return true;
+  }
+
+  // Yopilgan bronni mijoz eski eslatma tugmasi bilan qayta "ochib" yubormasin
+  if (['rejected', 'cancelled', 'completed'].includes(reservation.status)) {
+    await tg('answerCallbackQuery', {
+      callback_query_id: callbackQuery.id,
+      text: 'Bu bron allaqachon yopilgan',
       show_alert: true,
     });
     return true;
@@ -181,6 +221,11 @@ export async function handleReservationResponse(callbackQuery) {
       text: LABELS[action] || 'Qabul qilindi',
     });
   }
+
+  // Restoran botidagi xodimlar kartasi yangilanadi ("bora olmaymiz" — alohida xabar ham)
+  import('./restaurantBotOrders.js')
+    .then((m) => m.notifyReservationChangedByCustomer(reservation._id))
+    .catch((e) => console.error('[restaurantBot] mijoz javobi:', e.message));
 
   // Restoranga real-time xabar
   const io = getIO();

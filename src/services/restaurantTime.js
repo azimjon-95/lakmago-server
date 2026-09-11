@@ -102,3 +102,86 @@ export function workHoursLabel(restaurant) {
   if (open === close) return '24 soat';
   return `${restaurant.openTime} – ${restaurant.closeTime}`;
 }
+
+/* ═══════════════════════════════════════════════════════════
+ * SANA + VAQT ZONASI YORDAMCHILARI
+ * ═══════════════════════════════════════════════════════════
+ *
+ * Server qaysi zonada ishlashidan (UTC, Europe/...) qat'i
+ * nazar, "bugun", "soat 10:00" kabi tushunchalar RESTORAN
+ * vaqt zonasida hisoblanadi. `new Date('2026-09-12T10:00:00')`
+ * server zonasida talqin qilinadi — UTC serverda bu Toshkent
+ * bo'yicha 15:00 bo'lib chiqadi (5 soat xato).
+ */
+
+function safeTz(tz) {
+  try {
+    new Intl.DateTimeFormat('en-US', { timeZone: tz });
+    return tz;
+  } catch {
+    return 'Asia/Tashkent';
+  }
+}
+
+/** Zonadagi sana (YYYY-MM-DD) va kun boshidan o'tgan daqiqalar. */
+export function zoneDate(timezone = 'Asia/Tashkent', date = new Date()) {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: safeTz(timezone),
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', hour12: false,
+  }).formatToParts(date);
+  const get = (t) => parts.find((p) => p.type === t)?.value || '00';
+  const hh = Number(get('hour')) % 24;
+  return { ymd: `${get('year')}-${get('month')}-${get('day')}`, minutes: hh * 60 + Number(get('minute')) };
+}
+
+/** YYYY-MM-DD ga kun qo'shish (manfiy ham bo'ladi). */
+export function addDaysYmd(ymd, days) {
+  const [y, m, d] = String(ymd).split('-').map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, d + days));
+  return dt.toISOString().slice(0, 10);
+}
+
+/** "HH:MM" → daqiqa (noto'g'ri bo'lsa null). */
+export function hhmmToMinutes(hhmm) {
+  return toMinutes(hhmm);
+}
+
+/** Zonaning berilgan paytdagi UTC'dan farqi (daqiqa). */
+function zoneOffsetMinutes(timezone, date) {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: safeTz(timezone),
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
+  }).formatToParts(date);
+  const get = (t) => Number(parts.find((p) => p.type === t)?.value || 0);
+  const asUtc = Date.UTC(get('year'), get('month') - 1, get('day'), get('hour') % 24, get('minute'), get('second'));
+  return Math.round((asUtc - Math.floor(date.getTime() / 1000) * 1000) / 60_000);
+}
+
+/**
+ * Restoran zonasidagi "YYYY-MM-DD" + "HH:MM" → haqiqiy (UTC) Date.
+ * Noto'g'ri qiymatda null.
+ */
+export function zonedToUtc(ymd, hhmm, timezone = 'Asia/Tashkent') {
+  const dm = String(ymd || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  const mins = toMinutes(hhmm || '00:00');
+  if (!dm || mins === null) return null;
+  const guess = Date.UTC(Number(dm[1]), Number(dm[2]) - 1, Number(dm[3]), Math.floor(mins / 60), mins % 60);
+  // Ikki bosqich — yozgi/qishki vaqt almashadigan zonalarda ham aniq
+  const off1 = zoneOffsetMinutes(timezone, new Date(guess));
+  let ts = guess - off1 * 60_000;
+  const off2 = zoneOffsetMinutes(timezone, new Date(ts));
+  if (off2 !== off1) ts = guess - off2 * 60_000;
+  return new Date(ts);
+}
+
+/** Restoran zonasidagi bir kunning UTC chegaralari [start, end). */
+export function zoneDayRange(timezone = 'Asia/Tashkent', date = new Date()) {
+  const { ymd } = zoneDate(timezone, date);
+  return {
+    ymd,
+    start: zonedToUtc(ymd, '00:00', timezone),
+    end: zonedToUtc(addDaysYmd(ymd, 1), '00:00', timezone),
+  };
+}

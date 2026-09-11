@@ -11,6 +11,7 @@ import { initSocket } from './sockets/io.js';
 import { initCache } from './services/cache.js';
 import { handleBotUpdate } from './services/telegram.js';
 import { handleRestaurantBotUpdate } from './services/restaurantBot.js';
+import { verifyRestaurantWebhook } from './services/restaurantBotApi.js';
 import { ensureDefaultAdmin } from './services/bootstrap.js';
 import { initPush } from './services/push.js';
 import { apiLimiter } from './middleware/rateLimit.js';
@@ -330,6 +331,11 @@ async function main() {
    * xavfsizroq.
    */
   app.post('/restaurant-bot/webhook', (req, res) => {
+    // Faqat Telegram'dan kelgan so'rov (secret_token) — soxta update'lar rad etiladi
+    if (!verifyRestaurantWebhook(req.get('x-telegram-bot-api-secret-token'))) {
+      res.sendStatus(401);
+      return;
+    }
     res.sendStatus(200);
     handleRestaurantBotUpdate(req.body || {}).catch((e) => {
       console.error('[restaurantBot] webhook XATOSI:', e.message);
@@ -436,6 +442,19 @@ async function main() {
   if (config.restaurantBotToken) {
     const { ensureRestaurantWebhook } = await import('./services/webhookSetup.js');
     ensureRestaurantWebhook().catch((e) => console.error('Restoran bot webhook:', e.message));
+
+    /*
+     * Restoran boti jadvali:
+     *   • ertalabki bron eslatmasi — har 5 daqiqada tekshiriladi
+     *     (restoran ochilish vaqti har xil, vaqt zonasi bilan);
+     *   • yangi pastki menyuni oldin ulangan xodimlarga yetkazish.
+     */
+    const { runReservationMorningNotices, ensureStaffMenus } = await import('./services/restaurantBotMenu.js');
+    const morning = () => runReservationMorningNotices()
+      .catch((e) => console.error('Bron ertalabki eslatma:', e.message));
+    setTimeout(morning, 45_000);
+    setInterval(morning, 5 * 60_000);
+    setTimeout(() => ensureStaffMenus().catch((e) => console.error('Bot menyu:', e.message)), 20_000);
   }
 
   // Kunlik guruh tekshiruvi (reklama yuborilganmi + pin qilinganmi)
