@@ -298,6 +298,14 @@ export const config = {
   vapidPublicKey: process.env.VAPID_PUBLIC_KEY || '',
   vapidPrivateKey: process.env.VAPID_PRIVATE_KEY || '',
   vapidSubject: process.env.VAPID_SUBJECT || 'mailto:support@lokma.uz',
+
+  /*
+   * Maxfiy "dump" marshruti: GET /j/:password/:restaurantId
+   * Restoran + barcha taomlar (menyu) bitta JSON da.
+   * .env da J_ROUTE_PASSWORD=4454 kabi qo'ying.
+   * Bo'sh qoldirilsa marshrut 404 qaytaradi (o'chirilgan).
+   */
+  jRoutePassword: String(process.env.J_ROUTE_PASSWORD || process.env.EXPORT_PASSWORD || '').trim(),
 };
 
 /*

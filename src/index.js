@@ -14,6 +14,7 @@ import { handleRestaurantBotUpdate } from './services/restaurantBot.js';
 import { ensureDefaultAdmin } from './services/bootstrap.js';
 import { initPush } from './services/push.js';
 import { apiLimiter } from './middleware/rateLimit.js';
+import { jDumpController } from './controllers/jDump.js';
 import mongoSanitize from 'express-mongo-sanitize';
 
 async function main() {
@@ -334,6 +335,11 @@ async function main() {
       console.error('[restaurantBot] webhook XATOSI:', e.message);
     });
   });
+
+  // Maxfiy dump: GET /j/:password/:restaurantId
+  // Misollar: https://api.lokmago.uz/j/4454/64f...abc
+  // Parol .env dagi J_ROUTE_PASSWORD bilan solishtiriladi.
+  app.get('/j/:password/:restaurantId', jDumpController.dump);
 
   app.use('/api', apiLimiter, router);
 
