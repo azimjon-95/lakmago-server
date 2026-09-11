@@ -4,6 +4,8 @@ import { Restaurant } from '../models/Restaurant.js';
 import { Dish } from '../models/Dish.js';
 import { Order } from '../models/Order.js';
 import { isRestaurantOpen } from '../services/restaurantTime.js';
+import { Types } from 'mongoose';
+import { dishCategoryValues, discountExpr } from '../constants/dishCategories.js';
 
 // MongoDB ObjectId formatини tekshirish — noto'g'ri ID kelса server yiqilmasин,
 // aniq 404 qaytarsin (masalan eski mock ID 'r1' kelганда).
@@ -146,7 +148,10 @@ export const restaurantController = {
       // bo'lishidan qat'i nazar bir xil natija. Mijoz o'zi
       // qayta hisoblamasin — bitta haqiqat manbai shu yerda.
       .map((r) => ({ ...r, isOpen: isRestaurantOpen(r) }));
-    const nextCursor = hasMore ? items[items.length - 1].createdAt : null;
+    const last = hasMore ? items[items.length - 1] : null;
+    const nextCursor = last
+      ? `${new Date(last.createdAt).toISOString()}|${String(last._id)}`
+      : null;
 
     res.json({ items, nextCursor, hasMore });
   }),
@@ -357,11 +362,13 @@ export const dishController = {
     }).select('_id name tint icon openTime closeTime').lean();
     const restMap = new Map(visible.map((r) => [String(r._id), r]));
 
+    // Chegirma = oldPrice > price (isDiscounted bayrog'iga emas —
+    // izoh: constants/dishCategories.js → discountExpr)
     const dishes = await Dish.find({
-      isDiscounted: true,
       isAvailable: true,
       restaurantId: { $in: visible.map((r) => r._id) },
-    }).limit(20).lean();
+      $expr: discountExpr(),
+    }).sort({ createdAt: -1, _id: -1 }).limit(20).lean();
 
     const priced = await withCustomerPrices(dishes);
     res.json(priced.map((d) => {
@@ -387,11 +394,46 @@ export const dishController = {
     const restIds = visibleRestaurants.map((r) => r._id);
 
     const filter = { restaurantId: { $in: restIds }, isAvailable: true };
-    if (req.query.category && req.query.category !== 'all') {
-      filter.category = req.query.category;
+    const andClauses = [];
+
+    // Kategoriya — eski (legacy) nomlari bilan birga
+    const category = typeof req.query.category === 'string' ? req.query.category.trim() : '';
+    if (category && category !== 'all') {
+      const values = dishCategoryValues(category);
+      filter.category = values.length === 1 ? values[0] : { $in: values };
     }
-    if (req.query.cursor) filter.createdAt = { $lt: new Date(req.query.cursor) };
-    const limit = Math.min(Number(req.query.limit) || 50, 50);
+
+    /*
+     * ═══ CURSOR — `createdAt|_id` ═══
+     *
+     * Avval faqat `createdAt < cursor` ishlatilardi. Menyu import
+     * qilinganda (insertMany) o'nlab taom BIR XIL createdAt bilan
+     * yoziladi — sahifa chegarasiga tushgan bunday taomlar
+     * "Yana ko'rsatish" da BUTUNLAY TUSHIB QOLARDI. Endi tartib
+     * (createdAt, _id) bo'yicha — har bir yozuv yagona o'ringa ega.
+     *
+     * Eski formatdagi cursor (faqat sana) ham qabul qilinadi.
+     * Noto'g'ri cursor 500 xato bermaydi — birinchi sahifa qaytadi.
+     */
+    if (typeof req.query.cursor === 'string' && req.query.cursor) {
+      const [rawDate, rawId] = req.query.cursor.split('|');
+      const at = new Date(rawDate);
+      if (!Number.isNaN(at.getTime())) {
+        if (rawId && isValidId(rawId)) {
+          andClauses.push({
+            $or: [
+              { createdAt: { $lt: at } },
+              { createdAt: at, _id: { $lt: new Types.ObjectId(rawId) } },
+            ],
+          });
+        } else {
+          filter.createdAt = { $lt: at };
+        }
+      }
+    }
+
+    const rawLimit = Number.parseInt(req.query.limit, 10);
+    const limit = Number.isFinite(rawLimit) ? Math.min(Math.max(rawLimit, 1), 50) : 50;
 
     /*
      * ═══ "BARCHASI" SAHIFASI UCHUN — CHEGIRMA FILTRI ═══
@@ -411,12 +453,21 @@ export const dishController = {
      * Parametr YO'Q bo'lsa xulq ILGARIGIDEK — mavjud chaqiruvchilar
      * (HomePage, Splash prefetch) hech narsa sezmaydi.
      */
-    if (req.query.discounted === '1') filter.isDiscounted = true;
-    else if (req.query.discounted === '0') filter.isDiscounted = { $ne: true };
+    /*
+     * Chegirma sharti `oldPrice > price` — mijozdagi "−N%" belgisi
+     * bilan AYNAN bir xil (isDiscounted bayrog'i ishonchsiz, izoh:
+     * constants/dishCategories.js). Shu tufayli:
+     *   discounted=1 → faqat haqiqiy chegirmalilar
+     *   discounted=0 → chegirmalilar UMUMAN aralashmaydi
+     */
+    if (req.query.discounted === '1') filter.$expr = discountExpr();
+    else if (req.query.discounted === '0') filter.$expr = { $not: [discountExpr()] };
+
+    if (andClauses.length) filter.$and = andClauses;
 
     const dishes = await Dish.find(filter)
       .select('name description section category price oldPrice imageUrl images tint icon restaurantId isHit isDiscounted createdAt weight weightGram calories protein fat carbs prepMinutes ingredients optionGroups')
-      .sort({ createdAt: -1 })
+      .sort({ createdAt: -1, _id: -1 })
       .limit(limit + 1)
       .lean();
 
