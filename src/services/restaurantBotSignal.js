@@ -103,6 +103,19 @@ async function readAndRepeat(kind) {
       hash: crypto.createHash('sha1').update(raw).digest('hex'),
     };
     console.log(`[signal] ${kind}: ${SOUNDS[kind]} tayyor — ${REPEATS}× (${durationSec}s)`);
+    /*
+     * Signal qisqa bo'lishi kerak: u 3 marta takrorlanadi va
+     * xodim uni har buyurtmada eshitadi. Uzun fayl (masalan
+     * 7 soniyalik kuy) 20+ soniyalik ovozli xabarga aylanadi —
+     * xodim uni oxirigacha tinglamaydi, chalg'itadi.
+     */
+    if (durationSec > 12) {
+      warnOnce(
+        `long:${kind}`,
+        `[signal] ${SOUNDS[kind]} uzun: signal ${durationSec}s chiqdi. `
+        + 'Tavsiya: faylni 1–3 soniyaga qisqartiring (sounds/README.md).',
+      );
+    }
   } catch (e) {
     warnOnce(
       `file:${kind}`,

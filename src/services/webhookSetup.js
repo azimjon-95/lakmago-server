@@ -19,7 +19,33 @@ async function tg(method, params) {
 // balki API domeni kerak. .env da WEBHOOK_BASE bo'lsa o'shani olamiz.
 function resolveBase() {
   const raw = process.env.WEBHOOK_BASE || process.env.API_PUBLIC_URL || '';
-  return raw.trim().replace(/\/+$/, '');
+  const base = raw.trim().replace(/\/+$/, '');
+  if (!base) return '';
+
+  /*
+   * HIMOYA: WEBHOOK_BASE faqat menyu eksporti uchun ajratilgan
+   * domenga (J_ROUTE_HOSTS) qo'yilgan bo'lsa — webhook o'sha
+   * domenga o'rnatilardi, u yerda esa /bot/webhook 404 qaytaradi
+   * va BOT BUTUNLAY ISHLAMAY QOLARDI (tugmalar, buyurtma
+   * xabarlari — hammasi). Bunday sozlamani qabul qilmaymiz:
+   * mavjud webhook saqlanadi va logda aniq ogohlantirish chiqadi.
+   */
+  try {
+    const host = new URL(base).hostname.toLowerCase();
+    if (config.jRouteHosts.includes(host)) {
+      console.error(
+        `✗ WEBHOOK_BASE=${base} — bu domen J_ROUTE_HOSTS ro‘yxatida `
+        + '(faqat menyu eksporti uchun). Webhook u yerda ishlamaydi.\n'
+        + '  Yechim: WEBHOOK_BASE ni ASOSIY API domeniga qo‘ying.',
+      );
+      return '';
+    }
+  } catch {
+    console.error(`✗ WEBHOOK_BASE noto‘g‘ri: ${base} (masalan https://api.domeningiz.uz)`);
+    return '';
+  }
+
+  return base;
 }
 
 /**

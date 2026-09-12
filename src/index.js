@@ -91,6 +91,32 @@ async function main() {
   app.use(mongoSanitize());
   app.use(morgan('dev'));
 
+  /*
+   * ═══ DOMEN VAZIFASI ═══
+   *
+   * J_ROUTE_HOSTS dagi domen FAQAT menyu eksporti uchun:
+   *   GET /j/:password/:restaurantId  — ruxsat
+   *   GET /health                     — ruxsat (monitoring uchun)
+   *   qolgani                         — 404
+   *
+   * Asosiy API (bot, to'lov, admin panel, socket) o'z domenida
+   * avvalgidek ishlayveradi — bu tekshiruv faqat ro'yxatdagi
+   * domenga tegishli. Ro'yxat bo'sh bo'lsa hech narsa o'zgarmaydi.
+   *
+   * `req.hostname` — Nginx orqali kelganda X-Forwarded-Host
+   * ('trust proxy' yoqilgani uchun), ya'ni foydalanuvchi yozgan
+   * haqiqiy domen.
+   */
+  if (config.jRouteHosts.length) {
+    const dumpOnly = new Set(config.jRouteHosts);
+    app.use((req, res, next) => {
+      if (!dumpOnly.has(String(req.hostname || '').toLowerCase())) return next();
+      if (req.path === '/health' || req.path.startsWith('/j/')) return next();
+      res.status(404).json({ error: 'Bu domen faqat menyu eksporti uchun' });
+    });
+    console.log(`✓ Faqat menyu eksporti uchun domen(lar): ${config.jRouteHosts.join(', ')}`);
+  }
+
   // Ildiz — server ishlayotganini bildiradi (404 log to'ldirmasin)
   app.get('/', (_req, res) => res.json({
     service: 'LokmaGo API',

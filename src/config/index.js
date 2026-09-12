@@ -306,6 +306,31 @@ export const config = {
    * Bo'sh qoldirilsa marshrut 404 qaytaradi (o'chirilgan).
    */
   jRoutePassword: String(process.env.J_ROUTE_PASSWORD || process.env.EXPORT_PASSWORD || '').trim(),
+
+  /*
+   * ═══ DOMENLARNI VAZIFAGA KO'RA AJRATISH ═══
+   *
+   * Server bir nechta domenda ochiq bo'lishi mumkin. Shu ro'yxatdagi
+   * domenlarga kelgan so'rovlar FAQAT dump marshrutiga (/j/...) va
+   * /health ga javob beradi, qolganiga 404.
+   *
+   * Maqsad: yangi domen (masalan api.lokmago.uz) faqat menyu
+   * eksportiga xizmat qilsin, asosiy API esa eski domenda ishlab
+   * tursin. Shu tufayli yangi domen tasodifan botga, to'lovga yoki
+   * admin panelga ochilib qolmaydi.
+   *
+   * Yozilishi: J_ROUTE_HOSTS=api.lokmago.uz (vergul bilan bir nechta).
+   * https:// va portni yozsangiz ham bo'ladi — ular tashlab yuboriladi.
+   * Bo'sh qoldirilsa — hech qanday cheklov yo'q (barcha domenlar
+   * hamma narsaga javob beradi, avvalgidek).
+   */
+  jRouteHosts: String(process.env.J_ROUTE_HOSTS || '')
+    .split(',')
+    .map((h) => String(h).trim().toLowerCase()
+      .replace(/^[a-z]+:\/\//, '')     // sxema
+      .replace(/\/.*$/, '')            // yo'l
+      .replace(/:\d+$/, ''))           // port
+    .filter(Boolean),
 };
 
 /*
