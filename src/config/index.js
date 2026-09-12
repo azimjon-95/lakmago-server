@@ -71,6 +71,39 @@ function num(value, fallback) {
  * berish xavfsizroq). Faqat lokal ishlab chiqishda (NODE_ENV
  * !== 'production') qulaylik uchun standart qiymat qoldi.
  */
+/*
+ * ═══════════════════════════════════════════════════════════
+ * APP_ENV — MUHITNI AJRATISH (test / production)
+ * ═══════════════════════════════════════════════════════════
+ *
+ * NODE_ENV yetarli emas: test serveri ham `NODE_ENV=production`
+ * bilan ishlaydi (optimizatsiya uchun). Shu sababli alohida
+ * o'zgaruvchi.
+ *
+ * STANDART QIYMAT — 'production'. Ya'ni APP_ENV yozilmagan
+ * server (hozirgi ishlab turgan server) xatti-harakatini
+ * O'ZGARTIRMAYDI. Qo'shimcha himoya faqat APP_ENV=test
+ * yozilgandagina yoqiladi.
+ */
+export const APP_ENV = String(process.env.APP_ENV || 'production').trim().toLowerCase();
+export const isTestEnv = APP_ENV === 'test';
+
+/*
+ * Test muhitida webhook FAQAT shu domenlarga o'rnatilishi
+ * mumkin. Boshqa manzil yozilsa webhook umuman o'rnatilmaydi —
+ * shu tufayli test server production webhook'ini hech qachon
+ * o'ziga tortib ololmaydi.
+ *
+ * Bu maxfiy ma'lumot emas, shuning uchun kodda turishi xavfsiz.
+ * Kerak bo'lsa TEST_WEBHOOK_HOSTS bilan kengaytiriladi.
+ */
+export const TEST_WEBHOOK_HOSTS = String(
+  process.env.TEST_WEBHOOK_HOSTS || 'test-api.lokmago.uz',
+)
+  .split(',')
+  .map((h) => h.trim().toLowerCase().replace(/^[a-z]+:\/\//, '').replace(/\/.*$/, '').replace(/:\d+$/, ''))
+  .filter(Boolean);
+
 const isProd = process.env.NODE_ENV === 'production';
 const jwtSecretFromEnv = process.env.JWT_SECRET;
 if (isProd && (!jwtSecretFromEnv || jwtSecretFromEnv === 'dev-secret')) {

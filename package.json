@@ -12,7 +12,8 @@
     "webhook": "node scripts/setup-webhook.js",
     "bot": "node scripts/bot-tekshir.js",
     "sync:banners": "node scripts/sync-banners.js",
-    "seed:catalog": "node scripts/seed-catalog.js"
+    "seed:catalog": "node scripts/seed-catalog.js",
+    "test": "node tests/webhook-guard.test.mjs"
   },
   "dependencies": {
     "@socket.io/redis-adapter": "^8.3.0",

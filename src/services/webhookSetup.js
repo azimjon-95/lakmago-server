@@ -1,4 +1,4 @@
-import { config } from '../config/index.js';
+import { config, isTestEnv, APP_ENV, TEST_WEBHOOK_HOSTS } from '../config/index.js';
 import { restaurantWebhookSecret, markWebhookSecretActive } from './restaurantBotApi.js';
 
 // Bot to'g'ri ishlashi uchun ZARUR update turlari.
@@ -32,6 +32,29 @@ function resolveBase() {
    */
   try {
     const host = new URL(base).hostname.toLowerCase();
+
+    /*
+     * ═══ QULF 1: TEST MUHITI — MANZIL TEKSHIRUVI ═══
+     *
+     * APP_ENV=test bo'lsa webhook FAQAT ruxsat etilgan test
+     * domeniga o'rnatiladi (config.TEST_WEBHOOK_HOSTS →
+     * standart: test-api.lokmago.uz).
+     *
+     * NIMA UCHUN: test .env ga adashib production WEBHOOK_BASE
+     * yozilsa, server real botlarning webhook'ini o'ziga tortib
+     * olardi va mijozlarning butun bot oqimi test serverga
+     * ketardi. Endi bunday sozlamada webhook UMUMAN
+     * o'rnatilmaydi — server ishlaydi, lekin hech kimga tegmaydi.
+     */
+    if (isTestEnv && !TEST_WEBHOOK_HOSTS.includes(host)) {
+      console.error(
+        `✗ [TEST MUHITI] WEBHOOK_BASE=${base} — ruxsat etilmagan manzil.\n`
+        + `  Ruxsat etilgan: ${TEST_WEBHOOK_HOSTS.join(', ')}\n`
+        + '  Webhook O‘RNATILMADI (production botlari himoyalandi).',
+      );
+      return '';
+    }
+
     if (config.jRouteHosts.includes(host)) {
       console.error(
         `✗ WEBHOOK_BASE=${base} — bu domen J_ROUTE_HOSTS ro‘yxatida `
@@ -52,10 +75,58 @@ function resolveBase() {
  * Server ishga tushganda webhook'ni tekshiradi va kerak bo'lsa
  * AVTOMATIK to'g'rilaydi. Qo'lda buyruq yozish shart emas.
  */
+/*
+ * ═══ QULF 2: BOT KIMLIGINI TEKSHIRISH ═══
+ *
+ * Test muhitida bot username'ida "test" bo'lishi SHART.
+ * Production muhitida esa "test" bo'lMASLIGI kerak.
+ *
+ * NIMA UCHUN: qulf 1 manzilni tekshiradi, bu esa TOKENni.
+ * Ikkalasi birga ishlaganda:
+ *   • test .env ga production tokeni yozilsa → username "test"
+ *     emas → webhook o'rnatilmaydi, production bot omon qoladi;
+ *   • production .env ga test tokeni yozilsa → ogohlantirish
+ *     chiqadi (xodim darhol payqaydi).
+ *
+ * Token hech qayerda chop etilmaydi — faqat ochiq username.
+ *
+ * @returns {boolean} webhook o'rnatish mumkinmi
+ */
+function botMatchesEnv(username, label) {
+  const looksTest = /test/i.test(String(username || ''));
+
+  if (isTestEnv && !looksTest) {
+    console.error(
+      `✗ [TEST MUHITI] ${label}: @${username} — bu TEST boti emasga o‘xshaydi.\n`
+      + '  Test muhitida faqat nomida "test" bo‘lgan bot ishlatiladi.\n'
+      + '  Webhook O‘RNATILMADI (production botlari himoyalandi).\n'
+      + '  Tekshiring: test .env dagi bot tokeni to‘g‘rimi?',
+    );
+    return false;
+  }
+
+  if (!isTestEnv && looksTest) {
+    console.warn(
+      `⚠ [PRODUCTION] ${label}: @${username} — nomida "test" bor.\n`
+      + '  Production .env ga test boti tokeni yozilgan bo‘lishi mumkin.',
+    );
+  }
+
+  return true;
+}
+
 export async function ensureWebhook() {
   if (!config.telegramBotToken) return;
 
   try {
+    const me = await tg('getMe');
+    if (!me.ok) {
+      console.error(`✗ Mijoz boti tokeni NOTO‘G‘RI: ${me.description}`);
+      return;
+    }
+    console.log(`✓ Mijoz boti: @${me.result.username} (muhit: ${APP_ENV})`);
+    if (!botMatchesEnv(me.result.username, 'Mijoz boti')) return;
+
     const info = await tg('getWebhookInfo');
     const w = info.result || {};
     const allowed = w.allowed_updates || [];
@@ -65,15 +136,22 @@ export async function ensureWebhook() {
       ? ['my_chat_member', 'chat_member']
       : REQUIRED.filter((u) => !allowed.includes(u));
 
+    const base = resolveBase();
+
+    /*
+     * Test muhitida mavjud webhook manzili QAYTA ISHLATILMAYDI:
+     * u faqat resolveBase() tasdiqlagan test manzili bo'lishi
+     * mumkin. Production'da esa avvalgidek — mavjud manzil
+     * ustun turadi (qo'lda o'rnatilgan sozlama buzilmasin).
+     */
+    const wanted = base ? `${base}/bot/webhook` : '';
+    const url = isTestEnv ? wanted : (w.url || wanted);
+
     // Hammasi joyida — tegmaymiz
-    if (w.url && missing.length === 0) {
+    if (w.url && missing.length === 0 && (!isTestEnv || w.url === wanted)) {
       console.log('✓ Telegram webhook to‘g‘ri sozlangan');
       return;
     }
-
-    // Manzilni aniqlaymiz: mavjud webhook'dan yoki .env dan
-    const base = resolveBase();
-    const url = w.url || (base ? `${base}/bot/webhook` : '');
 
     if (!url) {
       console.warn(
@@ -151,7 +229,8 @@ export async function ensureRestaurantWebhook() {
       console.error(`✗ Restoran boti tokeni NOTO‘G‘RI: ${me.description}`);
       return;
     }
-    console.log(`✓ Restoran boti: @${me.result.username}`);
+    console.log(`✓ Restoran boti: @${me.result.username} (muhit: ${APP_ENV})`);
+    if (!botMatchesEnv(me.result.username, 'Restoran boti')) return;
 
     const info = await tgRestaurant('getWebhookInfo');
     const w = info.result || {};
