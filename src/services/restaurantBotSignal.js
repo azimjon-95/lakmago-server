@@ -110,22 +110,42 @@ async function readAndRepeat(kind) {
   return result;
 }
 
-/**
- * Fayl almashtirilgan bo'lsa keshni yangilash uchun — hash mos
- * kelgan `file_id` qaytariladi, aks holda null (qayta yuklanadi).
+/*
+ * file_id keshi ikki qavatli:
+ *   1) xotira — eng tez, va baza yozuvi muvaffaqiyatsiz bo'lsa ham
+ *      shu jarayon faylni qayta yuklamaydi;
+ *   2) baza — restartdan keyin ham saqlanadi, barcha nusxalar uchun umumiy.
+ * Ikkalasi ham hash bilan tekshiriladi: ovoz fayli almashtirilsa
+ * kesh o'zi bekor bo'ladi.
  */
+const memFileId = new Map();     // kind → { hash, fileId }
+
 async function cachedFileId(kind, hash) {
+  const mem = memFileId.get(kind);
+  if (mem && mem.hash === hash) return mem.fileId;
+
   const doc = await BotAsset.findOne({ key: `signal:${kind}` }).lean().catch(() => null);
-  return doc && doc.hash === hash ? doc.fileId : null;
+  if (doc && doc.hash === hash) {
+    memFileId.set(kind, { hash, fileId: doc.fileId });
+    return doc.fileId;
+  }
+  return null;
 }
 
 async function rememberFileId(kind, hash, fileId) {
   if (!fileId) return;
+  memFileId.set(kind, { hash, fileId });
   await BotAsset.updateOne(
     { key: `signal:${kind}` },
     { $set: { fileId, hash, updatedAt: new Date() } },
     { upsert: true },
   ).catch(() => {});
+}
+
+/** Eskirgan file_id — keshdan chiqariladi, keyingi yuborish yuklaydi. */
+function forgetFileId(kind) {
+  memFileId.delete(kind);
+  return BotAsset.deleteOne({ key: `signal:${kind}` }).catch(() => {});
 }
 
 /*
@@ -161,6 +181,8 @@ async function deliver({ chatId, kind, signal, fileId }) {
     if (res?.ok) return res;
     const res2 = await tgCall('sendAudio', { ...base, audio: fileId, title: CAPTION[kind] });
     if (res2?.ok) return res2;
+    // Ikkalasi ham rad etdi — file_id eskirgan, keshni tozalaymiz
+    await forgetFileId(kind);
   }
 
   /* 2) Yuklash: ovozli xabar sifatida. */
@@ -249,8 +271,24 @@ export async function sendSignal(kind, refId, staff) {
     if (inFlight.has(kind)) {
       fileId = await inFlight.get(kind);
     } else {
-      const first = chats.shift();
-      const task = sendTo(first, null).then(() => cachedFileId(kind, signal.hash));
+      /*
+       * Birinchi MUVAFFAQIYATLI yuborish faylni yuklaydi va keshni
+       * to'ldiradi. Ro'yxat boshidagi xodim signalni allaqachon
+       * olgan bo'lishi mumkin (masalan yangi xodim keyin qo'shilgan,
+       * yoki ovoz almashtirilgan) — o'shanda hech narsa yuklanmaydi,
+       * shuning uchun keshni to'ldirmaguncha KETMA-KET davom etamiz.
+       * Aks holda qolgan xodimlarning HAR BIRI faylni qaytadan
+       * yuklardi (5 xodimda ~0.5 MB ortiqcha trafik).
+       */
+      const task = (async () => {
+        while (chats.length) {
+          const chatId = chats.shift();
+          await sendTo(chatId, null);
+          const ready = await cachedFileId(kind, signal.hash);
+          if (ready) return ready;
+        }
+        return null;
+      })();
       inFlight.set(kind, task);
       try {
         fileId = await task;
