@@ -1,4 +1,5 @@
 import { Order } from '../models/Order.js';
+import { Dish } from '../models/Dish.js';
 import { Reservation } from '../models/Reservation.js';
 import { Restaurant } from '../models/Restaurant.js';
 import { RestaurantTelegramStaff } from '../models/RestaurantTelegramStaff.js';
@@ -57,6 +58,64 @@ const REJECT_REASONS = {
   closing: 'Yopilish vaqti',
   other: 'Boshqa sabab',
 };
+
+/* ═══════════════════════════════════════════════════════════
+ * TAOM RASMLARI — XABARDAGI HAVOLALAR
+ * ═══════════════════════════════════════════════════════════
+ *
+ * Xodim taom nomini bosib rasmini ko'ra olishi kerak: nom
+ * bo'yicha qaysi taom ekanini har doim ham aniqlab bo'lmaydi
+ * ("Yashil «Elegant»" — qanday tort?).
+ *
+ * Telegram xabarda rasmni matn ichiga qo'yib bo'lmaydi, lekin
+ * nomni HAVOLA qilish mumkin: bosilganda brauzerda rasm ochiladi.
+ *
+ * Rasmlar `dishId` bo'yicha BITTA so'rovda olinadi. Taom
+ * o'chirilgan yoki rasmsiz bo'lsa — nom oddiy matn bo'lib
+ * qoladi, hech narsa buzilmaydi.
+ */
+const imageCache = new Map();   // dishId → url | '' (5 daqiqa)
+
+export async function dishImageMap(items) {
+  const ids = [...new Set((items || [])
+    .map((i) => i?.dishId)
+    .filter((id) => id && /^[a-f\d]{24}$/i.test(String(id)))
+    .map(String))];
+  if (!ids.length) return new Map();
+
+  const now = Date.now();
+  const result = new Map();
+  const missing = [];
+  for (const id of ids) {
+    const hit = imageCache.get(id);
+    if (hit && hit.until > now) {
+      if (hit.url) result.set(id, hit.url);
+    } else missing.push(id);
+  }
+
+  if (missing.length) {
+    const dishes = await Dish.find({ _id: { $in: missing } })
+      .select('imageUrl images').lean().catch(() => []);
+    const found = new Map(dishes.map((d) => [String(d._id), d.imageUrl || d.images?.[0] || '']));
+    for (const id of missing) {
+      const url = found.get(id) || '';
+      imageCache.set(id, { url, until: now + 5 * 60_000 });
+      if (url) result.set(id, url);
+    }
+  }
+  return result;
+}
+
+/**
+ * Taom nomi — rasmi bo'lsa havola, bo'lmasa oddiy matn.
+ * Faqat http(s) havolalar qabul qilinadi (Telegram boshqasini
+ * rad etadi va BUTUN xabar yuborilmay qolardi).
+ */
+function dishName(name, url) {
+  const safe = esc(name);
+  if (!url || !/^https?:\/\//i.test(url)) return safe;
+  return `<a href="${esc(url)}">${safe}</a>`;
+}
 
 /* ═══ Restoran vaqt zonasi — qisqa kesh (har xabarda so'ramaslik uchun) ═══ */
 const tzCache = new Map();
@@ -124,7 +183,7 @@ function courierLine(order, assignment) {
   return '';
 }
 
-export function buildOrderText(order, { actorName = '', assignment = null, tz = DEFAULT_TZ, note = '' } = {}) {
+export function buildOrderText(order, { actorName = '', assignment = null, tz = DEFAULT_TZ, note = '', images = null } = {}) {
   const lines = [];
   const isPickup = order.fulfillment === 'pickup';
 
@@ -136,9 +195,11 @@ export function buildOrderText(order, { actorName = '', assignment = null, tz = 
 
   for (const it of order.items || []) {
     const sum = (Number(it.unitPrice) || 0) * (Number(it.quantity) || 0);
-    lines.push(`${Number(it.quantity) || 0}× ${esc(it.name)} — ${som(sum)} so‘m`);
+    const url = images?.get(String(it.dishId || ''));
+    lines.push(`${Number(it.quantity) || 0}× ${dishName(it.name, url)} — ${som(sum)} so‘m`);
     if (it.note) lines.push(`   <i>${esc(it.note)}</i>`);
   }
+  if (images?.size) lines.push('<i>Rasmini ko‘rish uchun taom nomini bosing</i>');
 
   lines.push('');
   lines.push(`🍽 Taomlar: ${som(order.subtotal)} so‘m`);
@@ -234,8 +295,11 @@ export async function notifyNewOrder(orderId) {
   const staff = await activeStaff(order.restaurantId);
   if (!staff.length) return;
 
-  const tz = await restaurantTz(order.restaurantId);
-  const text = buildOrderText(order, { tz });
+  const [tz, images] = await Promise.all([
+    restaurantTz(order.restaurantId),
+    dishImageMap(order.items),
+  ]);
+  const text = buildOrderText(order, { tz, images });
   const keyboard = buildOrderKeyboard(order);
 
   // Parallel — 5 xodimga ketma-ket yuborish bir necha soniya olardi
@@ -267,8 +331,12 @@ export async function refreshOrderMessages(orderId, actorName = '') {
   const msgs = await RestaurantBotMessage.find({ orderId, kind: 'order' }).lean();
   if (!msgs.length) return;
 
-  const [assignment, tz] = await Promise.all([latestAssignment(order._id), restaurantTz(order.restaurantId)]);
-  const text = buildOrderText(order, { actorName, assignment, tz });
+  const [assignment, tz, images] = await Promise.all([
+    latestAssignment(order._id),
+    restaurantTz(order.restaurantId),
+    dishImageMap(order.items),
+  ]);
+  const text = buildOrderText(order, { actorName, assignment, tz, images });
   const keyboard = buildOrderKeyboard(order, assignment);
 
   await Promise.all(msgs.map((m) => editStaffMessage(m.telegramUserId, m.messageId, text, keyboard)));
@@ -276,10 +344,14 @@ export async function refreshOrderMessages(orderId, actorName = '') {
 
 /** Buyurtma kartasini xodimga yangidan yuborish (ro'yxatdan ochilganda). */
 export async function sendOrderCard(order, telegramUserId) {
-  const [assignment, tz] = await Promise.all([latestAssignment(order._id), restaurantTz(order.restaurantId)]);
+  const [assignment, tz, images] = await Promise.all([
+    latestAssignment(order._id),
+    restaurantTz(order.restaurantId),
+    dishImageMap(order.items),
+  ]);
   const res = await sendToStaff(
     telegramUserId,
-    buildOrderText(order, { assignment, tz }),
+    buildOrderText(order, { assignment, tz, images }),
     buildOrderKeyboard(order, assignment),
   );
   await rememberMessage(res, { refId: order._id, telegramUserId, kind: 'order' });
@@ -428,11 +500,11 @@ export async function handleOrderCallback(cq) {
       return;
     }
     await answerCallback(cq.id, 'Sababni tanlang');
-    const tz = await restaurantTz(order.restaurantId);
+    const [tz, images] = await Promise.all([restaurantTz(order.restaurantId), dishImageMap(order.items)]);
     await editStaffMessage(
       staff.telegramUserId,
       cq.message?.message_id,
-      buildOrderText(order, { tz, note: '❓ <b>Rad etish sababini tanlang:</b>' }),
+      buildOrderText(order, { tz, images, note: '❓ <b>Rad etish sababini tanlang:</b>' }),
       kb([
         ...Object.entries(REJECT_REASONS).map(([key, label]) => [btn(`❌ ${label}`, `o:reject:${orderId}:${key}`, 'danger')]),
         [btn('‹ Ortga', `o:back:${orderId}`)],
@@ -541,7 +613,7 @@ export function preOrderTotal(r) {
   return (r.preOrder || []).reduce((s, p) => s + (Number(p.price) || 0) * (Number(p.quantity) || 0), 0);
 }
 
-export function buildReservationText(r, { title = '', actorName = '', note = '' } = {}) {
+export function buildReservationText(r, { title = '', actorName = '', note = '', images = null } = {}) {
   const heading = title || (r.status === 'pending' ? '🔔 <b>YANGI BRON</b>' : '📅 <b>BRON</b>');
   const lines = [
     heading,
@@ -566,7 +638,8 @@ export function buildReservationText(r, { title = '', actorName = '', note = '' 
     for (const p of pre) {
       const q = Number(p.quantity) || 1;
       const sum = (Number(p.price) || 0) * q;
-      lines.push(`• ${q}× ${esc(p.name)}${sum ? ` — ${som(sum)} so‘m` : ''}`);
+      const url = images?.get(String(p.dishId || ''));
+      lines.push(`• ${q}× ${dishName(p.name, url)}${sum ? ` — ${som(sum)} so‘m` : ''}`);
     }
     const total = preOrderTotal(r);
     if (total) lines.push(`💰 <b>Taomlar jami: ${som(total)} so‘m</b>`);
@@ -621,7 +694,8 @@ export async function notifyNewReservation(reservationId) {
   const staff = await activeStaff(r.restaurantId);
   if (!staff.length) return;
 
-  const text = buildReservationText(r);
+  const images = await dishImageMap(r.preOrder);
+  const text = buildReservationText(r, { images });
   const keyboard = buildReservationKeyboard(r);
 
   await Promise.all(staff.map(async (s) => {
@@ -636,7 +710,8 @@ export async function notifyNewReservation(reservationId) {
 
 /** Bron kartasini bitta xodimga yuborish (ro'yxat / ertalabki eslatma). */
 export async function sendReservationCard(r, telegramUserId, { title = '' } = {}) {
-  const res = await sendToStaff(telegramUserId, buildReservationText(r, { title }), buildReservationKeyboard(r));
+  const images = await dishImageMap(r.preOrder);
+  const res = await sendToStaff(telegramUserId, buildReservationText(r, { title, images }), buildReservationKeyboard(r));
   await rememberMessage(res, { refId: r._id, telegramUserId, kind: 'reservation' });
   return res;
 }
@@ -650,7 +725,8 @@ export async function refreshReservationMessages(reservationId, actorName = '') 
   const msgs = await RestaurantBotMessage.find({ orderId: reservationId, kind: 'reservation' }).lean();
   if (!msgs.length) return;
 
-  const text = buildReservationText(r, { actorName });
+  const images = await dishImageMap(r.preOrder);
+  const text = buildReservationText(r, { actorName, images });
   const keyboard = buildReservationKeyboard(r);
   await Promise.all(msgs.map((m) => editStaffMessage(m.telegramUserId, m.messageId, text, keyboard)));
 }
@@ -726,7 +802,7 @@ export async function handleReservationCallback(cq) {
     await editStaffMessage(
       staff.telegramUserId,
       cq.message?.message_id,
-      buildReservationText(r, { note: '❓ <b>Rad etish sababini tanlang:</b>' }),
+      buildReservationText(r, { images: await dishImageMap(r.preOrder), note: '❓ <b>Rad etish sababini tanlang:</b>' }),
       kb([
         ...Object.entries(RESERVATION_REJECT_REASONS).map(([key, label]) => [btn(`❌ ${label}`, `r:reject:${reservationId}:${key}`, 'danger')]),
         [btn('‹ Ortga', `r:back:${reservationId}`)],
