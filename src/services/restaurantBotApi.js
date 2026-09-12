@@ -18,6 +18,7 @@ import { config } from '../config/index.js';
 
 const TG = () => `https://api.telegram.org/bot${config.restaurantBotToken}`;
 const TIMEOUT_MS = 10_000;
+const UPLOAD_TIMEOUT_MS = 60_000;   // fayl yuklash — sekinroq
 
 /** Bot sozlanganmi. Sozlanmagan bo'lsa hech narsa qilinmaydi. */
 export function isRestaurantBotEnabled() {
@@ -99,6 +100,45 @@ export async function answerCallback(callbackId, text = '', { alert = false } = 
     ...(text ? { text: String(text).slice(0, 190) } : {}),
     ...(alert ? { show_alert: true } : {}),
   });
+}
+
+/**
+ * Fayl yuklash (multipart). Faqat BIRINCHI marta kerak —
+ * keyin Telegram bergan `file_id` ishlatiladi (tgCall orqali).
+ *
+ * Yuklash sekinroq bo'lgani uchun vaqt chegarasi kattaroq.
+ *
+ * @param {string} method  'sendVoice' | 'sendAudio' ...
+ * @param {object} fields  oddiy maydonlar (chat_id, duration ...)
+ * @param {object} file    { field, filename, buffer, contentType }
+ */
+export async function tgUpload(method, fields, file) {
+  if (!isRestaurantBotEnabled()) return null;
+  try {
+    const form = new FormData();
+    for (const [k, v] of Object.entries(fields)) {
+      if (v !== undefined && v !== null) form.append(k, String(v));
+    }
+    form.append(
+      file.field,
+      new Blob([file.buffer], { type: file.contentType || 'application/octet-stream' }),
+      file.filename,
+    );
+
+    const r = await fetch(`${TG()}/${method}`, {
+      method: 'POST',
+      body: form,
+      signal: AbortSignal.timeout(UPLOAD_TIMEOUT_MS),
+    });
+    const j = await r.json().catch(() => ({ ok: false, description: `HTTP ${r.status}` }));
+    if (!j.ok && !QUIET_ERRORS.some((re) => re.test(j.description || ''))) {
+      console.error(`[restaurantBot] ${method} (yuklash): ${j.description || 'noma’lum xato'}`);
+    }
+    return j;
+  } catch (e) {
+    console.error(`[restaurantBot] ${method} (yuklash):`, e.message);
+    return null;
+  }
 }
 
 /** HTML parse_mode uchun xavfsiz matn (mijoz kiritgan har qanday qiymat). */

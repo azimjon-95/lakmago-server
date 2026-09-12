@@ -7,6 +7,7 @@ import { DeliveryAssignment } from '../models/DeliveryAssignment.js';
 import { getIO } from '../sockets/io.js';
 import { orderLabel } from './orderNumber.js';
 import { createShareLink, buildShareUrls } from './courierDispatch.js';
+import { sendSignal } from './restaurantBotSignal.js';
 import {
   isRestaurantBotEnabled,
   sendToStaff,
@@ -242,6 +243,14 @@ export async function notifyNewOrder(orderId) {
     const res = await sendToStaff(s.telegramUserId, text, keyboard);
     await rememberMessage(res, { refId: order._id, telegramUserId: s.telegramUserId, kind: 'order' });
   }));
+
+  /*
+   * Ovozli signal — kartadan KEYIN (xodim avval buyurtmani
+   * ko'rsin). Signal bir marta ketadi; xatosi buyurtma oqimiga
+   * ta'sir qilmaydi, shuning uchun kutilmaydi.
+   */
+  sendSignal('order', order._id, staff)
+    .catch((e) => console.error('[signal] buyurtma:', e.message));
 }
 
 /*
@@ -619,6 +628,10 @@ export async function notifyNewReservation(reservationId) {
     const res = await sendToStaff(s.telegramUserId, text, keyboard);
     await rememberMessage(res, { refId: r._id, telegramUserId: s.telegramUserId, kind: 'reservation' });
   }));
+
+  // Ovozli signal — bron kartasidan keyin, bir marta
+  sendSignal('reservation', r._id, staff)
+    .catch((e) => console.error('[signal] bron:', e.message));
 }
 
 /** Bron kartasini bitta xodimga yuborish (ro'yxat / ertalabki eslatma). */

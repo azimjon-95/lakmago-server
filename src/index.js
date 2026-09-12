@@ -449,6 +449,11 @@ async function main() {
      *     (restoran ochilish vaqti har xil, vaqt zonasi bilan);
      *   • yangi pastki menyuni oldin ulangan xodimlarga yetkazish.
      */
+    // Signal fayllari (sounds/order.mp3, sounds/reservation.mp3) — holati logda
+    import('./services/restaurantBotSignal.js')
+      .then((m) => m.warmUpSignals())
+      .catch((e) => console.error('Signal fayllari:', e.message));
+
     const { runReservationMorningNotices, ensureStaffMenus } = await import('./services/restaurantBotMenu.js');
     const morning = () => runReservationMorningNotices()
       .catch((e) => console.error('Bron ertalabki eslatma:', e.message));
