@@ -48,6 +48,11 @@ import { isRestaurantBotEnabled, tgCall, tgUpload } from './restaurantBotApi.js'
 
 const REPEATS = 3;
 
+/** Xodim shu turdagi ovozli signalni yoqib qo'yganmi. */
+export function signalEnabled(staff, kind) {
+  return staff?.signals?.[kind] !== false;
+}
+
 const SOUNDS = {
   order: 'order.mp3',
   reservation: 'reservation.mp3',
@@ -220,7 +225,20 @@ async function deliver({ chatId, kind, signal, fileId }) {
  */
 export async function sendSignal(kind, refId, staff) {
   if (!isRestaurantBotEnabled() || !SOUNDS[kind] || !refId) return;
-  const chats = (staff || []).map((s) => String(s.telegramUserId)).filter(Boolean);
+
+  /*
+   * Signalni O'CHIRIB qo'ygan xodimlar chetlab o'tiladi
+   * (bot → ⚙️ Sozlamalar). Maydon yo'q bo'lsa — yoqilgan
+   * deb hisoblanadi (eski yozuvlar bilan moslik).
+   *
+   * Ular uchun "yuborilgan" belgisi ham qo'yilmaydi: keyin
+   * signalni qayta yoqsa, kelayotgan YANGI buyurtmalarni
+   * darhol eshitadi.
+   */
+  const chats = (staff || [])
+    .filter((s) => signalEnabled(s, kind))
+    .map((s) => String(s.telegramUserId))
+    .filter(Boolean);
   if (!chats.length) return;
 
   const signal = await prepare(kind);

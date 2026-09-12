@@ -91,6 +91,26 @@ const restaurantTelegramStaffSchema = new Schema(
      * (restaurantBotMenu.ensureStaffMenus).
      */
     menuVersion: { type: Number, default: 0 },
+
+    /*
+     * ═══ OVOZLI SIGNAL SOZLAMASI (HAR XODIM O'ZI UCHUN) ═══
+     *
+     * Botdagi "⚙️ Sozlamalar" menyusidan yoqiladi/o'chiriladi.
+     * Tanlov BAZADA — xodim uni bir marta o'chirsa, telefon
+     * o'chib-yonsa ham, server qayta ishga tushsa ham esda
+     * qoladi (xotiradagi belgi restartda yo'qolardi).
+     *
+     * Bu faqat OVOZLI SIGNALGA tegishli: buyurtma va bron
+     * kartalari baribir keladi, hech narsa yo'qolmaydi.
+     *
+     * default: true — yangi xodim signalni oladi; eski
+     * yozuvlarda maydon yo'q bo'lsa ham (undefined) kod uni
+     * "yoqilgan" deb hisoblaydi.
+     */
+    signals: {
+      order: { type: Boolean, default: true },
+      reservation: { type: Boolean, default: true },
+    },
   },
   { timestamps: true },
 );

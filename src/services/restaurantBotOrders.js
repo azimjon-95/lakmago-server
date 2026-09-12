@@ -210,7 +210,7 @@ export async function activeStaff(restaurantId) {
     restaurantId,
     isActive: true,
     telegramUserId: { $ne: null },
-  }).select('telegramUserId firstName username').lean();
+  }).select('telegramUserId firstName username signals').lean();
 }
 
 async function rememberMessage(res, { refId, telegramUserId, kind }) {
