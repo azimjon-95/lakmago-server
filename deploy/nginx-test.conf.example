@@ -1,0 +1,46 @@
+# ═══════════════════════════════════════════════════════════
+# TEST API — test-api.lokmago.uz → 127.0.0.1:4001
+# ═══════════════════════════════════════════════════════════
+#
+# Bu ALOHIDA fayl. Production konfiguratsiyasiga
+# (apilokma.poppolizol.uz → :4000) UMUMAN tegilmaydi.
+#
+# O'rnatish:
+#   sudo cp deploy/nginx-test.conf.example /etc/nginx/sites-available/lakmago-test
+#   sudo ln -s /etc/nginx/sites-available/lakmago-test /etc/nginx/sites-enabled/
+#   sudo nginx -t                 # ← tekshiruv; xato bo'lsa DAVOM ETMANG
+#   sudo systemctl reload nginx   # reload — mavjud ulanishlarni uzmaydi
+#   sudo certbot --nginx -d test-api.lokmago.uz
+#
+# Certbot HTTPS blokini o'zi qo'shadi va 80-portni 443 ga
+# yo'naltiradi. Faqat shu domenga tegadi.
+
+server {
+    listen 80;
+    listen [::]:80;
+    server_name test-api.lokmago.uz;
+
+    # Rasm yuklash uchun (production bilan bir xil)
+    client_max_body_size 10M;
+
+    # Qidiruv tizimlari test muhitini indekslamasin
+    add_header X-Robots-Tag "noindex, nofollow" always;
+
+    location / {
+        proxy_pass http://127.0.0.1:4001;
+
+        # WebSocket (Socket.io) — bularsiz jonli yangilanish ishlamaydi
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        # Uzoq so'rovlar (hisobot, eksport) uzilmasin
+        proxy_read_timeout 300s;
+        proxy_send_timeout 300s;
+    }
+}
