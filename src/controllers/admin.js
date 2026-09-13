@@ -56,6 +56,22 @@ export const adminController = {
     // ===== BUGUN =====
     const startOfDay = new Date();
     startOfDay.setHours(0, 0, 0, 0);
+
+    /*
+     * Bugungi komissiya — yuqoridagi bilan BIR XIL manbadan
+     * (Ledger), faqat bugungi yozuvlar bo'yicha.
+     *
+     * XATO TUZATILDI: bu yerda `t.revenue * (pct / 100)` yozilgan
+     * edi, `pct` esa hech qayerda aniqlanmagan. Natijada butun
+     * admin statistika endpointi ReferenceError bilan qulardi
+     * (500 xato). Bundan tashqari, bitta global foiz bilan
+     * hisoblash ham noto'g'ri: har restoranning o'z foizi bor.
+     */
+    const todayCommissionAgg = await Ledger.aggregate([
+      { $match: { type: 'commission', createdAt: { $gte: startOfDay } } },
+      { $group: { _id: null, total: { $sum: '$amount' } } },
+    ]);
+    const todayCommission = todayCommissionAgg[0]?.total ?? 0;
     const startOfYesterday = new Date(startOfDay.getTime() - 864e5);
 
     // Hali yopilmagan — diqqat talab qiladigan buyurtmalar
@@ -137,7 +153,7 @@ export const adminController = {
         open: t.open,
         dishes: dishesToday,
         revenue: t.revenue,
-        commission: Math.round(t.revenue * (pct / 100)),
+        commission: todayCommission,
         avgCheck: t.delivered ? Math.round(t.revenue / t.delivered) : 0,
       },
       yesterday: { orders: y.orders, revenue: y.revenue },
