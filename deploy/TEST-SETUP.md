@@ -55,16 +55,20 @@ ulana olmaydi: noto'g'ri `.env` bilan ham Atlas uni rad etadi.
 
 ## 2. Test papkasi
 
+Production `~/projects/lakmago-server` da — test ham yonida turadi.
+
 ```bash
-sudo mkdir -p /var/www/lakmago-test
-sudo chown -R $USER:$USER /var/www/lakmago-test
-git clone -b develop https://github.com/azimjon-95/lakmago-server.git /var/www/lakmago-test
-cd /var/www/lakmago-test
+git clone -b develop https://github.com/azimjon-95/lakmago-server.git ~/projects/lakmago-test
+cd ~/projects/lakmago-test
 npm ci --omit=dev
 mkdir -p logs
 ```
 
 Production papkasiga tegilmaydi — bu butunlay boshqa joy.
+
+> **Ehtiyot bo'ling:** test ishlari uchun `~/projects/lakmago-server`
+> ichida `git pull` qilmang — u production papkasi. Test har doim
+> `~/projects/lakmago-test` da.
 
 ---
 
@@ -123,7 +127,7 @@ Mavjud production sayt fayliga tegilmaydi.
 ## 5. Ishga tushirish
 
 ```bash
-cd /var/www/lakmago-test
+cd ~/projects/lakmago-test
 pm2 start ecosystem.test.config.cjs
 pm2 save
 pm2 logs lakmago-test --lines 40
@@ -183,7 +187,7 @@ process'i yoki bazasi o'zgartirilmagan.
 ## 8. Keyingi yangilash
 
 ```bash
-cd /var/www/lakmago-test
+cd ~/projects/lakmago-test
 git pull origin develop
 npm ci --omit=dev
 pm2 reload lakmago-test
