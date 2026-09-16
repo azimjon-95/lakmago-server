@@ -627,35 +627,67 @@ export const orderController = {
           .catch((e) => console.error('[promo]', e.message));
       }
 
-      // Real-time: restoranга yangi buyurtma (signal chalinadi)
-      io?.to(`restaurant:${o.restaurantId}`).emit('order:new', doc);
-      io?.to('admin').emit('order:new', doc);
-
       /*
-       * Telegram bot — ulangan xodimlarga.
+       * ═══════════════════════════════════════════════════════
+       * ⛔ QAT'IY QOIDA: PUL YECHILMAGUNCHA BUYURTMA
+       *    RESTORANGA UMUMAN BORMAYDI
+       * ═══════════════════════════════════════════════════════
        *
-       * `await` YO'Q: Telegram sekin javob bersa mijoz
-       * buyurtma yaratilishini kutib qolmasligi kerak.
-       * Bot ichida to'lanmagan karta buyurtmasi va dine-in
-       * o'zi filtrlanadi.
+       * 'awaiting_payment' = karta tanlangan, lekin mijoz hali
+       * to'lamagan (Click/Payme sahifasi hali ochilmagan ham
+       * bo'lishi mumkin). Bunday buyurtma restoran uchun
+       * MAVJUD EMAS.
+       *
+       * ILGARIGI XATO (real moliyaviy zarar keltirgan):
+       * quyidagi ikki chaqiruv SHARTSIZ ishlardi. Natijada
+       * mijoz kartani tanlab, to'lov sahifasini yopib
+       * yuborsa ham — restoran panelida buyurtma jonli
+       * (socket) paydo bo'lardi va oshpaz taom tayyorlab,
+       * jo'natib yuborardi. Pul esa hech qachon yechilmagan
+       * edi. GET /panel/orders REST endpointi to'g'ri
+       * filtrlagan ('status: { $ne: "awaiting_payment" }',
+       * restaurantPanel.js), Telegram bot ham to'g'ri
+       * filtrlagan (restaurantBotOrders.js:293) — LEKIN
+       * socket emit bu filtrlarni BUTUNLAY chetlab o'tib,
+       * buyurtmani to'g'ridan-to'g'ri panel ro'yxatiga
+       * qo'shib qo'yardi.
+       *
+       * To'lov muvaffaqiyatli bo'lganda buyurtma restoranga
+       * TO'LIQ yuboriladi (raqam beriladi, socket, Telegram
+       * bot, bildirishnoma) — services/paymentRecord.js
+       * ichidagi onPaymentSuccess(). Shuning uchun bu yerda
+       * to'xtatish HECH NARSA yo'qotmaydi, faqat kechiktiradi.
        */
-      import('../services/restaurantBotOrders.js')
-        .then((m) => m.notifyNewOrder(doc._id))
-        .catch((e) => console.error('[restaurantBot]', e.message));
+      if (doc.status !== 'awaiting_payment') {
+        // Real-time: restoranga yangi buyurtma (signal chalinadi)
+        io?.to(`restaurant:${o.restaurantId}`).emit('order:new', doc);
+        io?.to('admin').emit('order:new', doc);
 
-      // Markaziy bildirishnoma — bazaga yoziladi, socket uzilsa
-      // qayta ulanганda yo'qolmaydi
-      notify({
-        notificationId: `order:${doc._id}`,
-        audience: 'restaurant',
-        restaurantId: o.restaurantId,
-        type: 'order',
-        title: 'Yangi buyurtma',
-        body: `${doc.items?.length || 0} ta taom · ${doc.total?.toLocaleString('ru-RU') || 0} so'm`,
-        refType: 'order',
-        refId: doc._id,
-        meta: { fulfillment: doc.fulfillment, total: doc.total },
-      }).catch((e) => console.error('[notify:order]', e.message));
+        /*
+         * Telegram bot — ulangan xodimlarga.
+         *
+         * `await` YO'Q: Telegram sekin javob bersa mijoz
+         * buyurtma yaratilishini kutib qolmasligi kerak.
+         * Bot ichida dine-in o'zi filtrlanadi.
+         */
+        import('../services/restaurantBotOrders.js')
+          .then((m) => m.notifyNewOrder(doc._id))
+          .catch((e) => console.error('[restaurantBot]', e.message));
+
+        // Markaziy bildirishnoma — bazaga yoziladi, socket uzilsa
+        // qayta ulanganda yo'qolmaydi
+        notify({
+          notificationId: `order:${doc._id}`,
+          audience: 'restaurant',
+          restaurantId: o.restaurantId,
+          type: 'order',
+          title: 'Yangi buyurtma',
+          body: `${doc.items?.length || 0} ta taom · ${doc.total?.toLocaleString('ru-RU') || 0} so'm`,
+          refType: 'order',
+          refId: doc._id,
+          meta: { fulfillment: doc.fulfillment, total: doc.total },
+        }).catch((e) => console.error('[notify:order]', e.message));
+      }
     }
 
     res.status(201).json({ groupId, orders: created, bonusUsed: bonusToUse });
