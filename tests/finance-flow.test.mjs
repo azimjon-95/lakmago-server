@@ -80,13 +80,18 @@ async function scenario({ name, foodSom, deliverySom, customerPct, restaurantPct
   return { rest, order, finance, check };
 }
 
-console.log('\n[1] Narx himoyasi: mijoz 1 so‘m yubordi, server bazadan hisobladi');
+console.log('\n[1] NARX XAVFSIZLIGI — frontend qiymati moliyaviy manba EMAS');
 {
   const { check, finance } = await scenario({
     name: 'A', foodSom: 10000, deliverySom: 0, customerPct: 0, restaurantPct: 10,
   });
-  ok(check.foodBaseSom === 10000, `baza summasi ${check.foodBaseSom} (mijoz 1 yuborgan)`);
+  // Frontend yuborgan: { unitPrice: 1, quantity: 1, subtotal: 1 }
+  // Bazada:            Dish.price = 10 000
+  ok(check.foodBaseSom === 10000, `foodSubtotal = ${check.foodBaseSom} (frontend 1 yuborgan)`);
+  ok(check.items[0].unitPrice === 10000, `element narxi tuzatildi: ${check.items[0].unitPrice}`);
+  ok(check.mismatches.length === 1, 'farq qayd etildi (logga yoziladi)');
   ok(som(finance.totalCharged) === 10000, `mijoz to‘laydi ${som(finance.totalCharged)}`);
+  ok(som(finance.restaurantPayout) === 9000, `restoran payout ${som(finance.restaurantPayout)}`);
 }
 
 console.log('\n[2] Hisob-kitob → Ledger yozuvlari (10% restorandan, karta)');
@@ -176,6 +181,75 @@ console.log('\n[6] Takroriy hisob-kitobdan himoya');
   ok(second === null, 'ikkinchi chaqiruv hech narsa yozmadi');
   const count = await Ledger.countDocuments({ orderId: order._id, type: 'restaurant_due' });
   ok(count === 1, `restaurant_due yozuvi ${count} ta (kutilgan 1)`);
+}
+
+console.log('\n[7] Bazada QISMAN qaytarish — asl yozuvlar o‘zgarmaydi');
+{
+  const { rest, order, finance } = await scenario({
+    name: 'F', foodSom: 10000, deliverySom: 5000, customerPct: 5, restaurantPct: 5,
+  });
+  await settleOrder(order._id);
+  const balanceAfterSettle = (await Restaurant.findById(rest._id).lean()).balance;
+  ok(balanceAfterSettle === 9500, `hisob-kitobdan keyin balans ${balanceAfterSettle}`);
+
+  const { recordRefund } = await import('../src/services/billing.js');
+
+  // Yarmini qaytaramiz (yetkazishsiz)
+  const r1 = await recordRefund(order, 'click', null, {
+    foodBaseRefundTiyin: somToTiyin(5000),
+  });
+  ok(r1 && !r1.isFull, 'qisman qaytarish qayd etildi');
+  ok(r1.refunded === 5250, `mijozga qaytarildi ${r1.refunded} (kutilgan 5250)`);
+
+  const balanceAfterRefund = (await Restaurant.findById(rest._id).lean()).balance;
+  ok(balanceAfterRefund === 4750, `balans ${balanceAfterRefund} (9500 − 4750)`);
+
+  // ASL snapshot va ASL yozuvlar tegilmagan
+  const fresh = await Order.findById(order._id).lean();
+  ok(fresh.finance.restaurantPayout === finance.restaurantPayout,
+    'Order.finance o‘zgarmadi (immutable)');
+  const origDue = await Ledger.findOne({
+    orderId: order._id, type: 'restaurant_due', 'meta.note': { $exists: false },
+  }).lean();
+  ok(origDue && origDue.amount === 9500, 'asl restaurant_due yozuvi o‘zgarmadi');
+
+  // Qolganini ham qaytaramiz
+  const r2 = await recordRefund(order, 'click', null, {
+    foodBaseRefundTiyin: somToTiyin(5000), refundDelivery: true,
+  });
+  ok(r2 && r2.refunded === 10250, `qolgani qaytarildi ${r2?.refunded} (5250 + 5000)`);
+  const finalBalance = (await Restaurant.findById(rest._id).lean()).balance;
+  ok(finalBalance === 0, `yakuniy balans ${finalBalance}`);
+
+  // Ortiqcha qaytarish — rad etiladi
+  const r3 = await recordRefund(order, 'click', null, {
+    foodBaseRefundTiyin: somToTiyin(1000),
+  });
+  ok(r3 === null, 'ortiqcha qaytarish rad etildi');
+
+  const refunds = await Ledger.countDocuments({ orderId: order._id, type: 'refund' });
+  ok(refunds === 2, `2 ta refund yozuvi (${refunds}) — audit izi saqlandi`);
+}
+
+console.log('\n[8] Eski buyurtmada qaytarish — avvalgi mantiq');
+{
+  const rest = await Restaurant.create({
+    name: 'Eski2', cuisine: 'milliy', category: 'restoran',
+    commissionPercent: 10, commissionMode: 'deduct',
+  });
+  const order = await Order.create({
+    userId: user._id, restaurantId: rest._id, restaurantName: 'Eski2',
+    items: [{ name: 'Taom', quantity: 1, unitPrice: 10000 }],
+    subtotal: 10000, deliveryFee: 0, total: 10000,
+    status: 'delivered', fulfillment: 'pickup', phone: '+998901112233',
+    paymentMethod: 'click', isPaid: true,
+  });
+  await settleOrder(order._id);
+  const { recordRefund } = await import('../src/services/billing.js');
+  const r = await recordRefund(order, 'click');
+  ok(r && r.refunded === 10000, `eski: to‘liq qaytarildi ${r?.refunded}`);
+  const led = await Ledger.findOne({ orderId: order._id, type: 'refund' }).lean();
+  ok(led.meta.financeModel === 'legacy', 'legacy deb belgilandi');
 }
 
 await mongoose.disconnect();

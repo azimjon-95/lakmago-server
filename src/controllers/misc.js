@@ -22,7 +22,7 @@ import { notifyUser } from '../services/telegram.js';
 import { parseReferralCode, attachReferral, rewardReferralIfSubscribed } from '../services/referral.js';
 import { config } from '../config/index.js';
 import { verifyItemPrices } from '../services/priceVerification.js';
-import { computeOrderFinance, somToTiyin, tiyinToSom } from '../services/orderFinance.js';
+import { computeOrderFinance, reconcile, somToTiyin, tiyinToSom } from '../services/orderFinance.js';
 import { activeAgreement } from '../models/CommissionAgreement.js';
 
 export const bannerController = {
@@ -566,6 +566,28 @@ export const orderController = {
       });
       o._finance.commissionAgreementId = agreement?._id || null;
       o._finance.agreementEffectiveFrom = agreement?.effectiveFrom || null;
+
+      /*
+       * ═══ SNAPSHOT'SIZ BUYURTMA YARATILMAYDI ═══
+       *
+       * Yangi buyurtma HECH QACHON eski (legacy) hisob yo'liga
+       * tushmasligi kerak — aks holda restoran qarzi noto'g'ri
+       * hisoblanadi. Snapshot tuzilmasa yoki rekonsiliatsiyadan
+       * o'tmasa, buyurtma YARATILMAYDI: noto'g'ri pul yozuvidan
+       * ko'ra, mijozdan qayta urinishni so'rash xavfsizroq.
+       */
+      const balance = reconcile(o._finance);
+      if (!balance.ok) {
+        console.error(
+          `[moliya] Rekonsiliatsiya buzildi (restoran ${o.restaurantId}): `
+          + `farq ${balance.diff} tiyin · ${JSON.stringify(balance.parts)}`,
+        );
+        return res.status(500).json({
+          error: 'Buyurtma summasini hisoblashda xatolik. Qayta urinib ko‘ring.',
+          code: 'FINANCE_CALC_FAILED',
+          restaurantId: String(o.restaurantId),
+        });
+      }
 
       /*
        * Mijoz to'laydigan taom summasi ham SHU hisobdan olinadi —

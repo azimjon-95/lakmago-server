@@ -83,7 +83,7 @@ const ledgerSchema = new Schema(
       note: String,
 
       // ===== v2 tafsiloti (tiyinda emas, SO'MDA) =====
-      financeModel: { type: String, enum: ['v2', 'legacy'], default: undefined },
+      financeModel: { type: String, enum: ['v2', 'legacy', 'correction'], default: undefined },
       foodSubtotal: Number,                 // komissiya bazasi
       customerFeeAmount: Number,
       restaurantCommissionAmount: Number,
@@ -91,8 +91,26 @@ const ledgerSchema = new Schema(
       clickFoodFeeAmount: Number,
       commissionAgreementId: { type: Schema.Types.ObjectId, ref: 'CommissionAgreement', default: null },
 
-      // Qo'lda tuzatish sababi (type: 'adjustment')
-      reason: { type: String, default: undefined },
+      /*
+       * ═══ QAYTARISH IZI ═══
+       *
+       * Qisman qaytarishlar KETMA-KET bo'lishi mumkin. Har safar
+       * qancha taom summasi qaytarilgani shu yerda saqlanadi —
+       * keyingi qaytarish "qancha qoldi" ni shundan biladi va
+       * asl summadan oshib ketmaydi.
+       *
+       * Tiyinda saqlanadi (snapshot bilan bir xil birlik).
+       */
+      refundedFoodBaseTiyin: Number,
+      remainingFoodBaseTiyin: Number,
+
+      /*
+       * Qo'lda tuzatish (type: 'adjustment') — audit uchun.
+       * Kim qilgani `createdBy` da, qachoni `createdAt` da.
+       */
+      reason: { type: String, default: undefined },   // masalan: commission_correction
+      previousAmount: Number,                         // oldingi summa
+      correctedAmount: Number,                        // to'g'ri summa
     },
 
     // Kim yaratdi (admin qo'lda qilsa)

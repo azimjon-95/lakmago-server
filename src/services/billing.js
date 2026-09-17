@@ -506,10 +506,148 @@ export async function settleOrder(orderId) {
  * Pul qaytarish — buyurtma bekor qilinganda yoki restoran rad etganda.
  * Asl yozuvlar o'chirilmaydi, teskari yozuv qo'shiladi.
  */
-export async function recordRefund(order, provider, transactionId = null) {
-  const exists = await Ledger.findOne({ orderId: order._id, type: 'refund' });
-  if (exists) return null;
+export async function recordRefund(order, provider, transactionId = null, options = {}) {
+  /*
+   * ═══ SNAPSHOT ASOSIDA QAYTARISH ═══
+   *
+   * `Order.finance` HECH QACHON o'zgartirilmaydi — qaytarish
+   * ALOHIDA teskari yozuv bo'lib tushadi. Audit tarixida asl
+   * summa, qaytarilgan summa va qolgani ko'rinib turadi.
+   *
+   * Eski (snapshot'siz) buyurtmalarda avvalgi mantiq saqlanadi:
+   * to'liq summa qaytariladi.
+   *
+   * @param options.foodBaseRefundTiyin  qisman qaytarish summasi
+   * @param options.refundDelivery       yetkazish ham qaytarilsinmi
+   */
+  const fin = order.finance && order.finance.model === 'v2' ? order.finance : null;
 
+  // Avval qaytarilgan taom summasi — qisman qaytarishlar yig'indisi
+  const priorRefunds = await Ledger.find({ orderId: order._id, type: 'refund' })
+    .select('meta').lean();
+  const alreadyRefundedFoodBase = priorRefunds
+    .reduce((sum, l) => sum + (Number(l.meta?.refundedFoodBaseTiyin) || 0), 0);
+
+  // Eski buyurtma yoki to'liq qaytarish takrori — avvalgi himoya
+  if (!fin) {
+    if (priorRefunds.length) return null;
+    return recordLegacyRefund(order, provider, transactionId);
+  }
+
+  const { computeRefund, validateRefund } = await import('./refund.js');
+
+  let calc;
+  try {
+    calc = computeRefund(fin, {
+      foodBaseRefundTiyin: options.foodBaseRefundTiyin ?? null,
+      refundDelivery: options.refundDelivery ?? null,
+      alreadyRefundedFoodBaseTiyin: alreadyRefundedFoodBase,
+    });
+  } catch (e) {
+    console.error('[billing] refund hisobi:', e.message);
+    return null;
+  }
+
+  const { refund, isFull, remaining } = calc;
+  if (refund.totalCharged <= 0) return null;   // qaytariladigan narsa yo'q
+
+  const check = validateRefund(fin, refund);
+  if (!check.ok) {
+    console.error('[billing] refund tekshiruvi:', check.problems.join('; '));
+    return null;
+  }
+
+  const refundSom = tiyinToSom(refund.totalCharged);
+
+  await Ledger.create({
+    type: 'refund',
+    amount: -refundSom,
+    orderId: order._id,
+    restaurantId: order.restaurantId,
+    userId: order.userId,
+    provider,
+    transactionId,
+    meta: {
+      orderTotal: order.total,
+      financeModel: 'v2',
+      note: isFull ? 'To‘liq qaytarildi' : 'Qisman qaytarildi',
+      foodSubtotal: tiyinToSom(refund.foodSubtotal),
+      customerFeeAmount: tiyinToSom(refund.customerFeeAmount),
+      restaurantCommissionAmount: tiyinToSom(refund.restaurantCommissionAmount),
+      lokmaNetCommission: tiyinToSom(refund.lokmaNetCommission),
+      clickFoodFeeAmount: tiyinToSom(refund.clickFoodFeeAmount),
+      // Keyingi qisman qaytarishlar shu asosda hisoblanadi
+      refundedFoodBaseTiyin: refund.foodBase,
+      remainingFoodBaseTiyin: remaining.foodBase,
+    },
+  });
+
+  /*
+   * Restoran qarzi teskari yoziladi — FAQAT qaytarilgan qism
+   * bo'yicha. Asl `restaurant_due` yozuvi o'zgartirilmaydi.
+   */
+  const settled = await Ledger.findOne({ orderId: order._id, type: 'restaurant_due' }).lean();
+  if (settled) {
+    const isCash = order.paymentMethod === 'cash';
+    /*
+     * Naqdda pul restoranda qolgan edi va biz faqat komissiyani
+     * qarz qilgandik (manfiy yozuv) — qaytarishda o'sha komissiya
+     * qarzi bekor qilinadi. Kartada esa restoran ulushi qaytariladi.
+     */
+    const reverseSom = isCash
+      ? tiyinToSom(refund.lokmaGrossCommission)
+      : -tiyinToSom(refund.restaurantPayout);
+
+    if (reverseSom !== 0) {
+      await Ledger.create({
+        type: 'restaurant_due',
+        amount: reverseSom,
+        orderId: order._id,
+        restaurantId: order.restaurantId,
+        provider: order.paymentMethod || null,
+        isCash,
+        meta: {
+          financeModel: 'v2',
+          note: isFull ? 'Qaytarish — bekor qilindi' : 'Qisman qaytarish',
+        },
+      });
+      await Restaurant.updateOne(
+        { _id: order.restaurantId },
+        { $inc: { balance: reverseSom } },
+      );
+    }
+  }
+
+  // Komissiya ham teskari yoziladi (LokmaGo daromadi kamayadi)
+  if (refund.lokmaGrossCommission > 0) {
+    await Ledger.create({
+      type: 'commission',
+      amount: -tiyinToSom(refund.lokmaGrossCommission),
+      orderId: order._id,
+      restaurantId: order.restaurantId,
+      provider: order.paymentMethod || null,
+      isCash: order.paymentMethod === 'cash',
+      meta: { financeModel: 'v2', note: 'Qaytarish — komissiya bekor qilindi' },
+    });
+  }
+
+  getIO()?.to('admin').emit('billing:update', {
+    restaurantId: String(order.restaurantId),
+  });
+
+  return {
+    refunded: refundSom,
+    isFull,
+    remainingFoodBaseTiyin: remaining.foodBase,
+    refundFinance: refund,
+  };
+}
+
+/**
+ * Eski (snapshot'siz) buyurtmalar uchun qaytarish.
+ * Avvalgi xatti-harakat — o'zgartirilmagan.
+ */
+async function recordLegacyRefund(order, provider, transactionId) {
   await Ledger.create({
     type: 'refund',
     amount: -order.total,
@@ -518,14 +656,10 @@ export async function recordRefund(order, provider, transactionId = null) {
     userId: order.userId,
     provider,
     transactionId,
-    meta: { orderTotal: order.total, note: 'Mijozga qaytarildi' },
+    meta: { orderTotal: order.total, financeModel: 'legacy', note: 'Mijozga qaytarildi' },
   });
 
-  // Agar hisob-kitob qilingan bo'lsa — teskari yozamiz
-  const settled = await Ledger.findOne({
-    orderId: order._id, type: 'restaurant_due',
-  });
-
+  const settled = await Ledger.findOne({ orderId: order._id, type: 'restaurant_due' });
   if (settled && settled.amount !== 0) {
     const restaurant = await Restaurant.findById(order.restaurantId);
     if (restaurant) {
@@ -534,7 +668,7 @@ export async function recordRefund(order, provider, transactionId = null) {
         amount: -settled.amount,
         orderId: order._id,
         restaurantId: restaurant._id,
-        meta: { note: 'Qaytarish sababli bekor qilindi' },
+        meta: { financeModel: 'legacy', note: 'Qaytarish sababli bekor qilindi' },
       });
       restaurant.balance = (restaurant.balance || 0) - settled.amount;
       await restaurant.save();
@@ -545,7 +679,7 @@ export async function recordRefund(order, provider, transactionId = null) {
     restaurantId: String(order.restaurantId),
   });
 
-  return { refunded: order.total };
+  return { refunded: order.total, isFull: true };
 }
 
 /*

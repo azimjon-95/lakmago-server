@@ -13,8 +13,9 @@
     "bot": "node scripts/bot-tekshir.js",
     "sync:banners": "node scripts/sync-banners.js",
     "seed:catalog": "node scripts/seed-catalog.js",
-    "test": "node tests/webhook-guard.test.mjs && node tests/finance.test.mjs",
-    "test:flow": "node tests/finance-flow.test.mjs"
+    "test": "node tests/webhook-guard.test.mjs && node tests/finance.test.mjs && node tests/refund.test.mjs",
+    "test:flow": "node tests/finance-flow.test.mjs",
+    "report:legacy-finance": "node scripts/legacy-finance-report.js"
   },
   "dependencies": {
     "@socket.io/redis-adapter": "^8.3.0",
