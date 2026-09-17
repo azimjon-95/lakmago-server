@@ -603,20 +603,33 @@ export const orderController = {
       (s, o) => s + o.subtotal - (o._pickupDiscount || 0)
         + (isPickup ? 0 : (o.deliveryFee || 0)) + (o.serviceFee || 0), 0,
     );
-    // Ishlatiladigan bonus: so'ralган, lekin balansдан va summадан oshмаsин
-    let bonusToUse = 0;
+    /*
+     * ═══ BONUS YANGI BUYURTMADA ISHLATILMAYDI ═══
+     *
+     * LokmaGo'da bonus/promo balansi tizimi HOZIRCHA YO'Q — u
+     * kelajakda alohida feature sifatida qo'shiladi.
+     *
+     * NIMA UCHUN ATAYLAB O'CHIRILGAN (auditda aniqlangan xavf):
+     * bonus `order.total` ni kamaytiradi, moliyaviy snapshot
+     * (`finance.totalCharged`) esa bonusni BILMAYDI. Natijada
+     * shlyuz orqali hisobga KAMROQ pul tushardi, yozuvda esa
+     * KO'PROQ ko'rinardi. Restoran zarar ko'rmasdi (uning payout'i
+     * bonusga bog'liq emas), lekin LokmaGo hisoboti noto'g'ri
+     * bo'lardi va rekonsiliatsiya buzilardi.
+     *
+     * Shu sababli mijoz bonus so'rasa ham, u QO'LLANILMAYDI va
+     * balansidan HECH NARSA ayirilmaydi — bonusi joyida qoladi.
+     *
+     * Bonus tizimi qo'shilganda: `finance` ga bonus maydonlari
+     * kiritilib, rekonsiliatsiya formulasi yangilanishi kerak.
+     * Faqat shundan keyin bu blok qayta yoqiladi.
+     */
+    const bonusToUse = 0;
     if (useBonus > 0) {
-      const user = await User.findById(req.userId).select('bonusBalance');
-      const available = user?.bonusBalance || 0;
-      bonusToUse = Math.min(useBonus, available, grandTotal);
-      // Atomik ayirish (poyga holatини oldini oladi — faqat yetarli bo'lsa)
-      if (bonusToUse > 0) {
-        const upd = await User.updateOne(
-          { _id: req.userId, bonusBalance: { $gte: bonusToUse } },
-          { $inc: { bonusBalance: -bonusToUse } },
-        );
-        if (upd.modifiedCount === 0) bonusToUse = 0; // balans yetмади
-      }
+      console.warn(
+        `[bonus] Mijoz ${req.userId} ${useBonus} so'm bonus so'radi — `
+        + 'bonus tizimi hozircha o\'chirilgan, buyurtma to\'liq narxda yaratildi.',
+      );
     }
     let bonusLeft = bonusToUse; // buyurtмаларга taqsimlаnadi
 
@@ -662,6 +675,31 @@ export const orderController = {
       }
       bonusLeft -= orderBonus;
       const total = orderTotal - orderBonus;
+
+      /*
+       * ═══ NAZORAT: JAMI SUMMA SNAPSHOT BILAN MOS KELSIN ═══
+       *
+       * Mijoz to'laydigan summa moliyaviy snapshot'dagi summadan
+       * FARQ QILMASLIGI kerak (xizmat haqi bundan mustasno — u
+       * restoranning o'z yig'imi, komissiya bazasiga kirmaydi).
+       *
+       * Farq chiqsa — demak qayerdadir hisobga olinmagan chegirma
+       * yoki qo'shimcha bor. Bunday buyurtma YARATILMAYDI: noto'g'ri
+       * pul yozuvidan ko'ra mijozdan qayta urinishni so'rash
+       * xavfsizroq. Bu bonus kabi kelajakdagi o'zgarishlarni
+       * ham jimgina o'tkazib yubormaydi.
+       */
+      const expectedTotal = tiyinToSom(o._finance.totalCharged) + (o.serviceFee || 0);
+      if (total !== expectedTotal) {
+        console.error(
+          `[moliya] Jami summa mos kelmadi: order ${total} ≠ snapshot ${expectedTotal} `
+          + `(restoran ${o.restaurantId}, bonus ${orderBonus}, xizmat haqi ${o.serviceFee || 0})`,
+        );
+        return res.status(500).json({
+          error: 'Buyurtma summasini hisoblashda xatolik. Qayta urinib ko‘ring.',
+          code: 'FINANCE_TOTAL_MISMATCH',
+        });
+      }
 
       const doc = await Order.create({
         userId: req.userId,

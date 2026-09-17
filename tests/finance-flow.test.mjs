@@ -252,6 +252,34 @@ console.log('\n[8] Eski buyurtmada qaytarish — avvalgi mantiq');
   ok(led.meta.financeModel === 'legacy', 'legacy deb belgilandi');
 }
 
+console.log('\n[9] BONUS — yangi buyurtmada ishlatilmaydi va balans tegilmaydi');
+{
+  /*
+   * Bonus tizimi hozircha yo'q. Mijoz bonus so'rasa ham
+   * buyurtma TO'LIQ narxda yaratilishi va balansi joyida
+   * qolishi kerak — aks holda snapshot bilan haqiqiy pul
+   * o'rtasida farq paydo bo'ladi.
+   */
+  const bonusUser = await User.create({
+    firstName: 'Bonusli', telegramId: '888', bonusBalance: 50000,
+  });
+
+  const { order } = await scenario({
+    name: 'G', foodSom: 10000, deliverySom: 5000, customerPct: 0, restaurantPct: 10,
+  });
+
+  ok(!order.bonusUsed, `buyurtmada bonus ishlatilmadi (${order.bonusUsed || 0})`);
+  ok(order.total === som(order.finance.totalCharged),
+    `jami summa snapshot bilan mos: ${order.total} = ${som(order.finance.totalCharged)}`);
+
+  const fresh = await User.findById(bonusUser._id).lean();
+  ok(fresh.bonusBalance === 50000, `mijoz balansi tegilmadi: ${fresh.bonusBalance}`);
+
+  // Snapshot va haqiqiy pul o'rtasida farq YO'Q
+  const r = reconcile(order.finance);
+  ok(r.ok, `rekonsiliatsiya: farq ${r.diff} tiyin`);
+}
+
 await mongoose.disconnect();
 console.log(fails ? `\n✗ ${fails} ta xato` : '\n✓ HAMMASI O‘TDI');
 process.exit(fails ? 1 : 0);
