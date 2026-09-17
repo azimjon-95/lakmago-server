@@ -7,7 +7,7 @@ import {
 import { Banner } from '../models/User.js';
 import { Restaurant } from '../models/Restaurant.js';
 import { Dish } from '../models/Dish.js';
-import { calcDeliveryFee, calcServiceFee, checkMinOrder } from '../services/orderPricing.js';
+import { calcDeliveryFee, checkMinOrder } from '../services/orderPricing.js';
 import { isRestaurantOpen as isOpenTz } from '../services/restaurantTime.js';
 import { quoteDelivery } from '../services/deliveryEngine.js';
 import { applyPromotion, markPromotionUsed } from '../services/promotions.js';
@@ -514,7 +514,27 @@ export const orderController = {
       } else {
         o.deliveryFee = calcDeliveryFee(o.subtotal, rest, isPickup);
       }
-      o.serviceFee = calcServiceFee(o.subtotal, rest);
+      /*
+       * ═══ XIZMAT HAQI v2 BUYURTMALARDA ISHLATILMAYDI ═══
+       *
+       * Moliyaviy snapshot `serviceFee` ni bilmaydi: u komissiya
+       * bazasiga ham, rekonsiliatsiyaga ham kirmaydi. Agar u
+       * noldan farqli bo'lsa, mijoz to'laydigan summa snapshot'dagi
+       * summadan oshib ketadi va pul oqimi "yo'qolgan" ko'rinadi.
+       *
+       * Hozirgi biznes oqimida yetkazish/olib ketish buyurtmalarida
+       * xizmat haqi ishlatilmaydi (restoranlarda `serviceFeePercent`
+       * 0). Shuning uchun uni ataylab 0 qilamiz — keraksiz
+       * murakkablik qo'shmasdan rekonsiliatsiyani kafolatlaymiz.
+       *
+       * Zal (dine-in) oqimi BOShQA: u o'z narx dvigatelidan
+       * foydalanadi va bu yerga aloqasi yo'q.
+       *
+       * Xizmat haqi kerak bo'lsa: uni `orderFinance` ga alohida
+       * maydon sifatida kiritib, rekonsiliatsiya formulasiga
+       * qo'shish kerak. Faqat shundan keyin qayta yoqiladi.
+       */
+      o.serviceFee = 0;
 
       /*
        * OLIB KETISH CHEGIRMASI.

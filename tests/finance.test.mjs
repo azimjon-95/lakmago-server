@@ -26,6 +26,7 @@ const eq = (actualTiyin, expectedSom, label) => {
 };
 
 const S = somToTiyin;
+const som = (t) => tiyinToSom(t);
 
 /* ═══ TEST A — 10% faqat restorandan, yetkazishsiz ═══ */
 console.log('\n[A] Taom 10 000 · mijoz 0% · restoran 10% · yetkazish 0');
@@ -184,6 +185,104 @@ console.log('\n[F] Yaxlitlash — hech bir tiyin yo‘qolmaydi');
   }
   ok(cases.length === 0, `108 ta kombinatsiya rekonsiliatsiyadan o‘tdi (eng katta farq: ${worst} tiyin)`);
   if (cases.length) console.log('    muammoli:', JSON.stringify(cases.slice(0, 3)));
+}
+
+/* ═══ CHEGIRMA — FAQAT BIR MARTA ═══ */
+console.log('\n[G] Chegirma ikki marta ayirilmasligi (regressiya nazorati)');
+{
+  const f = computeOrderFinance({
+    foodBaseTiyin: S(10000),
+    discountTiyin: S(2000),
+    customerFeePercent: 0,
+    restaurantCommissionPercent: 10,
+  });
+
+  eq(f.foodBase, 10000, 'asl taom narxi');
+  eq(f.discountAmount, 2000, 'chegirma');
+  eq(f.foodSubtotal, 8000, 'chegirma BIR MARTA ayirildi (10 000 − 2 000)');
+  eq(f.totalCharged, 8000, 'mijoz to‘laydi — ortiqcha chegirma yo‘q');
+  eq(f.restaurantCommissionAmount, 800, 'komissiya chegirmali summadan');
+  eq(f.restaurantPayout, 7200, 'restoran payout noto‘g‘ri kamaymadi');
+  ok(reconcile(f).ok, 'rekonsiliatsiya');
+
+  // Chegirma + mijoz haqi + yetkazish birga
+  const full = computeOrderFinance({
+    foodBaseTiyin: S(10000), discountTiyin: S(2000), deliveryFeeTiyin: S(5000),
+    customerFeePercent: 5, restaurantCommissionPercent: 5, paymentFeePercent: 1.5,
+  });
+  eq(full.foodSubtotal, 8000, 'chegirmali baza');
+  eq(full.customerFeeAmount, 400, 'mijoz haqi chegirmadan KEYIN (8 000 × 5%)');
+  eq(full.totalCharged, 13400, 'jami: 8 000 + 400 + 5 000');
+  eq(full.restaurantPayout, 7600, 'payout: 8 000 − 400');
+  ok(reconcile(full).ok, 'rekonsiliatsiya');
+
+  // Chegirma taom narxidan katta bo'lsa — 0 ga cheklanadi
+  const over = computeOrderFinance({ foodBaseTiyin: S(5000), discountTiyin: S(9000) });
+  eq(over.foodSubtotal, 0, 'chegirma cheklandi, manfiy bo‘lmadi');
+  ok(reconcile(over).ok, 'rekonsiliatsiya');
+}
+
+/* ═══ KOMISSIYA MATRITSASI × TO'LOV TURI ═══ */
+console.log('\n[H] Komissiya kombinatsiyalari × Click/Naqd');
+{
+  const combos = [[0, 0], [0, 10], [5, 5], [10, 0], [3, 7]];
+  let bad = 0;
+  const lines = [];
+
+  for (const [cust, rest] of combos) {
+    for (const [label, feePct] of [['Click', 1.5], ['Naqd', 0]]) {
+      const f = computeOrderFinance({
+        foodBaseTiyin: S(10000), deliveryFeeTiyin: S(5000),
+        customerFeePercent: cust, restaurantCommissionPercent: rest,
+        paymentFeePercent: feePct,
+      });
+      const r = reconcile(f);
+      if (!r.ok) bad++;
+
+      // Pul ikki marta hisoblanmasligi: gross = mijoz haqi + restoran komissiyasi
+      const grossOk = f.lokmaGrossCommission === f.customerFeeAmount + f.restaurantCommissionAmount;
+      // Restoran payout hech qachon taom summasidan oshmasin
+      const payoutOk = f.restaurantPayout <= f.foodSubtotal;
+      /*
+       * Komissiya bazasiga YETKAZISH kirmasligi: xuddi shu
+       * buyurtma yetkazishsiz hisoblansa, komissiya O'ZGARMASLIGI
+       * kerak. Farq chiqsa — demak yetkazishdan ham olinyapti.
+       */
+      const noDelivery = computeOrderFinance({
+        foodBaseTiyin: S(10000), deliveryFeeTiyin: 0,
+        customerFeePercent: cust, restaurantCommissionPercent: rest,
+        paymentFeePercent: feePct,
+      });
+      const baseOk = noDelivery.lokmaGrossCommission === f.lokmaGrossCommission;
+      if (!grossOk || !payoutOk || !baseOk) bad++;
+
+      lines.push(
+        `    ${String(cust).padStart(2)}%+${String(rest).padStart(2)}% ${label.padEnd(6)}`
+        + ` mijoz ${String(som(f.totalCharged)).padStart(6)}`
+        + ` · restoran ${String(som(f.restaurantPayout)).padStart(5)}`
+        + ` · LokmaGo ${String(som(f.lokmaCashNet)).padStart(7)}`
+        + ` · delivery ${String(som(f.deliveryPayout)).padStart(5)}`
+        + ` · shlyuz ${String(som(f.clickFeeAmount)).padStart(6)}`,
+      );
+    }
+  }
+  lines.forEach((l) => console.log(l));
+  ok(bad === 0, `10 ta kombinatsiya (5 komissiya × 2 to‘lov) — pul yo‘qolmadi, ikki marta hisoblanmadi`);
+}
+
+/* ═══ YETKAZISHDAN KOMISSIYA OLINMAYDI ═══ */
+console.log('\n[I] Yetkazish komissiya bazasiga kirmaydi');
+{
+  const noDelivery = computeOrderFinance({
+    foodBaseTiyin: S(10000), deliveryFeeTiyin: 0, restaurantCommissionPercent: 10,
+  });
+  const withDelivery = computeOrderFinance({
+    foodBaseTiyin: S(10000), deliveryFeeTiyin: S(50000), restaurantCommissionPercent: 10,
+  });
+  ok(noDelivery.lokmaGrossCommission === withDelivery.lokmaGrossCommission,
+    `yetkazish 0 va 50 000 bo‘lganda komissiya BIR XIL (${som(withDelivery.lokmaGrossCommission)})`);
+  ok(noDelivery.restaurantPayout === withDelivery.restaurantPayout,
+    'restoran payout ham o‘zgarmadi');
 }
 
 console.log(fails ? `\n✗ ${fails} ta xato` : '\n✓ HAMMASI O‘TDI');
