@@ -5,6 +5,7 @@ import { Restaurant } from '../models/Restaurant.js';
 import { Payout } from '../models/Payout.js';
 import { getSettings } from '../models/Settings.js';
 import { getIO } from '../sockets/io.js';
+import { tiyinToSom } from './orderFinance.js';
 
 /**
  * Hisob-kitob tizimi.
@@ -366,14 +367,60 @@ export async function settleOrder(orderId) {
     return null;
   }
 
-  const { percent, mode } = await resolveCommission(restaurant);
-  const { commission, restaurantShare } = calcCommission(order.subtotal, percent, mode);
+  /*
+   * ═══ KOMISSIYA MANBAI ═══
+   *
+   * YANGI buyurtmalarda hisob `order.finance` snapshot'idan
+   * o'qiladi — u buyurtma yaratilganda CommissionAgreement
+   * asosida muzlatilgan (services/orderFinance.js).
+   *
+   * ESKI buyurtmalarda (snapshot yo'q) avvalgi mantiq saqlanadi:
+   * ularni qayta hisoblash o'tmishdagi hisobotlarni o'zgartirib
+   * yuborardi. Ular `financeModel: 'legacy'` bilan belgilanadi.
+   *
+   * AUDITDA ANIQLANGAN XATO: `calcCommission` da `markup`
+   * rejimida `restaurantShare = subtotal` edi — ya'ni restoranga
+   * TO'LIQ summa yozilardi, komissiya esa hech kimdan
+   * ushlanmasdi. Yangi yo'lda bunday holat yo'q: payout har doim
+   * `foodSubtotal − restaurantCommission`.
+   */
+  const fin = order.finance && order.finance.model === 'v2' ? order.finance : null;
 
-  const meta = {
-    orderTotal: order.total,
-    commissionPercent: percent,
-    commissionMode: mode,
-  };
+  let commission;
+  let restaurantShare;
+  let percent;
+  let mode;
+  let meta;
+
+  if (fin) {
+    commission = tiyinToSom(fin.lokmaGrossCommission);
+    restaurantShare = tiyinToSom(fin.restaurantPayout);
+    percent = fin.restaurantCommissionPercent + fin.customerFeePercent;
+    mode = 'agreement';
+    meta = {
+      orderTotal: order.total,
+      commissionPercent: percent,
+      commissionMode: mode,
+      financeModel: 'v2',
+      foodSubtotal: tiyinToSom(fin.foodSubtotal),
+      customerFeeAmount: tiyinToSom(fin.customerFeeAmount),
+      restaurantCommissionAmount: tiyinToSom(fin.restaurantCommissionAmount),
+      lokmaNetCommission: tiyinToSom(fin.lokmaNetCommission),
+      clickFoodFeeAmount: tiyinToSom(fin.clickFoodFeeAmount),
+      commissionAgreementId: fin.commissionAgreementId || null,
+    };
+  } else {
+    const resolved = await resolveCommission(restaurant);
+    percent = resolved.percent;
+    mode = resolved.mode;
+    ({ commission, restaurantShare } = calcCommission(order.subtotal, percent, mode));
+    meta = {
+      orderTotal: order.total,
+      commissionPercent: percent,
+      commissionMode: mode,
+      financeModel: 'legacy',
+    };
+  }
 
   const isCash = order.paymentMethod === 'cash';
   /*

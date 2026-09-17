@@ -58,6 +58,70 @@ const orderSchema = new Schema(
 
     items: [orderItemSchema],
     subtotal: { type: Number, required: true },
+
+    /*
+     * ═══════════════════════════════════════════════════════════
+     * MOLIYAVIY SNAPSHOT — buyurtma yaratilganda MUZLATILADI
+     * ═══════════════════════════════════════════════════════════
+     *
+     * NIMA UCHUN: avval komissiya har hisobotda JORIY foiz bilan
+     * qayta hisoblanardi. Shartnoma o'zgarsa — o'tgan oyning
+     * hisoboti ham o'zgarib ketardi. Endi har buyurtma o'z
+     * hisobini ichida olib yuradi.
+     *
+     * BIRLIK: barcha summalar TIYINDA, butun son
+     * (232.50 so'm = 23250 tiyin). Float ishlatilmaydi.
+     *
+     * Hisob services/orderFinance.js da, YAGONA joyda bajariladi.
+     *
+     * `model: 'v2'` — yangi moliyaviy model. Bu maydon YO'Q
+     * buyurtmalar (eski, snapshot'dan oldingi) hisobotlarda
+     * `legacy` deb ajratiladi va avtomatik migratsiya QILINMAYDI.
+     */
+    finance: {
+      model: { type: String, enum: ['v2'], default: undefined },
+      currency: { type: String, default: 'UZS' },
+      unit: { type: String, default: 'tiyin' },
+
+      // Taom
+      foodBase: Number,                    // Dish.price × qty (BAZADAN)
+      discountAmount: Number,
+      deliveryMarkupPercent: Number,
+      deliveryMarkupAmount: Number,
+      foodSubtotal: Number,                // komissiya BAZASI
+      deliveryFee: Number,
+
+      // Komissiyalar
+      customerFeePercent: Number,
+      customerFeeAmount: Number,
+      restaurantCommissionPercent: Number,
+      restaurantCommissionAmount: Number,
+
+      // Mijoz to'lovi
+      customerFoodTotal: Number,
+      totalCharged: Number,
+
+      // To'lov shlyuzi
+      clickFeePercent: Number,
+      clickFeeAmount: Number,
+      clickFoodFeeAmount: Number,
+      clickDeliveryFeeAmount: Number,
+      clickResidualAmount: Number,
+
+      // Ulushlar
+      restaurantPayout: Number,
+      lokmaGrossCommission: Number,
+      lokmaFoodPaymentFee: Number,
+      lokmaNetCommission: Number,          // biznes ko'rsatkichi
+      lokmaCashNet: Number,                // hisobda qoladigan haqiqiy pul
+      deliveryPayout: Number,
+      deliveryFeeAbsorbedByLokma: Boolean,
+
+      // Audit izi
+      commissionAgreementId: { type: Schema.Types.ObjectId, ref: 'CommissionAgreement', default: null },
+      agreementEffectiveFrom: Date,
+      calculatedAt: Date,
+    },
     deliveryFee: { type: Number, default: 0 },
     serviceFee: { type: Number, default: 0 },
     bonusUsed: { type: Number, default: 0 }, // shu buyurtмада ishlatilган bonus (so'm)

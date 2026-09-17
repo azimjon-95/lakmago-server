@@ -106,7 +106,47 @@ export function splitClick(totalTiyin, lokmaPercent = config.split.defaultLokmaP
   };
 }
 
-/** Provayder nomiga qarab tanlaydi. */
+/**
+ * ═══ SNAPSHOT ASOSIDA BO'LINISH (yangi yo'l) ═══
+ *
+ * AUDITDA ANIQLANGAN XATO: `splitClick`/`splitPaynet` LokmaGo
+ * ulushini JAMI summadan hisoblardi — ya'ni YETKAZISH pulidan
+ * ham komissiya olinardi. Biznes qoidasi buni taqiqlaydi:
+ * komissiya faqat taom summasidan.
+ *
+ * Buyurtmada `finance` snapshot bo'lsa, bo'linish o'shandan
+ * o'qiladi — qayta hisoblanmaydi, chunki snapshot allaqachon
+ * to'g'ri qoidalar bilan tuzilgan.
+ *
+ * @param {object} finance  Order.finance (tiyinda)
+ * @param {string} provider click | paynet | payme
+ */
+export function splitFromFinance(finance, provider) {
+  const total = Math.round(Number(finance.totalCharged) || 0);
+
+  return {
+    provider,
+    total,
+    // Restoranga qarz — faqat taom ulushi, yetkazish aralashmaydi
+    restaurantAmount: Math.round(Number(finance.restaurantPayout) || 0),
+    lokmaGrossCommission: Math.round(Number(finance.lokmaGrossCommission) || 0),
+    providerFee: Math.round(Number(finance.clickFeeAmount) || 0),
+    lokmaNetCommission: Math.round(Number(finance.lokmaNetCommission) || 0),
+    lokmaCashNet: Math.round(Number(finance.lokmaCashNet) || 0),
+    deliveryPayout: Math.round(Number(finance.deliveryPayout) || 0),
+    payoutAmount: Math.round(Number(finance.restaurantPayout) || 0),
+    requiresBankPayout: true,
+    financeModel: 'v2',
+  };
+}
+
+/**
+ * Provayder nomiga qarab tanlaydi.
+ *
+ * ESKIRGAN YO'L: faqat `finance` snapshot YO'Q eski buyurtmalar
+ * uchun qoldirilgan. Yangi buyurtmalarda `splitFromFinance`
+ * ishlatiladi (paymentRecord.js).
+ */
 export function computeSplit(provider, totalTiyin, lokmaPercent) {
   if (provider === 'paynet') return splitPaynet(totalTiyin, lokmaPercent);
   if (provider === 'click') return splitClick(totalTiyin, lokmaPercent);

@@ -13,6 +13,30 @@ function rid(req) {
   return req.restaurantId;
 }
 
+/**
+ * Restoran ko'radigan moliyaviy tasvir.
+ *
+ * Faqat restoranga tegishli raqamlar: taom summasi, ushlangan
+ * komissiya va qo'lga tegadigan summa. LokmaGo daromadi, shlyuz
+ * residuali va mijoz xizmat haqining taqsimoti KO'RSATILMAYDI.
+ *
+ * Summalar so'mda (snapshot tiyinda saqlanadi).
+ */
+function restaurantFinanceView(f) {
+  const som = (t) => Math.round(Number(t) || 0) / 100;
+  return {
+    model: f.model,
+    currency: f.currency,
+    foodSubtotal: som(f.foodSubtotal),
+    discountAmount: som(f.discountAmount),
+    restaurantCommissionPercent: f.restaurantCommissionPercent,
+    restaurantCommissionAmount: som(f.restaurantCommissionAmount),
+    restaurantPayout: som(f.restaurantPayout),
+    deliveryFee: som(f.deliveryFee),
+    totalCharged: som(f.totalCharged),
+  };
+}
+
 export const restaurantPanelController = {
   // GET /api/panel/me — restoranning o'z profili
   profile: asyncHandler(async (req, res) => {
@@ -211,11 +235,21 @@ export const restaurantPanelController = {
     if (req.query.status && req.query.status !== 'all') filter.status = req.query.status;
 
     // Mijoz ma'lumotlari bilan — restoran bog'lana olishi uchun
+    /*
+     * Moliyaviy snapshot ichida LokmaGo ICHKI ko'rsatkichlari bor
+     * (netto daromad, shlyuz residual). Restoran ularni ko'rmasligi
+     * kerak — unga faqat O'Z hisobi ko'rsatiladi (pastda
+     * `restaurantFinanceView` bilan qisqartiriladi).
+     */
     const orders = await Order.find(filter)
       .populate('userId', 'firstName lastName username telegramId phone photoUrl')
       .sort({ createdAt: -1 })
       .limit(80)
       .lean();
+
+    for (const o of orders) {
+      if (o.finance) o.finance = restaurantFinanceView(o.finance);
+    }
 
     // Mijozni qulay ko'rinishga keltiramiz
     const items = orders.map((o) => {

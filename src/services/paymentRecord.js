@@ -1,6 +1,6 @@
 import { Payment, buildIdempotencyKey, canTransition } from '../models/Payment.js';
 import { Order } from '../models/Order.js';
-import { computeSplit } from './paymentSplit.js';
+import { computeSplit, splitFromFinance } from './paymentSplit.js';
 import { getProvider } from './providers/index.js';
 import { getIO } from '../sockets/io.js';
 
@@ -36,7 +36,15 @@ export async function recordSuccess({
   const existing = await Payment.findOne({ idempotencyKey: key });
   if (existing && existing.status === 'SUCCESS') return existing;
 
-  const split = computeSplit(provider, amountTiyin, percent);
+  /*
+   * Yangi buyurtmalarda bo'linish moliyaviy snapshot'dan olinadi:
+   * komissiya faqat taom summasidan hisoblangan va yetkazish
+   * unga kirmagan. Eski buyurtmalarda avvalgi hisob saqlanadi.
+   */
+  const fin = order.finance && order.finance.model === 'v2' ? order.finance : null;
+  const split = fin
+    ? splitFromFinance(fin, provider)
+    : computeSplit(provider, amountTiyin, percent);
   const gateway = getProvider(provider);
 
   // Paynet o'zi bo'ladi → o'tkazma kerak emas.

@@ -20,6 +20,10 @@ import { getIO } from '../sockets/io.js';
 import { notify } from '../services/notifications.js';
 import { notifyUser } from '../services/telegram.js';
 import { parseReferralCode, attachReferral, rewardReferralIfSubscribed } from '../services/referral.js';
+import { config } from '../config/index.js';
+import { verifyItemPrices } from '../services/priceVerification.js';
+import { computeOrderFinance, somToTiyin, tiyinToSom } from '../services/orderFinance.js';
+import { activeAgreement } from '../models/CommissionAgreement.js';
 
 export const bannerController = {
   // GET /api/banners — mijozга ko'rinadigan bannerlar
@@ -436,6 +440,27 @@ export const orderController = {
         });
       }
 
+      /*
+       * ═══ NARX TEKSHIRUVI — SERVER PRICE WINS ═══
+       *
+       * CLAUDE.md 5-qoida. Avval `unitPrice` va `subtotal`
+       * mijozdan kelgan holda ishlatilardi: API'ga qo'lda
+       * `unitPrice: 1` yuborilsa buyurtma shu narxda o'tardi.
+       * Endi taom summasi BAZADAN qayta hisoblanadi.
+       *
+       * `_foodBaseSom` — restoran menyusidagi SOF narx (mijoz
+       * xizmat haqisiz). Moliyaviy snapshot shundan quriladi.
+       */
+      const priceCheck = await verifyItemPrices(o.items, o.restaurantId);
+      o.items = priceCheck.items;
+      o._foodBaseSom = priceCheck.foodBaseSom;
+      if (priceCheck.mismatches.length) {
+        console.warn(
+          `[narx] Buyurtmada farq (restoran ${o.restaurantId}): `
+          + JSON.stringify(priceCheck.mismatches),
+        );
+      }
+
       // Taomlar mavjudligini tekshiramiz — STOP qilingan bo'lishi mumkin
       const dishIds = (o.items || []).map((i) => i.dishId).filter(Boolean);
       if (dishIds.length) {
@@ -513,6 +538,41 @@ export const orderController = {
       // Aksiya — SERVERDA hisoblanadi, client qiymatiga ishonilmaydi
       const promo = await applyPromotion(o.restaurantId, o.items || [], o.subtotal);
       o._promo = promo;
+
+      /*
+       * ═══ MOLIYAVIY SNAPSHOT ═══
+       *
+       * Komissiya YAGONA manbadan — CommissionAgreement.
+       * `Restaurant.commissionPercent` / `Settings.commissionPercent`
+       * yangi hisobda ISHLATILMAYDI (auditda aniqlangan: uch xil
+       * konfiguratsiya uch xil natija berardi).
+       *
+       * Snapshot buyurtma bilan birga MUZLATILADI — shartnoma
+       * keyin o'zgarsa ham bu buyurtmaning hisobi o'zgarmaydi.
+       */
+      const agreement = await activeAgreement(o.restaurantId);
+      const feePercent = o.paymentMethod === 'cash'
+        ? 0
+        : (config.split.clickFeePercent || 0);
+
+      o._finance = computeOrderFinance({
+        foodBaseTiyin: somToTiyin(o._foodBaseSom),
+        deliveryFeeTiyin: somToTiyin(isPickup ? 0 : (o.deliveryFee || 0)),
+        discountTiyin: somToTiyin((o._pickupDiscount || 0) + (promo?.discount || 0)),
+        deliveryMarkupPercent: rest.deliveryMarkupPercent || 0,
+        customerFeePercent: Number(agreement?.customerFeePercent) || 0,
+        restaurantCommissionPercent: Number(agreement?.restaurantCommissionPercent) || 0,
+        paymentFeePercent: feePercent,
+      });
+      o._finance.commissionAgreementId = agreement?._id || null;
+      o._finance.agreementEffectiveFrom = agreement?.effectiveFrom || null;
+
+      /*
+       * Mijoz to'laydigan taom summasi ham SHU hisobdan olinadi —
+       * mijoz ko'rgan narx va keyingi bo'linish bir-biriga mos
+       * bo'lishi uchun.
+       */
+      o.subtotal = tiyinToSom(o._finance.customerFoodTotal);
     }
 
     // ===== BONUS BILAN TO'LASH =====
@@ -583,6 +643,19 @@ export const orderController = {
         pickupDiscount: o._pickupDiscount || 0,
         pickupDiscountPercent: o._pickupPercent || 0,
         total,
+
+        /*
+         * Moliyaviy snapshot — buyurtma bilan MUZLATILADI.
+         * Bundan keyingi barcha hisob (restoran qarzi, LokmaGo
+         * daromadi, shlyuz bo'linishi, hisobotlar) faqat shundan
+         * o'qiladi. Shartnoma keyin o'zgarsa ham bu buyurtmaning
+         * raqamlari o'zgarmaydi.
+         *
+         * Bonus bu yerga kirmaydi: u LokmaGo chegirmasi, restoran
+         * payout'iga ta'sir qilmaydi (mijoz kamroq to'laydi, farqni
+         * LokmaGo o'z ulushidan qoplaydi).
+         */
+        finance: o._finance,
         // Karta to'lovi bo'lsa buyurtma TO'LOV KUTILMOQDA holatida
         // yaratiladi — restoranga faqat pul kelgach yuboriladi.
         // Naqd bo'lsa darhol restoranga boradi.

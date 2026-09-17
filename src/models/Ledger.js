@@ -63,12 +63,36 @@ const ledgerSchema = new Schema(
      */
     isCash: { type: Boolean, default: false, index: true },
 
-    // Hisob-kitob tafsiloti — keyin tekshirish uchun saqlanadi
+    /*
+     * Hisob-kitob tafsiloti — keyin tekshirish uchun saqlanadi.
+     *
+     * `financeModel` ikki avlodni AJRATADI:
+     *   'v2'     — Order.finance snapshot'i asosida (yangi qoidalar:
+     *              komissiya faqat taomdan, shartnoma bo'yicha);
+     *   'legacy' — snapshot'dan oldingi buyurtmalar, eski
+     *              Restaurant.commissionPercent bilan hisoblangan.
+     *
+     * Eski yozuvlar avtomatik MIGRATSIYA QILINMAYDI. Ularni
+     * kerak bo'lsa buxgalter `type: 'adjustment'` yozuvi bilan
+     * qo'lda to'g'rilaydi — asl yozuv o'zgartirilmaydi (audit izi).
+     */
     meta: {
       orderTotal: Number,        // buyurtma summasi
       commissionPercent: Number, // qo'llanilgan foiz
-      commissionMode: String,    // markup | deduct
+      commissionMode: String,    // markup | deduct | agreement
       note: String,
+
+      // ===== v2 tafsiloti (tiyinda emas, SO'MDA) =====
+      financeModel: { type: String, enum: ['v2', 'legacy'], default: undefined },
+      foodSubtotal: Number,                 // komissiya bazasi
+      customerFeeAmount: Number,
+      restaurantCommissionAmount: Number,
+      lokmaNetCommission: Number,
+      clickFoodFeeAmount: Number,
+      commissionAgreementId: { type: Schema.Types.ObjectId, ref: 'CommissionAgreement', default: null },
+
+      // Qo'lda tuzatish sababi (type: 'adjustment')
+      reason: { type: String, default: undefined },
     },
 
     // Kim yaratdi (admin qo'lda qilsa)
