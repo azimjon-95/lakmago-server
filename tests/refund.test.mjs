@@ -142,7 +142,64 @@ console.log('\n[7] Barcha komissiya kombinatsiyalari × to‘lov turlari');
   ok(bad === 0, `150 ta qaytarish stsenariysi rekonsiliatsiyadan o‘tdi (muammo: ${bad})`);
 }
 
-console.log('\n[8] Chekka holatlar');
+console.log('\n[8] YETKAZISH ikki marta qaytarilmasligi');
+{
+  const r1 = computeRefund(order, { foodBaseRefundTiyin: S(5000), refundDelivery: true });
+  const r2 = computeRefund(order, {
+    foodBaseRefundTiyin: S(5000), refundDelivery: true,
+    alreadyRefundedFoodBaseTiyin: S(5000),
+    deliveryAlreadyRefunded: r1.deliveryRefunded,
+  });
+  eq(r1.refund.deliveryFee, 5000, '1-qaytarishda yetkazish');
+  eq(r2.refund.deliveryFee, 0, '2-qaytarishda yetkazish (qayta qaytarilmadi)');
+  const totalDelivery = r1.refund.deliveryFee + r2.refund.deliveryFee;
+  ok(totalDelivery === order.deliveryFee,
+    `jami qaytarilgan yetkazish = asl (${som(totalDelivery)})`);
+
+  // Taom + yetkazish alohida nazorat: jami hech qaysi biri oshmaydi
+  const totalFood = r1.refund.foodSubtotal + r2.refund.foodSubtotal;
+  ok(totalFood === order.foodSubtotal, `jami qaytarilgan taom = asl (${som(totalFood)})`);
+  const totalRefunded = r1.refund.totalCharged + r2.refund.totalCharged;
+  ok(totalRefunded === order.totalCharged,
+    `jami qaytarilgan = mijoz to‘lagani (${som(totalRefunded)})`);
+}
+
+console.log('\n[9] Uch bosqichli qaytarish — yig‘indi asldan oshmaydi');
+{
+  const steps = [S(3000), S(3000), S(4000)];
+  let already = 0;
+  let delivered = false;
+  let sumFood = 0;
+  let sumDelivery = 0;
+  let sumTotal = 0;
+
+  for (const part of steps) {
+    const { refund, deliveryRefunded } = computeRefund(order, {
+      foodBaseRefundTiyin: part,
+      refundDelivery: true,
+      alreadyRefundedFoodBaseTiyin: already,
+      deliveryAlreadyRefunded: delivered,
+    });
+    already += part;
+    delivered = delivered || deliveryRefunded;
+    sumFood += refund.foodSubtotal;
+    sumDelivery += refund.deliveryFee;
+    sumTotal += refund.totalCharged;
+    ok(reconcile(refund).ok, `bosqich ${som(part)}: rekonsiliatsiya`);
+  }
+
+  ok(sumFood === order.foodSubtotal, `taom: ${som(sumFood)} = ${som(order.foodSubtotal)}`);
+  ok(sumDelivery === order.deliveryFee, `yetkazish: ${som(sumDelivery)} = ${som(order.deliveryFee)}`);
+  ok(sumTotal === order.totalCharged, `jami: ${som(sumTotal)} = ${som(order.totalCharged)}`);
+
+  let threw = false;
+  try {
+    computeRefund(order, { foodBaseRefundTiyin: S(1), alreadyRefundedFoodBaseTiyin: already });
+  } catch { threw = true; }
+  ok(threw, '4-urinish rad etildi');
+}
+
+console.log('\n[10] Chekka holatlar');
 {
   // Chegirmali buyurtmadan qisman qaytarish
   const disc = computeOrderFinance({

@@ -527,6 +527,8 @@ export async function recordRefund(order, provider, transactionId = null, option
     .select('meta').lean();
   const alreadyRefundedFoodBase = priorRefunds
     .reduce((sum, l) => sum + (Number(l.meta?.refundedFoodBaseTiyin) || 0), 0);
+  // Yetkazish bo'linmaydi — bir marta qaytarilgan bo'lsa, qayta qaytarilmaydi
+  const deliveryAlreadyRefunded = priorRefunds.some((l) => l.meta?.deliveryRefunded === true);
 
   // Eski buyurtma yoki to'liq qaytarish takrori — avvalgi himoya
   if (!fin) {
@@ -542,6 +544,7 @@ export async function recordRefund(order, provider, transactionId = null, option
       foodBaseRefundTiyin: options.foodBaseRefundTiyin ?? null,
       refundDelivery: options.refundDelivery ?? null,
       alreadyRefundedFoodBaseTiyin: alreadyRefundedFoodBase,
+      deliveryAlreadyRefunded,
     });
   } catch (e) {
     console.error('[billing] refund hisobi:', e.message);
@@ -579,6 +582,7 @@ export async function recordRefund(order, provider, transactionId = null, option
       // Keyingi qisman qaytarishlar shu asosda hisoblanadi
       refundedFoodBaseTiyin: refund.foodBase,
       remainingFoodBaseTiyin: remaining.foodBase,
+      deliveryRefunded: calc.deliveryRefunded,
     },
   });
 

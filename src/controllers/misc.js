@@ -627,9 +627,23 @@ export const orderController = {
       const fee = isPickup ? 0 : (o.deliveryFee || 0);
       // Aksiya chegirmasi taomlar summasidan ayriladi
       const promoDiscount = o._promo?.discount || 0;
+      /*
+       * ═══ JAMI SUMMA — MOLIYAVIY SNAPSHOT'DAN ═══
+       *
+       * XATO TUZATILDI: bu yerda `o.subtotal − promoDiscount −
+       * pickupDiscount` yozilgan edi. Lekin `o.subtotal` endi
+       * snapshot'dan olinadi va chegirmalar unda ALLAQACHON
+       * ayirilgan — natijada chegirma IKKI MARTA ayirilardi va
+       * mijoz kam to'lardi, restoran qarzi esa to'g'ri qolardi
+       * (ya'ni farq LokmaGo zarariga yozilardi).
+       *
+       * Endi jami summa `finance.totalCharged` dan olinadi.
+       * Xizmat haqi (serviceFee) snapshot'dan TASHQARIDA —
+       * u restoranning o'z yig'imi, komissiya bazasiga kirmaydi.
+       */
       const orderTotal = Math.max(
         0,
-        o.subtotal - promoDiscount - (o._pickupDiscount || 0) + fee + (o.serviceFee || 0),
+        tiyinToSom(o._finance.totalCharged) + (o.serviceFee || 0),
       );
       // Bonusni shu buyurtmaga qo'llaymiz (ketma-ket, oshib ketmasin)
       // Chegirma qo'shish qoidasi (discount stacking policy).

@@ -103,6 +103,8 @@ const ledgerSchema = new Schema(
        */
       refundedFoodBaseTiyin: Number,
       remainingFoodBaseTiyin: Number,
+      // Yetkazish bo'linmaydi — bir marta qaytarilsa, qayta qaytarilmaydi
+      deliveryRefunded: Boolean,
 
       /*
        * Qo'lda tuzatish (type: 'adjustment') — audit uchun.

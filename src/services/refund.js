@@ -48,7 +48,8 @@ export function itemsBaseTiyin(items) {
  * @param {number} [opts.foodBaseRefundTiyin]  qaytarilayotgan taom BAZA summasi.
  *                 Berilmasa — to'liq qaytarish (butun `finance.foodBase`)
  * @param {boolean} [opts.refundDelivery]      yetkazish ham qaytarilsinmi
- * @param {number} [opts.alreadyRefundedFoodBaseTiyin] avval qaytarilgani
+ * @param {number} [opts.alreadyRefundedFoodBaseTiyin] avval qaytarilgan taom
+ * @param {boolean} [opts.deliveryAlreadyRefunded] yetkazish avval qaytarilganmi
  *
  * @returns {{ refund:object, isFull:boolean, remaining:object }}
  *   `refund` — qaytariladigan summalar (musbat, tiyinda)
@@ -57,6 +58,7 @@ export function computeRefund(finance, {
   foodBaseRefundTiyin = null,
   refundDelivery = null,
   alreadyRefundedFoodBaseTiyin = 0,
+  deliveryAlreadyRefunded = false,
 } = {}) {
   if (!finance || finance.model !== 'v2') {
     throw new Error('Refund faqat v2 moliyaviy snapshot bilan ishlaydi');
@@ -85,7 +87,23 @@ export function computeRefund(finance, {
    * qaytarishda qaytariladi. Qisman qaytarishda kuryer ishini
    * bajargan, uning puli qaytarilmaydi.
    */
-  const withDelivery = refundDelivery === null ? isFull : Boolean(refundDelivery);
+  let withDelivery = refundDelivery === null ? isFull : Boolean(refundDelivery);
+
+  /*
+   * ═══ YETKAZISH IKKI MARTA QAYTARILMASIN ═══
+   *
+   * Taom summasi qismlarga bo'linadi va har qismi alohida
+   * kuzatiladi, yetkazish esa BO'LINMAYDI — u bir butun.
+   * Ikki marta `refundDelivery: true` bilan chaqirilsa, tekshiruvsiz
+   * 5 000 so'mlik yetkazish 10 000 bo'lib qaytarilardi.
+   *
+   * Shuning uchun u alohida bayroq bilan nazorat qilinadi:
+   * bir marta qaytarilgan bo'lsa, keyingi qaytarishlarda
+   * yetkazish summasi 0 bo'ladi.
+   */
+  if (withDelivery && deliveryAlreadyRefunded) {
+    withDelivery = false;
+  }
 
   /*
    * Chegirma proporsional bo'linadi: 10 000 dan 2 000 chegirma
@@ -118,10 +136,12 @@ export function computeRefund(finance, {
     refund,
     isFull,
     withDelivery,
+    deliveryRefunded: withDelivery,
     remaining: {
       foodBase: totalFoodBase - refundedFoodBaseAfter,
       refundedFoodBase: refundedFoodBaseAfter,
       originalFoodBase: totalFoodBase,
+      deliveryRefunded: Boolean(deliveryAlreadyRefunded) || withDelivery,
     },
   };
 }
