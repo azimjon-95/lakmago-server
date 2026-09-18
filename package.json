@@ -15,7 +15,8 @@
     "seed:catalog": "node scripts/seed-catalog.js",
     "test": "node tests/webhook-guard.test.mjs && node tests/finance.test.mjs && node tests/refund.test.mjs",
     "test:flow": "node tests/finance-flow.test.mjs",
-    "report:legacy-finance": "node scripts/legacy-finance-report.js"
+    "report:legacy-finance": "node scripts/legacy-finance-report.js",
+    "test:tz": "node tests/tz-finance.test.mjs"
   },
   "dependencies": {
     "@socket.io/redis-adapter": "^8.3.0",
