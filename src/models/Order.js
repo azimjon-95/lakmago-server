@@ -109,7 +109,9 @@ const orderSchema = new Schema(
       clickResidualAmount: Number,
 
       // Ulushlar
-      restaurantPayout: Number,
+      restaurantFoodPayout: Number,      // taom ulushi
+      restaurantDeliveryPayout: Number,  // yetkazish (100% restoranga)
+      restaurantPayout: Number,          // restoranga JAMI
       lokmaGrossCommission: Number,
       lokmaFoodPaymentFee: Number,
       lokmaNetCommission: Number,          // biznes ko'rsatkichi

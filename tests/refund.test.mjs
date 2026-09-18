@@ -37,9 +37,10 @@ console.log('\n[1] TO‘LIQ qaytarish');
   ok(isFull, 'to‘liq deb aniqlandi');
   ok(withDelivery, 'yetkazish ham qaytariladi');
   eq(refund.totalCharged, 15500, 'mijozga qaytariladi');
-  eq(refund.restaurantPayout, 9500, 'restoran ulushi teskari');
+  eq(refund.restaurantFoodPayout, 9500, 'restoran taom ulushi teskari');
+  eq(refund.restaurantDeliveryPayout, 5000, 'yetkazish 100% teskari');
+  eq(refund.restaurantPayout, 14500, 'restoranga jami teskari');
   eq(refund.lokmaGrossCommission, 1000, 'LokmaGo komissiyasi teskari');
-  eq(refund.deliveryPayout, 4925, 'delivery teskari');
   ok(reconcile(refund).ok, 'qaytarish rekonsiliatsiyasi');
   ok(validateRefund(order, refund).ok, 'asl summadan oshmadi');
 }
@@ -54,10 +55,10 @@ console.log('\n[2] QISMAN — 2 ta taomdan bittasi (5 000), yetkazishsiz');
   eq(refund.foodSubtotal, 5000, 'qaytarilgan taom summasi');
   eq(refund.customerFeeAmount, 250, 'mijoz haqi proporsional (5% dan yarmi)');
   eq(refund.restaurantCommissionAmount, 250, 'restoran komissiyasi proporsional');
-  eq(refund.restaurantPayout, 4750, 'restoran ulushi proporsional');
+  eq(refund.restaurantFoodPayout, 4750, 'restoran taom ulushi proporsional');
   eq(refund.totalCharged, 5250, 'mijozga qaytariladi (yetkazishsiz)');
   eq(refund.deliveryFee, 0, 'yetkazish 0');
-  eq(refund.deliveryPayout, 0, 'delivery payout 0');
+  eq(refund.restaurantDeliveryPayout, 0, 'delivery payout 0');
   ok(remaining.foodBase === S(5000), `qolgan taom summasi ${som(remaining.foodBase)}`);
   ok(reconcile(refund).ok, 'rekonsiliatsiya');
   ok(validateRefund(order, refund).ok, 'asl summadan oshmadi');
@@ -70,7 +71,7 @@ console.log('\n[3] QISMAN — taom + yetkazish birga');
   });
   ok(withDelivery, 'yetkazish ham qaytarildi');
   eq(refund.totalCharged, 10250, 'mijozga qaytariladi (5 250 + 5 000)');
-  eq(refund.deliveryPayout, 4925, 'delivery payout teskari');
+  eq(refund.restaurantDeliveryPayout, 5000, 'delivery 100% teskari');
   ok(reconcile(refund).ok, 'rekonsiliatsiya');
 }
 
@@ -80,7 +81,7 @@ console.log('\n[4] FAQAT yetkazish qaytariladi (taom mijozda qoldi)');
     foodBaseRefundTiyin: 0, refundDelivery: true,
   });
   eq(refund.foodSubtotal, 0, 'taom qaytarilmadi');
-  eq(refund.restaurantPayout, 0, 'restoran ulushi tegilmadi');
+  eq(refund.restaurantFoodPayout, 0, 'restoran taom ulushi tegilmadi');
   eq(refund.lokmaGrossCommission, 0, 'komissiya tegilmadi');
   eq(refund.totalCharged, 5000, 'faqat yetkazish qaytarildi');
   ok(reconcile(refund).ok, 'rekonsiliatsiya');
@@ -224,7 +225,7 @@ console.log('\n[10] Chekka holatlar');
   // Komissiyasiz buyurtma
   const free = computeOrderFinance({ foodBaseTiyin: S(10000), paymentFeePercent: 1.5 });
   const r = computeRefund(free, {});
-  eq(r.refund.restaurantPayout, 10000, 'komissiyasiz: to‘liq qaytariladi');
+  eq(r.refund.restaurantFoodPayout, 10000, 'komissiyasiz: to‘liq qaytariladi');
   ok(reconcile(r.refund).ok, 'komissiyasiz rekonsiliatsiya');
 }
 

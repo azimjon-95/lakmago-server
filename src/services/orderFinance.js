@@ -28,16 +28,19 @@
  *  2. restaurantPayout = foodSubtotal − restaurantCommission.
  *     Mijoz xizmat haqi restoranga BERILMAYDI.
  *  3. lokmaGross = customerFee + restaurantCommission.
- *  4. Click jami summadan 1.5% ushlaydi, lekin LokmaGo o'z
- *     ulushidan FAQAT taom qismini qoplaydi:
- *       lokmaFoodPaymentFee = foodSubtotal × 1.5%
- *     Mijoz haqiga tegishli qismi (residual) alohida yuritiladi
- *     va restoran payout'iga TA'SIR QILMAYDI.
- *  5. deliveryPayout = deliveryFee − clickDeliveryFee (standart).
+ *  4. Click jami mijoz to'lovidan 1.5% ushlaydi va bu xarajatni
+ *     LokmaGo TO'LIQ o'z ulushidan qoplaydi:
+ *       lokmaNetCommission = lokmaGross − clickFeeAmount
+ *     Restoran ulushi Click sababli HECH QACHON kamaymaydi.
+ *  5. Yetkazish puli 100% RESTORANGA: restoran o'z kuryeri bilan
+ *     yetkazadi, LokmaGo undan na komissiya oladi, na Click
+ *     haqini ushlaydi.
+ *  6. Restoranga jami = taom ulushi + yetkazish puli.
  *
  * ─── TEKSHIRUV (reconciliation) ───
- * restaurantPayout + lokmaCashNet + deliveryPayout + clickFeeTotal
+ * restaurantPayout + lokmaNetCommission + clickFeeAmount
  *   ===  totalCharged
+ * `restaurantPayout` — taom ulushi + yetkazish (jami).
  *
  * DIQQAT: bu yerda `lokmaNetCommission` EMAS, `lokmaCashNet`
  * ishlatiladi. Birinchisi — biznes ko'rsatkichi (hisobot uchun),
@@ -118,14 +121,28 @@ export function computeOrderFinance({
   const clickResidualAmount = clickFeeTotal - clickFoodFeeAmount - clickDeliveryFeeAmount;
 
   // ═══ Ulushlar ═══
-  const restaurantPayout = foodSubtotal - restaurantCommissionAmount;
-  const lokmaGrossCommission = customerFeeAmount + restaurantCommissionAmount;
-  const lokmaFoodPaymentFee = clickFoodFeeAmount;
-  const lokmaNetCommission = lokmaGrossCommission - lokmaFoodPaymentFee;
 
-  const deliveryPayout = deliveryFeeAbsorbedByLokma
-    ? deliveryFee
-    : deliveryFee - clickDeliveryFeeAmount;
+  // TAOM: kelishuv bo'yicha komissiya ushlanadi
+  const restaurantFoodPayout = foodSubtotal - restaurantCommissionAmount;
+
+  /*
+   * YETKAZISH: 100% restoranga. LokmaGo undan komissiya OLMAYDI
+   * va Click haqini ham ushlamaydi — restoran o'z kuryeri bilan
+   * yetkazadi, bu uning xizmati.
+   */
+  const restaurantDeliveryPayout = deliveryFee;
+
+  // Restoranga JAMI
+  const restaurantPayout = restaurantFoodPayout + restaurantDeliveryPayout;
+
+  const lokmaGrossCommission = customerFeeAmount + restaurantCommissionAmount;
+
+  /*
+   * Click haqini LokmaGo TO'LIQ qoplaydi — jami mijoz to'lovidan
+   * ushlangan 1.5% ning hammasi. Restoran ulushi kamaymaydi.
+   */
+  const lokmaFoodPaymentFee = clickFeeTotal;
+  const lokmaNetCommission = lokmaGrossCommission - clickFeeTotal;
 
   /*
    * ═══ BIZNES KO'RSATKICHI ≠ HAQIQIY PUL ═══
@@ -143,7 +160,7 @@ export function computeOrderFinance({
    * rekonsiliatsiya har qanday yaxlitlashda ham ANIQ to'g'ri
    * chiqadi, bironta tiyin yo'qolmaydi.
    */
-  const lokmaCashNet = totalCharged - restaurantPayout - deliveryPayout - clickFeeTotal;
+  const lokmaCashNet = totalCharged - restaurantPayout - clickFeeTotal;
 
   const finance = {
     model: FINANCE_MODEL,
@@ -171,12 +188,14 @@ export function computeOrderFinance({
     clickDeliveryFeeAmount,
     clickResidualAmount,
 
-    restaurantPayout,
+    restaurantFoodPayout,        // taom ulushi
+    restaurantDeliveryPayout,    // yetkazish (100% restoranga)
+    restaurantPayout,            // restoranga JAMI
     lokmaGrossCommission,
-    lokmaFoodPaymentFee,
+    lokmaFoodPaymentFee,         // = clickFeeAmount (LokmaGo qoplaydi)
     lokmaNetCommission,
     lokmaCashNet,
-    deliveryPayout,
+    deliveryPayout: restaurantDeliveryPayout,   // eski nom bilan moslik
     deliveryFeeAbsorbedByLokma: Boolean(deliveryFeeAbsorbedByLokma),
 
     calculatedAt: new Date(),
@@ -198,16 +217,17 @@ export function computeOrderFinance({
  * @returns {{ ok: boolean, diff: number, parts: object }}
  */
 export function reconcile(f) {
-  const sum = f.restaurantPayout + f.lokmaCashNet + f.deliveryPayout + f.clickFeeAmount;
+  const sum = f.restaurantPayout + f.lokmaNetCommission + f.clickFeeAmount;
   const diff = f.totalCharged - sum;
 
   return {
     ok: diff === 0,
     diff,
     parts: {
+      restaurantFoodPayout: f.restaurantFoodPayout,
+      restaurantDeliveryPayout: f.restaurantDeliveryPayout,
       restaurantPayout: f.restaurantPayout,
-      lokmaCashNet: f.lokmaCashNet,
-      deliveryPayout: f.deliveryPayout,
+      lokmaNetCommission: f.lokmaNetCommission,
       clickFeeAmount: f.clickFeeAmount,
       totalCharged: f.totalCharged,
     },

@@ -91,7 +91,7 @@ console.log('\n[1] NARX XAVFSIZLIGI — frontend qiymati moliyaviy manba EMAS');
   ok(check.items[0].unitPrice === 10000, `element narxi tuzatildi: ${check.items[0].unitPrice}`);
   ok(check.mismatches.length === 1, 'farq qayd etildi (logga yoziladi)');
   ok(som(finance.totalCharged) === 10000, `mijoz to‘laydi ${som(finance.totalCharged)}`);
-  ok(som(finance.restaurantPayout) === 9000, `restoran payout ${som(finance.restaurantPayout)}`);
+  ok(som(finance.restaurantFoodPayout) === 9000, `taom ulushi ${som(finance.restaurantFoodPayout)}`);
 }
 
 console.log('\n[2] Hisob-kitob → Ledger yozuvlari (10% restorandan, karta)');
@@ -103,19 +103,24 @@ console.log('\n[2] Hisob-kitob → Ledger yozuvlari (10% restorandan, karta)');
 
   ok(result !== null, 'hisob-kitob bajarildi');
   ok(result.commission === 1000, `komissiya ${result.commission} (kutilgan 1000)`);
-  ok(result.restaurantShare === 9000, `restoran ulushi ${result.restaurantShare} (kutilgan 9000)`);
+  ok(result.restaurantShare === 14000,
+    `restoranga jami ${result.restaurantShare} (taom 9 000 + yetkazish 5 000)`);
   ok(result.mode === 'agreement', `manba: ${result.mode} (shartnoma)`);
 
   const due = await Ledger.findOne({ orderId: order._id, type: 'restaurant_due' }).lean();
-  ok(due.amount === 9000, `restaurant_due yozuvi: ${due.amount}`);
+  ok(due.amount === 14000, `restaurant_due yozuvi: ${due.amount}`);
   ok(due.meta.financeModel === 'v2', 'yozuvda financeModel: v2');
 
   const updated = await Restaurant.findById(rest._id).lean();
-  ok(updated.balance === 9000, `restoran balansi ${updated.balance}`);
+  ok(updated.balance === 14000, `restoran balansi ${updated.balance}`);
 
-  // ENG MUHIM: yetkazish puli restoranga QO'SHILMAGAN
-  ok(due.amount < som(finance.totalCharged), 'yetkazish puli restoran qarziga kirmadi');
-  ok(som(finance.deliveryPayout) === 4925, `delivery payout ${som(finance.deliveryPayout)}`);
+  // Yetkazish puli 100% restoranga, Click haqi undan ushlanmaydi
+  ok(som(finance.restaurantDeliveryPayout) === 5000,
+    `yetkazish 100% restoranga: ${som(finance.restaurantDeliveryPayout)}`);
+  ok(som(finance.restaurantFoodPayout) === 9000,
+    `taom ulushi: ${som(finance.restaurantFoodPayout)}`);
+  ok(som(finance.lokmaNetCommission) === 775,
+    `LokmaGo net: ${som(finance.lokmaNetCommission)} (1 000 − 225 Click)`);
 }
 
 console.log('\n[3] Naqd to‘lov — bizga faqat komissiya qarz');
@@ -137,18 +142,19 @@ console.log('\n[4] Shlyuz bo‘linishi snapshot‘dan (5% + 5%)');
   });
   const split = splitFromFinance(finance, 'click');
   ok(som(split.total) === 15500, `jami ${som(split.total)}`);
-  ok(som(split.restaurantAmount) === 9500, `restoranga ${som(split.restaurantAmount)}`);
+  ok(som(split.restaurantAmount) === 14500,
+    `restoranga jami ${som(split.restaurantAmount)} (9 500 + 5 000)`);
   ok(som(split.lokmaGrossCommission) === 1000, `LokmaGo gross ${som(split.lokmaGrossCommission)}`);
   ok(som(split.providerFee) === 232.5, `Click haqi ${som(split.providerFee)}`);
-  ok(som(split.lokmaNetCommission) === 850, `LokmaGo net ${som(split.lokmaNetCommission)}`);
+  ok(som(split.lokmaNetCommission) === 767.5, `LokmaGo net ${som(split.lokmaNetCommission)}`);
   ok(split.financeModel === 'v2', 'snapshot yo‘li ishlatildi');
 
   // Rekonsiliatsiya
   const r = reconcile(finance);
   ok(r.ok, `rekonsiliatsiya: farq ${r.diff} tiyin`);
-  const parts = som(finance.restaurantPayout) + som(finance.lokmaCashNet)
-    + som(finance.deliveryPayout) + som(finance.clickFeeAmount);
-  ok(parts === 15500, `9 500 + ${som(finance.lokmaCashNet)} + 4 925 + 232.5 = ${parts}`);
+  const parts = som(finance.restaurantPayout) + som(finance.lokmaNetCommission)
+    + som(finance.clickFeeAmount);
+  ok(parts === 15500, `14 500 + ${som(finance.lokmaNetCommission)} + 232.5 = ${parts}`);
 }
 
 console.log('\n[5] Eski buyurtma (snapshot yo‘q) — avvalgi mantiq saqlanadi');
@@ -190,7 +196,7 @@ console.log('\n[7] Bazada QISMAN qaytarish — asl yozuvlar o‘zgarmaydi');
   });
   await settleOrder(order._id);
   const balanceAfterSettle = (await Restaurant.findById(rest._id).lean()).balance;
-  ok(balanceAfterSettle === 9500, `hisob-kitobdan keyin balans ${balanceAfterSettle}`);
+  ok(balanceAfterSettle === 14500, `hisob-kitobdan keyin balans ${balanceAfterSettle}`);
 
   const { recordRefund } = await import('../src/services/billing.js');
 
@@ -202,7 +208,7 @@ console.log('\n[7] Bazada QISMAN qaytarish — asl yozuvlar o‘zgarmaydi');
   ok(r1.refunded === 5250, `mijozga qaytarildi ${r1.refunded} (kutilgan 5250)`);
 
   const balanceAfterRefund = (await Restaurant.findById(rest._id).lean()).balance;
-  ok(balanceAfterRefund === 4750, `balans ${balanceAfterRefund} (9500 − 4750)`);
+  ok(balanceAfterRefund === 9750, `balans ${balanceAfterRefund} (14 500 − 4 750)`);
 
   // ASL snapshot va ASL yozuvlar tegilmagan
   const fresh = await Order.findById(order._id).lean();
@@ -211,13 +217,13 @@ console.log('\n[7] Bazada QISMAN qaytarish — asl yozuvlar o‘zgarmaydi');
   const origDue = await Ledger.findOne({
     orderId: order._id, type: 'restaurant_due', 'meta.note': { $exists: false },
   }).lean();
-  ok(origDue && origDue.amount === 9500, 'asl restaurant_due yozuvi o‘zgarmadi');
+  ok(origDue && origDue.amount === 14500, 'asl restaurant_due yozuvi o‘zgarmadi');
 
   // Qolganini ham qaytaramiz
   const r2 = await recordRefund(order, 'click', null, {
     foodBaseRefundTiyin: somToTiyin(5000), refundDelivery: true,
   });
-  ok(r2 && r2.refunded === 10250, `qolgani qaytarildi ${r2?.refunded} (5250 + 5000)`);
+  ok(r2 && r2.refunded === 10250, `qolgani qaytarildi ${r2?.refunded} (5 250 + 5 000)`);
   const finalBalance = (await Restaurant.findById(rest._id).lean()).balance;
   ok(finalBalance === 0, `yakuniy balans ${finalBalance}`);
 

@@ -69,13 +69,11 @@ console.log('\n[C] Taom 10 000 · restoran 10% · yetkazish 5 000 · Click 1.5%'
   });
   eq(f.totalCharged, 15000, 'Mijoz to‘laydi');
   eq(f.clickFeeAmount, 225, 'Click jami');
-  eq(f.restaurantPayout, 9000, 'Restoran payout');
+  eq(f.restaurantPayout, 14000, 'Restoranga jami (9 000 + 5 000)');
   eq(f.lokmaGrossCommission, 1000, 'LokmaGo gross');
-  eq(f.clickFoodFeeAmount, 150, 'Taom Click haqi');
-  eq(f.clickDeliveryFeeAmount, 75, 'Delivery Click haqi');
-  eq(f.lokmaNetCommission, 850, 'LokmaGo net');
-  eq(f.deliveryPayout, 4925, 'Delivery payout');
-  eq(f.clickResidualAmount, 0, 'Click residual (mijoz haqi yo‘q)');
+  eq(f.lokmaNetCommission, 775, 'LokmaGo net (1 000 − 225 to‘liq Click haqi)');
+  eq(f.restaurantFoodPayout, 9000, 'Restoran — taom ulushi');
+  eq(f.restaurantDeliveryPayout, 5000, 'Restoran — yetkazish 100%');
   ok(reconcile(f).ok, 'rekonsiliatsiya');
 }
 
@@ -91,13 +89,11 @@ console.log('\n[D] Taom 10 000 · mijoz 5% · restoran 5% · yetkazish 5 000 · 
   });
   eq(f.totalCharged, 15500, 'Mijoz to‘laydi');
   eq(f.clickFeeAmount, 232.5, 'Click jami');
-  eq(f.restaurantPayout, 9500, 'Restoran payout');
+  eq(f.restaurantPayout, 14500, 'Restoranga jami (9 500 + 5 000)');
   eq(f.lokmaGrossCommission, 1000, 'LokmaGo gross');
-  eq(f.clickFoodFeeAmount, 150, 'Taom Click haqi');
-  eq(f.clickDeliveryFeeAmount, 75, 'Delivery Click haqi');
-  eq(f.lokmaNetCommission, 850, 'LokmaGo net');
-  eq(f.clickResidualAmount, 7.5, 'Click residual (mijoz haqidan)');
-  eq(f.deliveryPayout, 4925, 'Delivery payout');
+  eq(f.lokmaNetCommission, 767.5, 'LokmaGo net (1 000 − 232.5)');
+  eq(f.restaurantFoodPayout, 9500, 'Restoran — taom ulushi');
+  eq(f.restaurantDeliveryPayout, 5000, 'Restoran — yetkazish 100%');
   ok(reconcile(f).ok, 'rekonsiliatsiya');
 }
 
@@ -110,21 +106,22 @@ console.log('\n[E] Chekka holatlar');
     restaurantCommissionPercent: 10, paymentFeePercent: 0,
   });
   eq(cash.clickFeeAmount, 0, 'naqd: Click haqi yo‘q');
-  eq(cash.lokmaNetCommission, 1000, 'naqd: net = gross');
-  eq(cash.deliveryPayout, 5000, 'naqd: delivery to‘liq');
+  eq(cash.lokmaNetCommission, 1000, 'naqd: net = gross (Click haqi yo‘q)');
+  eq(cash.restaurantDeliveryPayout, 5000, 'naqd: delivery to‘liq');
+  eq(cash.restaurantPayout, 14000, 'naqd: restoranga jami');
   ok(reconcile(cash).ok, 'naqd rekonsiliatsiya');
 
   // Yetkazish 0 (olib ketish)
   const pickup = computeOrderFinance({
     foodBaseTiyin: S(10000), restaurantCommissionPercent: 10, paymentFeePercent: 1.5,
   });
-  eq(pickup.deliveryPayout, 0, 'olib ketish: delivery 0');
+  eq(pickup.restaurantDeliveryPayout, 0, 'olib ketish: delivery 0');
   eq(pickup.clickDeliveryFeeAmount, 0, 'olib ketish: delivery Click 0');
   ok(reconcile(pickup).ok, 'olib ketish rekonsiliatsiya');
 
   // Shartnoma yo'q — komissiya 0
   const noAgreement = computeOrderFinance({ foodBaseTiyin: S(10000) });
-  eq(noAgreement.restaurantPayout, 10000, 'shartnomasiz: payout = to‘liq');
+  eq(noAgreement.restaurantFoodPayout, 10000, 'shartnomasiz: payout = to‘liq');
   eq(noAgreement.lokmaGrossCommission, 0, 'shartnomasiz: komissiya 0');
   ok(reconcile(noAgreement).ok, 'shartnomasiz rekonsiliatsiya');
 
@@ -134,7 +131,7 @@ console.log('\n[E] Chekka holatlar');
   });
   eq(disc.foodSubtotal, 8000, 'chegirmadan keyingi baza');
   eq(disc.restaurantCommissionAmount, 800, 'komissiya chegirmali summadan');
-  eq(disc.restaurantPayout, 7200, 'chegirmali payout');
+  eq(disc.restaurantFoodPayout, 7200, 'chegirmali payout');
   ok(reconcile(disc).ok, 'chegirma rekonsiliatsiya');
 
   // Restoran ustamasi — uning puli, payout'ga qaytadi
@@ -142,7 +139,7 @@ console.log('\n[E] Chekka holatlar');
     foodBaseTiyin: S(10000), deliveryMarkupPercent: 5, restaurantCommissionPercent: 10,
   });
   eq(markup.foodSubtotal, 10500, 'ustama bilan baza');
-  eq(markup.restaurantPayout, 9450, 'ustama restoranga qaytdi (10500 − 1050)');
+  eq(markup.restaurantFoodPayout, 9450, 'ustama restoranga qaytdi (10500 − 1050)');
   ok(reconcile(markup).ok, 'ustama rekonsiliatsiya');
 
   // Bepul buyurtma
@@ -161,8 +158,8 @@ console.log('\n[E] Chekka holatlar');
     restaurantCommissionPercent: 10, paymentFeePercent: 1.5,
     deliveryFeeAbsorbedByLokma: true,
   });
-  eq(absorbed.deliveryPayout, 5000, 'LokmaGo qopladi: delivery to‘liq');
-  ok(reconcile(absorbed).ok, 'qoplangan rekonsiliatsiya');
+  eq(absorbed.restaurantDeliveryPayout, 5000, 'delivery har doim 100% restoranga');
+  ok(reconcile(absorbed).ok, 'rekonsiliatsiya');
 }
 
 /* ═══ YAXLITLASH: tiyin yo'qolmasligi ═══ */
@@ -202,7 +199,7 @@ console.log('\n[G] Chegirma ikki marta ayirilmasligi (regressiya nazorati)');
   eq(f.foodSubtotal, 8000, 'chegirma BIR MARTA ayirildi (10 000 − 2 000)');
   eq(f.totalCharged, 8000, 'mijoz to‘laydi — ortiqcha chegirma yo‘q');
   eq(f.restaurantCommissionAmount, 800, 'komissiya chegirmali summadan');
-  eq(f.restaurantPayout, 7200, 'restoran payout noto‘g‘ri kamaymadi');
+  eq(f.restaurantFoodPayout, 7200, 'restoran payout noto‘g‘ri kamaymadi');
   ok(reconcile(f).ok, 'rekonsiliatsiya');
 
   // Chegirma + mijoz haqi + yetkazish birga
@@ -213,7 +210,7 @@ console.log('\n[G] Chegirma ikki marta ayirilmasligi (regressiya nazorati)');
   eq(full.foodSubtotal, 8000, 'chegirmali baza');
   eq(full.customerFeeAmount, 400, 'mijoz haqi chegirmadan KEYIN (8 000 × 5%)');
   eq(full.totalCharged, 13400, 'jami: 8 000 + 400 + 5 000');
-  eq(full.restaurantPayout, 7600, 'payout: 8 000 − 400');
+  eq(full.restaurantFoodPayout, 7600, 'payout: 8 000 − 400');
   ok(reconcile(full).ok, 'rekonsiliatsiya');
 
   // Chegirma taom narxidan katta bo'lsa — 0 ga cheklanadi
@@ -242,7 +239,7 @@ console.log('\n[H] Komissiya kombinatsiyalari × Click/Naqd');
       // Pul ikki marta hisoblanmasligi: gross = mijoz haqi + restoran komissiyasi
       const grossOk = f.lokmaGrossCommission === f.customerFeeAmount + f.restaurantCommissionAmount;
       // Restoran payout hech qachon taom summasidan oshmasin
-      const payoutOk = f.restaurantPayout <= f.foodSubtotal;
+      const payoutOk = f.restaurantFoodPayout <= f.foodSubtotal;
       /*
        * Komissiya bazasiga YETKAZISH kirmasligi: xuddi shu
        * buyurtma yetkazishsiz hisoblansa, komissiya O'ZGARMASLIGI
@@ -261,7 +258,7 @@ console.log('\n[H] Komissiya kombinatsiyalari × Click/Naqd');
         + ` mijoz ${String(som(f.totalCharged)).padStart(6)}`
         + ` · restoran ${String(som(f.restaurantPayout)).padStart(5)}`
         + ` · LokmaGo ${String(som(f.lokmaCashNet)).padStart(7)}`
-        + ` · delivery ${String(som(f.deliveryPayout)).padStart(5)}`
+        + ` · delivery ${String(som(f.restaurantDeliveryPayout)).padStart(5)}`
         + ` · shlyuz ${String(som(f.clickFeeAmount)).padStart(6)}`,
       );
     }
@@ -281,8 +278,10 @@ console.log('\n[I] Yetkazish komissiya bazasiga kirmaydi');
   });
   ok(noDelivery.lokmaGrossCommission === withDelivery.lokmaGrossCommission,
     `yetkazish 0 va 50 000 bo‘lganda komissiya BIR XIL (${som(withDelivery.lokmaGrossCommission)})`);
-  ok(noDelivery.restaurantPayout === withDelivery.restaurantPayout,
-    'restoran payout ham o‘zgarmadi');
+  ok(noDelivery.restaurantFoodPayout === withDelivery.restaurantFoodPayout,
+    'taom ulushi ham o‘zgarmadi');
+  ok(withDelivery.restaurantDeliveryPayout === S(50000),
+    'yetkazishning 100% restoranga');
 }
 
 console.log(fails ? `\n✗ ${fails} ta xato` : '\n✓ HAMMASI O‘TDI');
