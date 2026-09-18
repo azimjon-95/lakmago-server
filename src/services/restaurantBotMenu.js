@@ -185,13 +185,16 @@ function settingsText(staff) {
   const lines = [
     '⚙️ <b>Sozlamalar — ovozli signal</b>',
     '',
-    'Tugmani bosib yoqing yoki o‘chiring. Tanlov shu Telegram',
-    'akkauntingiz uchun saqlanadi va esda qoladi.',
+    'Yoqilsa, buyurtma kartasidan keyin qo‘shimcha <b>ovozli xabar</b>',
+    'yuboriladi. Telegram uni avtomatik chalmaydi — bosib tinglaysiz.',
+    '',
+    '💡 Eng baland ogohlantirish uchun: shu bot chatini oching →',
+    'Bildirishnomalar → ohangni tanlang. Bu avtomatik ishlaydi.',
     '',
   ];
   const off = Object.keys(SIGNAL_LABEL).filter((k) => !signalEnabled(staff, k));
   if (off.length === 2) {
-    lines.push('🔇 Hozir ikkala signal ham o‘chiq — faqat kartalar keladi.');
+    lines.push('🔇 Ikkala ovozli signal ham o‘chiq — faqat buyurtma kartalari keladi.');
   } else if (off.length === 1) {
     lines.push(`🔇 ${SIGNAL_LABEL[off[0]].replace('🔔 ', '')} o‘chirilgan.`);
   } else {

@@ -107,9 +107,26 @@ const restaurantTelegramStaffSchema = new Schema(
      * yozuvlarda maydon yo'q bo'lsa ham (undefined) kod uni
      * "yoqilgan" deb hisoblaydi.
      */
+    /*
+     * STANDART HOLAT: O'CHIRILGAN.
+     *
+     * Telegram botga ovozni AVTOMATIK chaldirish imkoni yo'q —
+     * platforma buni taqiqlaydi. Shu sababli signal alohida
+     * ovozli xabar bo'lib kelardi va suhbatni "🔔 Yangi buyurtma
+     * signali" yozuvlari bilan to'ldirib yuborardi. Xodimlar
+     * uni chiroyli emas deb topdi.
+     *
+     * Endi buyurtma haqida XABARNING O'ZI (karta) keladi —
+     * telefon Telegram bildirishnomasi bilan jiringlaydi. Ovozli
+     * xabar esa faqat xodim uni ⚙️ Sozlamalardan ATAYLAB yoqsa
+     * yuboriladi.
+     *
+     * Eng baland ogohlantirish kerak bo'lsa: Telegramda bot
+     * chatining bildirishnoma ohangini o'zgartirish yetarli.
+     */
     signals: {
-      order: { type: Boolean, default: true },
-      reservation: { type: Boolean, default: true },
+      order: { type: Boolean, default: false },
+      reservation: { type: Boolean, default: false },
     },
   },
   { timestamps: true },
