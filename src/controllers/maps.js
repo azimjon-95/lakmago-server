@@ -75,14 +75,20 @@ export const mapsController = {
     }
 
     const restaurant = await Restaurant.findById(req.query.restaurantId)
-      .select('name lat lng delivery deliveryFee')
+      .select('name lat lng delivery deliveryFee deliveryEnabled freeDeliveryThreshold')
       .lean();
 
     if (!restaurant) {
       return res.status(404).json({ error: 'Restoran topilmadi' });
     }
 
-    const quote = await quoteDelivery(restaurant, { lat, lng });
+    /*
+     * `subtotal` — savat summasi. Bepul yetkazish chegarasi shunga
+     * qarab qo'llanadi: usiz mijoz chegaradan oshgan buyurtmada ham
+     * to'liq yetkazish narxini ko'rardi.
+     */
+    const subtotal = Math.max(0, Number(req.query.subtotal) || 0);
+    const quote = await quoteDelivery(restaurant, { lat, lng }, subtotal);
 
     res.json({
       restaurantId: String(restaurant._id),
@@ -90,6 +96,8 @@ export const mapsController = {
       distanceKm: quote.distanceKm,
       deliveryAvailable: quote.available,
       deliveryPrice: quote.price,
+      deliveryFree: Boolean(quote.free),
+      freeDeliveryThreshold: quote.threshold || 0,
       ...(quote.reason ? { reason: quote.reason, code: quote.code } : {}),
       ...(quote.breakdown ? { breakdown: quote.breakdown } : {}),
     });

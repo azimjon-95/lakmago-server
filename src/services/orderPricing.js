@@ -9,26 +9,12 @@
  * frontendga ishonib bo'lmaydi.
  */
 
-/**
- * Yetkazish haqini hisoblaydi.
- *
- * @param {number} subtotal - taomlar summasi
- * @param {object} restaurant - { deliveryFee, freeDeliveryThreshold }
- * @param {boolean} isPickup - o'zi olib ketadimi
+/*
+ * `calcDeliveryFee` OLIB TASHLANDI — yetkazish narxi endi
+ * services/deliveryEngine.js da, YAGONA joyda hisoblanadi
+ * (radius tekshiruvi bilan birga). Ikki manba bo'lsa ular
+ * vaqt o'tib bir-biridan ajralib ketardi.
  */
-export function calcDeliveryFee(subtotal, restaurant, isPickup) {
-  // O'zi olib ketsa yetkazish yo'q
-  if (isPickup) return 0;
-
-  const fee = Number(restaurant?.deliveryFee) || 0;
-  if (fee <= 0) return 0;
-
-  // Bepul yetkazish chegarasi (0 yoki yo'q = doim pullik)
-  const threshold = Number(restaurant?.freeDeliveryThreshold) || 0;
-  if (threshold > 0 && subtotal >= threshold) return 0;
-
-  return fee;
-}
 
 /**
  * Xizmat haqi — foiz, min/max bilan cheklanadi.
@@ -76,18 +62,6 @@ export function freeDeliveryGap(subtotal, restaurant, isPickup) {
 
   return threshold - subtotal;
 }
-
-/**
- * To'liq hisob — bitta restoran uchun.
- */
-export function calcOrderTotals(subtotal, restaurant, isPickup, bonusUsed = 0) {
-  const deliveryFee = calcDeliveryFee(subtotal, restaurant, isPickup);
-  const serviceFee = calcServiceFee(subtotal, restaurant);
-  const total = Math.max(0, subtotal + deliveryFee + serviceFee - bonusUsed);
-
-  return { subtotal, deliveryFee, serviceFee, bonusUsed, total };
-}
-
 
 /**
  * Restoran hozir ochiqmi.

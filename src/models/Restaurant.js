@@ -82,29 +82,27 @@ const restaurantSchema = new Schema(
       enum: ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'],
     }],
 
-    // ===== YETKAZISH TIZIMI =====
+    /*
+     * ===== YETKAZISH TIZIMI =====
+     *
+     * SODDALASHTIRILDI: avval "yetkazish turi" (free/paid/disabled)
+     * va masofaga qarab bosqichli narx bor edi — bepul masofa,
+     * boshlang'ich narx, har km uchun narx, eng ko'p narx.
+     * Restoranlar buni to'ldirmasdi, mijoz esa yakuniy narxni
+     * oldindan bilolmasdi.
+     *
+     * ENDI uch sozlama yetarli:
+     *   deliveryEnabled       — yetkazish xizmati bormi (pastda)
+     *   deliveryFee           — BITTA narx (0 = bepul, yuqorida)
+     *   freeDeliveryThreshold — shu summadan oshsa bepul
+     *
+     * `delivery.maxDistanceKm` faqat RADIUS uchun qoldi —
+     * narxga ta'sir qilmaydi, undan uzoqqa buyurtma qabul
+     * qilinmaydi.
+     */
     delivery: {
-      // FREE — bepul, PAID — masofaga qarab, DISABLED — yo'q
-      type: {
-        type: String,
-        enum: ['free', 'paid', 'disabled'],
-        default: 'free',
-      },
-
-      // Yetkazish radiusi (km). Undan uzoqqa buyurtma qabul
-      // qilinmaydi.
+      // Yetkazish radiusi (km). 0 = cheklov yo'q
       maxDistanceKm: { type: Number, default: 10 },
-
-      pricing: {
-        // Shu masofagacha bepul
-        freeKm: { type: Number, default: 0 },
-        // Boshlang'ich narx
-        basePrice: { type: Number, default: 0 },
-        // Bepul masofadan keyin har km uchun
-        extraKmPrice: { type: Number, default: 0 },
-        // Eng ko'p yetkazish narxi (0 = cheklovsiz)
-        maxPrice: { type: Number, default: 0 },
-      },
     },
     // Shu summadan boshlab yetkazish bepul. 0 = doim pullik
     freeDeliveryThreshold: { type: Number, default: 0 },

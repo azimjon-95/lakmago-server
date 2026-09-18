@@ -343,15 +343,14 @@ export const restaurantPanelController = {
       // Ish vaqti
       timezone: z.string().max(50).optional(),
       workingDays: z.array(z.enum(['mon','tue','wed','thu','fri','sat','sun'])).optional(),
+      /*
+       * Yetkazish: faqat RADIUS qoldi. Yetkazish turi va
+       * masofaga qarab bosqichli narx (freeKm, basePrice,
+       * extraKmPrice, maxPrice) olib tashlandi — endi bitta
+       * narx (`deliveryFee`) va bepul chegara ishlatiladi.
+       */
       delivery: z.object({
-        type: z.enum(['free','paid','disabled']).optional(),
         maxDistanceKm: z.number().min(0).max(200).optional(),
-        pricing: z.object({
-          freeKm: z.number().min(0).max(200).optional(),
-          basePrice: z.number().min(0).max(1000000).optional(),
-          extraKmPrice: z.number().min(0).max(1000000).optional(),
-          maxPrice: z.number().min(0).max(1000000).optional(),
-        }).optional(),
       }).optional(),
       openTime: z.string().regex(/^\d{2}:\d{2}$/).optional(),
       closeTime: z.string().regex(/^\d{2}:\d{2}$/).optional(),
@@ -362,6 +361,9 @@ export const restaurantPanelController = {
       deliveryFee: z.number().min(0).max(500000).optional(),
       freeDeliveryThreshold: z.number().min(0).max(10000000).optional(),
       minOrderAmount: z.number().min(0).max(10000000).optional(),
+
+      // Yetkazish xizmati umuman bormi
+      deliveryEnabled: z.boolean().optional(),
 
       // Olib ketish
       pickupEnabled: z.boolean().optional(),

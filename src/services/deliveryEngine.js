@@ -89,69 +89,75 @@ export async function roadDistanceKm(from, to) {
   return km;
 }
 
-/**
- * Yetkazish narxini hisoblaydi.
+/*
+ * ═══════════════════════════════════════════════════════════
+ * YETKAZISH NARXI — BITTA QAT'IY NARX
+ * ═══════════════════════════════════════════════════════════
  *
- * FREE     — har doim bepul
- * PAID     — basePrice + (masofa − freeKm) × extraKmPrice
- * DISABLED — yetkazish yo'q
+ * SODDALASHTIRILDI: avval "yetkazish turi" (free/paid/disabled)
+ * va masofaga qarab bosqichli hisob bor edi (bepul masofa,
+ * boshlang'ich narx, har km uchun narx, eng ko'p narx).
+ * Amalda restoranlar buni to'ldirmасdi va mijoz yakuniy narxni
+ * oldindan bilolmasdi.
  *
- * @returns {{ available, price, reason }}
+ * ENDI:
+ *   • restoran BITTA yetkazish narxini belgilaydi (deliveryFee);
+ *   • 0 bo'lsa — yetkazish BEPUL;
+ *   • buyurtma summasi `freeDeliveryThreshold` dan oshsa — bepul;
+ *   • `deliveryEnabled = false` bo'lsa — yetkazish umuman yo'q;
+ *   • masofa faqat RADIUSNI tekshirish uchun ishlatiladi
+ *     (`delivery.maxDistanceKm`), narxga ta'sir qilmaydi.
+ *
+ * @param {number}  distanceKm  haqiqiy yo'l masofasi (km)
+ * @param {object}  restaurant  deliveryEnabled, deliveryFee,
+ *                              freeDeliveryThreshold, delivery.maxDistanceKm
+ * @param {number}  [subtotal]  taom summasi — bepul chegara uchun
+ * @returns {{ available, price, free, reason, code, distanceKm, maxKm }}
  */
-export function calcDeliveryPrice(distanceKm, delivery) {
-  const type = delivery?.type || 'free';
-
-  if (type === 'disabled') {
+export function calcDeliveryPrice(distanceKm, restaurant, subtotal = 0) {
+  // Restoran yetkazib bermaydi
+  if (restaurant?.deliveryEnabled === false) {
     return {
       available: false,
       price: 0,
+      free: false,
       reason: 'Bu restoran yetkazib bermaydi',
       code: 'DELIVERY_DISABLED',
     };
   }
 
-  // Radius tekshiruvi
-  const maxKm = Number(delivery?.maxDistanceKm) || 0;
-  if (maxKm > 0 && distanceKm > maxKm) {
+  // Radius — undan uzoqqa yetkazilmaydi
+  const maxKm = Number(restaurant?.delivery?.maxDistanceKm) || 0;
+  if (maxKm > 0 && Number.isFinite(distanceKm) && distanceKm > maxKm) {
     return {
       available: false,
       price: 0,
-      reason: `Manzil juda uzoq — ${distanceKm} km. `
-        + `Yetkazish ${maxKm} km gacha.`,
+      free: false,
+      reason: `Manzil juda uzoq — ${distanceKm} km. Yetkazish ${maxKm} km gacha.`,
       code: 'OUT_OF_RANGE',
       distanceKm,
       maxKm,
     };
   }
 
-  if (type === 'free') {
-    return { available: true, price: 0, distanceKm };
+  const fee = Math.max(0, Math.round(Number(restaurant?.deliveryFee) || 0));
+
+  // Narx 0 — yetkazish bepul
+  if (fee === 0) {
+    return { available: true, price: 0, free: true, distanceKm, maxKm };
   }
 
-  // PAID
-  const p = delivery?.pricing || {};
-  const freeKm = Number(p.freeKm) || 0;
-  const basePrice = Number(p.basePrice) || 0;
-  const extraKmPrice = Number(p.extraKmPrice) || 0;
-  const maxPrice = Number(p.maxPrice) || 0;
+  /*
+   * Bepul yetkazish chegarasi: buyurtma summasi shu miqdordan
+   * oshsa, restoran yetkazishni o'z zimmasiga oladi.
+   * 0 = chegara yo'q (doim pullik).
+   */
+  const threshold = Math.max(0, Number(restaurant?.freeDeliveryThreshold) || 0);
+  if (threshold > 0 && Number(subtotal) >= threshold) {
+    return { available: true, price: 0, free: true, distanceKm, maxKm, threshold };
+  }
 
-  const extraKm = Math.max(0, distanceKm - freeKm);
-  // Yarim km ham to'liq hisoblanadi — mijozga tushunarli
-  let price = basePrice + Math.ceil(extraKm) * extraKmPrice;
-
-  if (maxPrice > 0 && price > maxPrice) price = maxPrice;
-
-  return {
-    available: true,
-    price: Math.max(0, Math.round(price)),
-    distanceKm,
-    breakdown: {
-      basePrice,
-      freeKm,
-      extraKm: Math.ceil(extraKm),
-      extraKmPrice,
-    },
-  };
+  return { available: true, price: fee, free: false, distanceKm, maxKm, threshold };
 }
 
 /**
@@ -160,23 +166,18 @@ export function calcDeliveryPrice(distanceKm, delivery) {
  * @param {object} restaurant - lat, lng, delivery
  * @param {object} customer - { lat, lng }
  */
-export async function quoteDelivery(restaurant, customer) {
-  // Koordinata yo'q — masofani hisoblab bo'lmaydi
-  if (!restaurant?.lat || !restaurant?.lng) {
+export async function quoteDelivery(restaurant, customer, subtotal = 0) {
+  /*
+   * Koordinata yo'q — masofani hisoblab bo'lmaydi. Buyurtmani
+   * RAD ETMAYMIZ: narx baribir bitta, masofa faqat radius uchun
+   * kerak edi. Radius tekshiruvisiz narx qaytariladi.
+   */
+  if (!restaurant?.lat || !restaurant?.lng || !customer?.lat || !customer?.lng) {
+    const quote = calcDeliveryPrice(NaN, restaurant, subtotal);
     return {
-      available: true,
-      price: Number(restaurant?.deliveryFee) || 0,
+      ...quote,
       distanceKm: null,
-      reason: 'Restoran koordinatasi belgilanmagan',
-    };
-  }
-
-  if (!customer?.lat || !customer?.lng) {
-    return {
-      available: true,
-      price: Number(restaurant?.deliveryFee) || 0,
-      distanceKm: null,
-      reason: 'Manzil koordinatasi yo‘q',
+      reason: quote.reason || 'Masofa aniqlanmadi — radius tekshirilmadi',
     };
   }
 
@@ -185,5 +186,5 @@ export async function quoteDelivery(restaurant, customer) {
     { lat: customer.lat, lng: customer.lng },
   );
 
-  return calcDeliveryPrice(distanceKm, restaurant.delivery);
+  return calcDeliveryPrice(distanceKm, restaurant, subtotal);
 }

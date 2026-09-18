@@ -7,7 +7,7 @@ import {
 import { Banner } from '../models/User.js';
 import { Restaurant } from '../models/Restaurant.js';
 import { Dish } from '../models/Dish.js';
-import { calcDeliveryFee, checkMinOrder } from '../services/orderPricing.js';
+import { checkMinOrder } from '../services/orderPricing.js';
 import { isRestaurantOpen as isOpenTz } from '../services/restaurantTime.js';
 import { quoteDelivery } from '../services/deliveryEngine.js';
 import { applyPromotion, markPromotionUsed } from '../services/promotions.js';
@@ -495,10 +495,17 @@ export const orderController = {
       // ===== YETKAZISH NARXI =====
       // Masofa bo'yicha hisoblanadi. Koordinata yo'q bo'lsa
       // eski usul (freeDeliveryThreshold) ishlaydi.
-      if (!isPickup && rest.delivery?.type && addressLat && addressLng) {
-        const quote = await quoteDelivery(rest, {
-          lat: addressLat, lng: addressLng,
-        });
+      /*
+       * Yetkazish narxi — SERVERDA. Mijoz yuborgan qiymat
+       * ishlatilmaydi. Narx bitta (restoran belgilagan), masofa
+       * faqat radiusni tekshirish uchun.
+       */
+      if (!isPickup) {
+        const quote = await quoteDelivery(
+          rest,
+          { lat: addressLat, lng: addressLng },
+          o.subtotal,
+        );
 
         if (!quote.available) {
           return res.status(400).json({
@@ -512,7 +519,7 @@ export const orderController = {
         o.deliveryFee = quote.price;
         o._distanceKm = quote.distanceKm;
       } else {
-        o.deliveryFee = calcDeliveryFee(o.subtotal, rest, isPickup);
+        o.deliveryFee = 0;   // olib ketishda yetkazish yo'q
       }
       /*
        * ═══ XIZMAT HAQI v2 BUYURTMALARDA ISHLATILMAYDI ═══
