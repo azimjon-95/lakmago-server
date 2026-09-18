@@ -293,6 +293,15 @@ export async function handleRestaurantBotUpdate(update) {
         await handleMenuCallback(cq);
         return;
       }
+      /*
+       * Admin tarqatgan xabar tugmasi. Alohida modul —
+       * buyurtma/bron oqimiga tegmaydi.
+       */
+      if (data.startsWith('b:')) {
+        const { handleBroadcastCallback } = await import('./botBroadcast.js');
+        await handleBroadcastCallback(cq);
+        return;
+      }
       // Noma'lum tugma (juda eski xabar) — "soat" belgisi qotib qolmasin
       await answerCallback(cq.id);
     }

@@ -42,6 +42,7 @@ import {
   kioskAuth, requireKioskSection,
 } from '../middleware/auth.js';
 import { loginLimiter, writeLimiter } from '../middleware/rateLimit.js';
+import { botBroadcastController } from '../controllers/botBroadcast.js';
 
 export const router = Router();
 
@@ -544,6 +545,17 @@ router.patch('/admin/support/:id/resolve', auth, requireRole('admin'), supportCo
  * bo'limlar aro ochiq bo'lishi xavfsiz.
  */
 router.get('/admin/stats', ...AS('dashboard'), adminController.stats);
+/*
+ * ═══ RESTORAN BOTLARI (yangi bo'lim) ═══
+ * Botga ulangan restoranlar, ularga xabar yuborish va
+ * statistika. Mavjud endpointlarga tegmaydi.
+ */
+router.get('/admin/bot/restaurants', ...A, botBroadcastController.restaurants);
+router.get('/admin/bot/broadcasts', ...A, botBroadcastController.list);
+router.get('/admin/bot/broadcasts/:id', ...A, botBroadcastController.detail);
+router.post('/admin/bot/broadcasts', ...A, writeLimiter, botBroadcastController.create);
+router.delete('/admin/bot/broadcasts/:id', ...A, botBroadcastController.remove);
+
 router.get('/admin/restaurants', ...AS('restaurants'), adminController.restaurants);
 router.get('/admin/restaurants/:id/dishes', ...AS('restaurants'), adminController.restaurantDishes);
 router.get('/admin/restaurants/:id/reservations', ...AS('restaurants'), adminController.restaurantReservations);
