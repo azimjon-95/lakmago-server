@@ -12,7 +12,6 @@ import {
   esc,
   btn,
 } from './restaurantBotApi.js';
-import { signalEnabled } from './restaurantBotSignal.js';
 import {
   activeStaff,
   sendReservationCard,
@@ -43,13 +42,14 @@ import {
  * yangi menyu barcha faol xodimlarga bir marta yuboriladi
  * (ensureStaffMenus, fayl oxirida).
  *   1 → Faol bronlar, Bugungi dostavkalar
- *   2 → + Sozlamalar (ovozli signalni yoqish/o'chirish)
+ *   2 → + Sozlamalar (ovozli signal)
+ *   3 → Sozlamalar OLIB TASHLANDI: ovozli signal butunlay
+ *        o'chirildi, sozlaydigan narsa qolmadi
  */
-export const MENU_VERSION = 2;
+export const MENU_VERSION = 3;
 export const MENU = {
   reservations: '📅 Faol bronlar',
   today: '🚴 Bugungi dostavkalar',
-  settings: '⚙️ Sozlamalar',
 };
 
 const som = (n) => new Intl.NumberFormat('ru-RU').format(Math.round(Number(n) || 0)).replace(/\u00a0/g, ' ');
@@ -57,13 +57,10 @@ const MAX_TEXT = 3900; // Telegram chegarasi 4096 — zaxira bilan
 
 export function mainMenuKeyboard() {
   return {
-    keyboard: [
-      [
-        { text: MENU.reservations, style: 'primary' },
-        { text: MENU.today, style: 'success' },
-      ],
-      [{ text: MENU.settings }],
-    ],
+    keyboard: [[
+      { text: MENU.reservations, style: 'primary' },
+      { text: MENU.today, style: 'success' },
+    ]],
     resize_keyboard: true,
     is_persistent: true,
     input_field_placeholder: 'Menyudan tanlang',
@@ -76,7 +73,6 @@ export async function sendMainMenu(chatId, { restaurantName = '', intro = '' } =
     '',
     `${MENU.reservations} — yopilmagan bronlar, har birini ochib holatini belgilash`,
     `${MENU.today} — bugungi buyurtmalar va ularning holati`,
-    `${MENU.settings} — ovozli signalni yoqish/o‘chirish`,
     '',
     'Yangi buyurtma va bronlar shu yerga avtomatik keladi.',
   ].join('\n');
@@ -111,10 +107,6 @@ export async function handleStaffMessage(msg) {
     await showTodayOrders(staff, restaurant);
     return true;
   }
-  if (text === MENU.settings || /^\/sozlama/i.test(text) || /sozlama/i.test(text)) {
-    await showSettings(staff);
-    return true;
-  }
 
   await sendMainMenu(staff.telegramUserId, { restaurantName: restaurant?.name });
   return true;
@@ -141,125 +133,7 @@ export async function handleMenuCallback(cq) {
     await showTodayOrders(staff, restaurant, { editMessageId });
     return;
   }
-  if (action === 'set') {
-    await answerCallback(cq.id);
-    await showSettings(staff, { editMessageId });
-    return;
-  }
-  if (action === 'sig') {
-    await toggleSignal(cq, staff, String(cq.data || '').split(':')[2], editMessageId);
-    return;
-  }
   await answerCallback(cq.id);
-}
-
-/* ═══════════════════════════════════════════════════════════
- * ⚙️ SOZLAMALAR — OVOZLI SIGNAL
- * ═══════════════════════════════════════════════════════════
- *
- * Ikkita tugma: buyurtma signali va bron signali. Har xodim
- * O'ZI uchun yoqadi/o'chiradi — tanlov bazada saqlanadi va
- * telefon o'chsa ham, server qayta ishga tushsa ham esda qoladi.
- *
- * Signal o'chirilsa ham buyurtma va bron KARTALARI baribir
- * keladi — faqat ovozli xabar yuborilmaydi.
- */
-const SIGNAL_LABEL = {
-  order: '🔔 Buyurtma signali',
-  reservation: '🔔 Bron signali',
-};
-
-function settingsKeyboard(staff) {
-  const rows = Object.keys(SIGNAL_LABEL).map((kind) => {
-    const on = signalEnabled(staff, kind);
-    return [btn(
-      `${SIGNAL_LABEL[kind]}: ${on ? 'YOQILGAN ✅' : 'O‘CHIQ 🔇'}`,
-      `m:sig:${kind}`,
-      on ? 'success' : 'danger',
-    )];
-  });
-  return { inline_keyboard: rows };
-}
-
-function settingsText(staff) {
-  const lines = [
-    '⚙️ <b>Sozlamalar — ovozli signal</b>',
-    '',
-    'Yoqilsa, buyurtma kartasidan keyin qo‘shimcha <b>ovozli xabar</b>',
-    'yuboriladi. Telegram uni avtomatik chalmaydi — bosib tinglaysiz.',
-    '',
-    '💡 Eng baland ogohlantirish uchun: shu bot chatini oching →',
-    'Bildirishnomalar → ohangni tanlang. Bu avtomatik ishlaydi.',
-    '',
-  ];
-  const off = Object.keys(SIGNAL_LABEL).filter((k) => !signalEnabled(staff, k));
-  if (off.length === 2) {
-    lines.push('🔇 Ikkala ovozli signal ham o‘chiq — faqat buyurtma kartalari keladi.');
-  } else if (off.length === 1) {
-    lines.push(`🔇 ${SIGNAL_LABEL[off[0]].replace('🔔 ', '')} o‘chirilgan.`);
-  } else {
-    lines.push('✅ Ikkala signal ham yoqilgan.');
-  }
-  lines.push('');
-  lines.push('<i>Signal o‘chsa ham buyurtma va bron xabarlari to‘xtamaydi.</i>');
-  return lines.join('\n');
-}
-
-export async function showSettings(staff, { editMessageId } = {}) {
-  await sendOrEdit(staff, settingsText(staff), settingsKeyboard(staff), editMessageId);
-}
-
-async function toggleSignal(cq, staff, kind, editMessageId) {
-  if (!SIGNAL_LABEL[kind]) {
-    await answerCallback(cq.id);
-    return;
-  }
-
-  /*
-   * Atomik o'zgartirish: xodim tugmani tez-tez bossa ham holat
-   * chalkashmaydi, natija BAZADAN o'qiladi (ekrandagi eski
-   * nusxadan emas).
-   */
-  const next = !signalEnabled(staff, kind);
-  const updated = await RestaurantTelegramStaff.findOneAndUpdate(
-    { _id: staff._id },
-    { $set: { [`signals.${kind}`]: next } },
-    { new: true },
-  ).lean();
-
-  if (!updated) {
-    await answerCallback(cq.id, 'Saqlanmadi, qayta urinib ko‘ring', { alert: true });
-    return;
-  }
-
-  const on = signalEnabled(updated, kind);
-  await answerCallback(cq.id, on
-    ? `${SIGNAL_LABEL[kind]} yoqildi`
-    : `${SIGNAL_LABEL[kind]} o‘chirildi 🔇`);
-  await showSettings(updated, { editMessageId });
-}
-
-async function sendOrEdit(staff, text, keyboard, editMessageId) {
-  if (editMessageId) {
-    const res = await editStaffMessage(staff.telegramUserId, editMessageId, text, keyboard);
-    // Xabar juda eski/o'chirilgan bo'lsa — yangisini yuboramiz
-    if (res?.ok || /not modified/i.test(res?.description || '')) return;
-  }
-  await sendToStaff(staff.telegramUserId, text, keyboard);
-}
-
-function clip(lines) {
-  const out = [];
-  let len = 0;
-  for (const l of lines) {
-    if (len + l.length + 1 > MAX_TEXT) {
-      out.push('…');
-      break;
-    }
-    out.push(l);
-    len += l.length + 1;
-  }
-  return out.join('\n');
 }
 
 /* ═══════════════════════════════════════════════════════════
@@ -576,8 +450,6 @@ export async function ensureStaffMenus() {
         `Pastda yangi menyu paydo bo‘ldi (<b>${esc(restaurant?.name || 'Restoran')}</b>):`,
         `${MENU.reservations} — yopilmagan bronlar`,
         `${MENU.today} — bugungi buyurtmalar`,
-        '',
-        `${MENU.settings} — ovozli signalni yoqish/o‘chirish`,
         '',
         'Endi buyurtmani qabul qilgach <b>🚴 Kuryerga ulashish</b> tugmasi ham bor.',
       ].join('\n'),

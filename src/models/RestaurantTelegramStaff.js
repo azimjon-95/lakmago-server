@@ -93,41 +93,12 @@ const restaurantTelegramStaffSchema = new Schema(
     menuVersion: { type: Number, default: 0 },
 
     /*
-     * ═══ OVOZLI SIGNAL SOZLAMASI (HAR XODIM O'ZI UCHUN) ═══
-     *
-     * Botdagi "⚙️ Sozlamalar" menyusidan yoqiladi/o'chiriladi.
-     * Tanlov BAZADA — xodim uni bir marta o'chirsa, telefon
-     * o'chib-yonsa ham, server qayta ishga tushsa ham esda
-     * qoladi (xotiradagi belgi restartda yo'qolardi).
-     *
-     * Bu faqat OVOZLI SIGNALGA tegishli: buyurtma va bron
-     * kartalari baribir keladi, hech narsa yo'qolmaydi.
-     *
-     * default: true — yangi xodim signalni oladi; eski
-     * yozuvlarda maydon yo'q bo'lsa ham (undefined) kod uni
-     * "yoqilgan" deb hisoblaydi.
+     * `signals` maydoni OLIB TASHLANDI — ovozli signal
+     * funksiyasi butunlay o'chirildi (Telegram ovozni avtomatik
+     * chalmaydi, alohida ovozli xabar esa faqat suhbatni
+     * to'ldirardi). Eski yozuvlardagi maydon bazada qoladi,
+     * lekin hech qayerda o'qilmaydi.
      */
-    /*
-     * STANDART HOLAT: O'CHIRILGAN.
-     *
-     * Telegram botga ovozni AVTOMATIK chaldirish imkoni yo'q —
-     * platforma buni taqiqlaydi. Shu sababli signal alohida
-     * ovozli xabar bo'lib kelardi va suhbatni "🔔 Yangi buyurtma
-     * signali" yozuvlari bilan to'ldirib yuborardi. Xodimlar
-     * uni chiroyli emas deb topdi.
-     *
-     * Endi buyurtma haqida XABARNING O'ZI (karta) keladi —
-     * telefon Telegram bildirishnomasi bilan jiringlaydi. Ovozli
-     * xabar esa faqat xodim uni ⚙️ Sozlamalardan ATAYLAB yoqsa
-     * yuboriladi.
-     *
-     * Eng baland ogohlantirish kerak bo'lsa: Telegramda bot
-     * chatining bildirishnoma ohangini o'zgartirish yetarli.
-     */
-    signals: {
-      order: { type: Boolean, default: false },
-      reservation: { type: Boolean, default: false },
-    },
   },
   { timestamps: true },
 );

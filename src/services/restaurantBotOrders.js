@@ -8,7 +8,6 @@ import { DeliveryAssignment } from '../models/DeliveryAssignment.js';
 import { getIO } from '../sockets/io.js';
 import { orderLabel } from './orderNumber.js';
 import { createShareLink, buildShareUrls } from './courierDispatch.js';
-import { sendSignal } from './restaurantBotSignal.js';
 import {
   isRestaurantBotEnabled,
   sendToStaff,
@@ -271,7 +270,7 @@ export async function activeStaff(restaurantId) {
     restaurantId,
     isActive: true,
     telegramUserId: { $ne: null },
-  }).select('telegramUserId firstName username signals').lean();
+  }).select('telegramUserId firstName username').lean();
 }
 
 async function rememberMessage(res, { refId, telegramUserId, kind }) {
@@ -309,12 +308,18 @@ export async function notifyNewOrder(orderId) {
   }));
 
   /*
-   * Ovozli signal — kartadan KEYIN (xodim avval buyurtmani
-   * ko'rsin). Signal bir marta ketadi; xatosi buyurtma oqimiga
-   * ta'sir qilmaydi, shuning uchun kutilmaydi.
+   * OVOZLI SIGNAL OLIB TASHLANDI.
+   *
+   * Avval kartadan keyin alohida ovozli xabar ("🔔 Yangi
+   * buyurtma signali") yuborilardi. Telegram uni AVTOMATIK
+   * chalmaydi — xodim bosib tinglashi kerak edi, shu sababli
+   * u faqat suhbatni to'ldirib, chalg'itardi.
+   *
+   * Ogohlantirish endi Telegramning O'Z bildirishnomasi orqali:
+   * xabar kelganda telefon jiringlaydi. Baland ovoz kerak bo'lsa
+   * bot chatining bildirishnoma ohangi o'zgartiriladi — u
+   * haqiqatan avtomatik ishlaydi.
    */
-  sendSignal('order', order._id, staff)
-    .catch((e) => console.error('[signal] buyurtma:', e.message));
 }
 
 /*
@@ -703,9 +708,7 @@ export async function notifyNewReservation(reservationId) {
     await rememberMessage(res, { refId: r._id, telegramUserId: s.telegramUserId, kind: 'reservation' });
   }));
 
-  // Ovozli signal — bron kartasidan keyin, bir marta
-  sendSignal('reservation', r._id, staff)
-    .catch((e) => console.error('[signal] bron:', e.message));
+  // Ovozli signal olib tashlandi (yuqoridagi izohga qarang)
 }
 
 /** Bron kartasini bitta xodimga yuborish (ro'yxat / ertalabki eslatma). */
