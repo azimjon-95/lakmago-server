@@ -367,6 +367,38 @@ export const orderController = {
 
     // Olib ketishda yetkazish haqi olinmaydi
     const isPickup = fulfillment === 'pickup';
+
+    /*
+     * ═══ KOORDINATA ZAXIRASI ═══
+     *
+     * Kuryerga mijozning aniq nuqtasi kerak: usiz "Yo'l ko'rsatish"
+     * tugmasi manzil MATNI bo'yicha ishlab, butunlay boshqa joyga
+     * olib borishi mumkin.
+     *
+     * Eski ilova versiyalari koordinatani yubormaydi. Shunday
+     * hollarda foydalanuvchining saqlangan manzillaridan birinchi
+     * YAROQLI koordinata olinadi.
+     *
+     * QAT'IY QOIDA: mijoz yuborgan qiymat HECH QACHON
+     * o'zgartirilmaydi — zaxira faqat u YO'Q bo'lganda ishlaydi.
+     * Olib ketishda umuman kerak emas.
+     */
+    let finalLat = addressLat;
+    let finalLng = addressLng;
+
+    if (!isPickup && (finalLat == null || finalLng == null) && req.userId) {
+      const owner = await User.findById(req.userId).select('addresses').lean().catch(() => null);
+      const saved = (owner?.addresses || []).find((a) => (
+        typeof a?.lat === 'number' && typeof a?.lng === 'number'
+        && Number.isFinite(a.lat) && Number.isFinite(a.lng)
+      ));
+      if (saved) {
+        finalLat = saved.lat;
+        finalLng = saved.lng;
+        console.log(`[manzil] Koordinata saqlangan manzildan olindi (user ${req.userId})`);
+      }
+    }
+
     const groupId = 'G' + Date.now() + Math.floor(Math.random() * 1000);
     const io = getIO();
 
@@ -503,7 +535,7 @@ export const orderController = {
       if (!isPickup) {
         const quote = await quoteDelivery(
           rest,
-          { lat: addressLat, lng: addressLng },
+          { lat: finalLat, lng: finalLng },
           o.subtotal,
         );
 
@@ -770,8 +802,8 @@ export const orderController = {
         paymentLabel,
         cardLast4,
         cardBrand,
-        addressLat: addressLat ?? null,
-        addressLng: addressLng ?? null,
+        addressLat: finalLat ?? null,
+        addressLng: finalLng ?? null,
         addressNote: addressNote || '',
         ...(o._distanceKm != null ? { distanceKm: o._distanceKm } : {}),
         etaMinutes: o.etaMinutes,
