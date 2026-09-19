@@ -40,9 +40,16 @@ let f=0; const ok=(c,m)=>{console.log(c?'  ✓':'  ✗ FAIL:',m); if(!c)f++;};
 // MIJOZ TANLAGAN MANZIL (Toshkent, Chilonzor)
 const LAT=41.2856, LNG=69.2034;
 
+/*
+ * Ish vaqti 00:00–23:59: test SUTKANING ISTALGAN paytida
+ * ishlashi kerak. Avval standart 09:00–23:00 qolgandi va test
+ * kechqurun ishga tushirilganda "restoran yopiq" deb yiqilardi.
+ */
 const rest=await Restaurant.create({name:'TOTLI',cuisine:'milliy',category:'restoran',
   lat:41.3111,lng:69.2797,deliveryEnabled:true,deliveryFee:15000,
-  delivery:{maxDistanceKm:0},address:'Sang senter'});
+  delivery:{maxDistanceKm:0},address:'Sang senter',
+  openTime:'00:00',closeTime:'23:59',isActive:true,isApproved:true,
+  workingDays:['mon','tue','wed','thu','fri','sat','sun']});
 await CommissionAgreement.create({restaurantId:rest._id,restaurantCommissionPercent:10,
   customerFeePercent:0,effectiveFrom:new Date()});
 const dish=await Dish.create({restaurantId:rest._id,section:'menu',name:'Pasta',price:10000});

@@ -104,7 +104,7 @@ export const restaurantController = {
     );
 
     const restaurants = await cached(cacheKey, TTL.catalog, () => Restaurant.find(filter)
-      .select('name cuisine category kind rating reviewCount deliveryMin deliveryMax deliveryFee freeDeliveryThreshold minOrderAmount discount isFresh tint icon images imageUrl createdAt pickupEnabled deliveryEnabled pickupDiscountPercent prepMinutes shopTypes openTime closeTime timezone workingDays')
+      .select('name cuisine category kind rating reviewCount deliveryMin deliveryMax deliveryFee freeDeliveryThreshold minOrderAmount discount isFresh tint icon images imageUrl createdAt pickupEnabled deliveryEnabled cashEnabled delivery pickupDiscountPercent prepMinutes shopTypes openTime closeTime timezone workingDays')
       .sort({ createdAt: -1 })
       .limit(limit + 1)
       .lean());

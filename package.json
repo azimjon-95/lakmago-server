@@ -13,12 +13,13 @@
     "bot": "node scripts/bot-tekshir.js",
     "sync:banners": "node scripts/sync-banners.js",
     "seed:catalog": "node scripts/seed-catalog.js",
-    "test": "node tests/webhook-guard.test.mjs && node tests/finance.test.mjs && node tests/refund.test.mjs",
+    "test": "node tests/webhook-guard.test.mjs && node tests/finance.test.mjs && node tests/refund.test.mjs && node tests/delivery-pricing.test.mjs",
     "test:flow": "node tests/finance-flow.test.mjs",
     "report:legacy-finance": "node scripts/legacy-finance-report.js",
     "test:tz": "node tests/tz-finance.test.mjs",
     "test:broadcast": "node tests/bot-broadcast.test.mjs",
     "test:menu": "node tests/bot-menu.test.mjs",
+    "test:delivery": "node tests/delivery-pricing.test.mjs",
     "test:coords": "node tests/coords-chain.test.mjs"
   },
   "dependencies": {

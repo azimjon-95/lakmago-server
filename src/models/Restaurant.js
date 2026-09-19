@@ -103,6 +103,24 @@ const restaurantSchema = new Schema(
     delivery: {
       // Yetkazish radiusi (km). 0 = cheklov yo'q
       maxDistanceKm: { type: Number, default: 10 },
+
+      /*
+       * NARX REJIMI:
+       *   'flat'  — bitta qat'iy narx (`deliveryFee`)
+       *   'perKm' — masofaga qarab: `freeKm` dan keyin har km
+       *             uchun `perKm` so'm
+       *
+       * Ikkala rejimda ham `freeDeliveryThreshold` (bepul
+       * chegarasi) va `minOrderAmount` ishlaydi.
+       *
+       * default 'flat' — mavjud restoranlar avvalgidek ishlaydi.
+       */
+      pricingMode: { type: String, enum: ['flat', 'perKm'], default: 'flat' },
+
+      // perKm rejimi uchun: shu masofagacha yetkazish bepul
+      freeKm: { type: Number, default: 0, min: 0, max: 200 },
+      // perKm rejimi uchun: bepul masofadan keyin har km narxi
+      perKm: { type: Number, default: 0, min: 0, max: 1000000 },
     },
     // Shu summadan boshlab yetkazish bepul. 0 = doim pullik
     freeDeliveryThreshold: { type: Number, default: 0 },
@@ -193,6 +211,17 @@ const restaurantSchema = new Schema(
     // ===== OLIB KETISH (pickup) =====
     // Muassasa o'zi olib ketishni qabul qiladimi
     pickupEnabled: { type: Boolean, default: true },
+
+    /*
+     * Naqd pul qabul qilinadimi.
+     *
+     * O'chirilsa mijoz shu restorandan FAQAT karta orqali
+     * buyurtma bera oladi: savatda "Naqd" tanlovi ko'rinmaydi
+     * va server ham bunday buyurtmani rad etadi.
+     *
+     * default: true — mavjud restoranlar avvalgidek ishlaydi.
+     */
+    cashEnabled: { type: Boolean, default: true },
     // Olib ketishda chegirma (foizda) — mijozni rag'batlantirish
     pickupDiscountPercent: { type: Number, default: 0 },
 

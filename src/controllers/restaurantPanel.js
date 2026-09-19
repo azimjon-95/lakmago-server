@@ -351,6 +351,10 @@ export const restaurantPanelController = {
        */
       delivery: z.object({
         maxDistanceKm: z.number().min(0).max(200).optional(),
+        // Narx rejimi: qat'iy narx yoki kilometr bo'yicha
+        pricingMode: z.enum(['flat', 'perKm']).optional(),
+        freeKm: z.number().min(0).max(200).optional(),
+        perKm: z.number().min(0).max(1000000).optional(),
       }).optional(),
       openTime: z.string().regex(/^\d{2}:\d{2}$/).optional(),
       closeTime: z.string().regex(/^\d{2}:\d{2}$/).optional(),
@@ -364,6 +368,9 @@ export const restaurantPanelController = {
 
       // Yetkazish xizmati umuman bormi
       deliveryEnabled: z.boolean().optional(),
+
+      // Naqd pul qabul qilinadimi (o'chirilsa faqat karta)
+      cashEnabled: z.boolean().optional(),
 
       // Olib ketish
       pickupEnabled: z.boolean().optional(),

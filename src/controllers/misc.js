@@ -413,7 +413,7 @@ export const orderController = {
 
     const restIds = orders.map((o) => o.restaurantId);
     const restDocs = await Restaurant.find({ _id: { $in: restIds } })
-      .select('name deliveryFee freeDeliveryThreshold minOrderAmount serviceFeePercent serviceFeeMin serviceFeeMax prepMinutes openTime closeTime timezone workingDays isActive isBlocked isApproved pickupEnabled deliveryEnabled pickupDiscountPercent lat lng delivery')
+      .select('name deliveryFee freeDeliveryThreshold minOrderAmount serviceFeePercent serviceFeeMin serviceFeeMax prepMinutes openTime closeTime timezone workingDays isActive isBlocked isApproved pickupEnabled deliveryEnabled cashEnabled pickupDiscountPercent lat lng delivery')
       .lean();
     const restMap = new Map(restDocs.map((r) => [String(r._id), r]));
 
@@ -459,6 +459,22 @@ export const orderController = {
         return res.status(400).json({
           error: `${rest.name} yetkazib berish xizmatini ko'rsatmaydi — o'zingiz olib ketishingiz mumkin`,
           code: 'DELIVERY_DISABLED',
+          restaurantId: String(o.restaurantId),
+        });
+      }
+
+      /*
+       * Naqd qabul qilinadimi.
+       *
+       * Mijoz ilovasi bunday restoranda "Naqd" tanlovini
+       * ko'rsatmaydi, lekin savat eski ochilgan yoki so'rov
+       * qo'lda yuborilgan bo'lishi mumkin — shuning uchun
+       * server ham tekshiradi.
+       */
+      if (paymentMethod === 'cash' && rest.cashEnabled === false) {
+        return res.status(400).json({
+          error: `${rest.name} naqd pul qabul qilmaydi — karta orqali to‘lang`,
+          code: 'CASH_DISABLED',
           restaurantId: String(o.restaurantId),
         });
       }

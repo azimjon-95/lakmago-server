@@ -105,8 +105,8 @@ export async function roadDistanceKm(from, to) {
  *   • 0 bo'lsa — yetkazish BEPUL;
  *   • buyurtma summasi `freeDeliveryThreshold` dan oshsa — bepul;
  *   • `deliveryEnabled = false` bo'lsa — yetkazish umuman yo'q;
- *   • masofa faqat RADIUSNI tekshirish uchun ishlatiladi
- *     (`delivery.maxDistanceKm`), narxga ta'sir qilmaydi.
+ *   • masofa radiusni tekshiradi va perKm rejimida narxga
+ *     ta'sir qiladi (`delivery.pricingMode`).
  *
  * @param {number}  distanceKm  haqiqiy yo'l masofasi (km)
  * @param {object}  restaurant  deliveryEnabled, deliveryFee,
@@ -140,11 +140,48 @@ export function calcDeliveryPrice(distanceKm, restaurant, subtotal = 0) {
     };
   }
 
-  const fee = Math.max(0, Math.round(Number(restaurant?.deliveryFee) || 0));
+  /*
+   * ═══ NARXNI HISOBLASH ═══
+   *
+   * Ikki rejim:
+   *   flat  — restoran belgilagan bitta narx;
+   *   perKm — bepul masofadan keyin har km uchun narx.
+   *
+   * perKm rejimida masofa NOMA'LUM bo'lsa (koordinata yo'q),
+   * qat'iy narxga qaytamiz: mijozdan noaniq summa olib
+   * bo'lmaydi, "0" deb ko'rsatish esa restoranni zarar qiladi.
+   */
+  const mode = restaurant?.delivery?.pricingMode === 'perKm' ? 'perKm' : 'flat';
+  const flatFee = Math.max(0, Math.round(Number(restaurant?.deliveryFee) || 0));
+
+  let fee = flatFee;
+  let breakdown = null;
+
+  if (mode === 'perKm') {
+    const perKm = Math.max(0, Math.round(Number(restaurant?.delivery?.perKm) || 0));
+    const freeKm = Math.max(0, Number(restaurant?.delivery?.freeKm) || 0);
+
+    if (!Number.isFinite(distanceKm)) {
+      breakdown = { mode: 'perKm', fallback: true, perKm, freeKm };
+    } else {
+      // Bepul masofadan keyingi qism uchun to'lanadi
+      const paidKm = Math.max(0, distanceKm - freeKm);
+      /*
+       * 100 so'mgacha yaxlitlanadi — mijoz "4 733 so'm" kabi
+       * g'alati summani ko'rmasin.
+       */
+      fee = Math.round((paidKm * perKm) / 100) * 100;
+      breakdown = {
+        mode: 'perKm', perKm, freeKm,
+        distanceKm: Math.round(distanceKm * 10) / 10,
+        paidKm: Math.round(paidKm * 10) / 10,
+      };
+    }
+  }
 
   // Narx 0 — yetkazish bepul
   if (fee === 0) {
-    return { available: true, price: 0, free: true, distanceKm, maxKm };
+    return { available: true, price: 0, free: true, distanceKm, maxKm, breakdown };
   }
 
   /*
@@ -154,10 +191,10 @@ export function calcDeliveryPrice(distanceKm, restaurant, subtotal = 0) {
    */
   const threshold = Math.max(0, Number(restaurant?.freeDeliveryThreshold) || 0);
   if (threshold > 0 && Number(subtotal) >= threshold) {
-    return { available: true, price: 0, free: true, distanceKm, maxKm, threshold };
+    return { available: true, price: 0, free: true, distanceKm, maxKm, threshold, breakdown };
   }
 
-  return { available: true, price: fee, free: false, distanceKm, maxKm, threshold };
+  return { available: true, price: fee, free: false, distanceKm, maxKm, threshold, breakdown };
 }
 
 /**
