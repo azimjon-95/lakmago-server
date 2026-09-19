@@ -136,6 +136,33 @@ export async function handleMenuCallback(cq) {
   await answerCallback(cq.id);
 }
 
+/**
+ * Ro'yxatni yuboradi yoki mavjudini JOYIDA yangilaydi.
+ * Xabar juda eski/o'chirilgan bo'lsa — yangisini yuboradi.
+ */
+async function sendOrEdit(staff, text, keyboard, editMessageId) {
+  if (editMessageId) {
+    const res = await editStaffMessage(staff.telegramUserId, editMessageId, text, keyboard);
+    if (res?.ok || /not modified/i.test(res?.description || '')) return;
+  }
+  await sendToStaff(staff.telegramUserId, text, keyboard);
+}
+
+/** Telegram chegarasiga sig'dirish (4096 belgi). */
+function clip(lines) {
+  const out = [];
+  let len = 0;
+  for (const l of lines) {
+    if (len + l.length + 1 > MAX_TEXT) {
+      out.push('…');
+      break;
+    }
+    out.push(l);
+    len += l.length + 1;
+  }
+  return out.join('\n');
+}
+
 /* ═══════════════════════════════════════════════════════════
  * 📅 FAOL BRONLAR
  * ═══════════════════════════════════════════════════════════
