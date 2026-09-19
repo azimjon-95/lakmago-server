@@ -18,7 +18,8 @@
     "report:legacy-finance": "node scripts/legacy-finance-report.js",
     "test:tz": "node tests/tz-finance.test.mjs",
     "test:broadcast": "node tests/bot-broadcast.test.mjs",
-    "test:menu": "node tests/bot-menu.test.mjs"
+    "test:menu": "node tests/bot-menu.test.mjs",
+    "test:coords": "node tests/coords-chain.test.mjs"
   },
   "dependencies": {
     "@socket.io/redis-adapter": "^8.3.0",
