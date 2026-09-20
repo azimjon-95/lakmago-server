@@ -11,6 +11,68 @@ import { Reservation } from '../models/Reservation.js';
 import { Ledger } from '../models/Ledger.js';
 import { getIO } from '../sockets/io.js';
 
+/**
+ * ═══ DAROMAD JADVALI — SOF MANTIQ ═══
+ *
+ * Alohida funksiya, chunki bu PUL hisobi: uni bazasiz, to'g'ridan
+ * to'g'ri testdan o'tkazish mumkin bo'lishi kerak.
+ *
+ * Yangi buyurtmalar `order.finance` snapshot'idan (har restoran
+ * O'Z kelishuvi bilan, tiyinda), eski buyurtmalar avvalgi mantiq
+ * bilan qo'shiladi.
+ *
+ * Ko'rsatiladigan foiz HAQIQIY summalardan hisoblanadi
+ * (komissiya ÷ aylanma) — jadvaldagi raqamlar bilan har doim mos
+ * keladi, hatto restoranda kelishuv almashgan bo'lsa ham.
+ */
+export async function mergeRevenueRows({ v2, legacy, restMap, legacyCommission, tiyinToSom }) {
+  const merged = new Map();
+  const touch = (id) => {
+    const key = String(id);
+    if (!merged.has(key)) {
+      merged.set(key, {
+        restaurantId: id,
+        name: restMap.get(key)?.name || 'Nomsiz',
+        orders: 0,
+        gross: 0, platformIncome: 0, restaurantIncome: 0,
+        hasLegacy: false,
+      });
+    }
+    return merged.get(key);
+  };
+
+  for (const r of v2 || []) {
+    const row = touch(r._id);
+    row.orders += r.orders || 0;
+    row.gross += tiyinToSom(r.foodSubtotal || 0);
+    row.platformIncome += tiyinToSom(r.commission || 0);
+    row.restaurantIncome += tiyinToSom(r.restaurantShare || 0);
+  }
+
+  for (const r of legacy || []) {
+    const row = touch(r._id);
+    const { commission, restaurantShare } = await legacyCommission(
+      restMap.get(String(r._id)) || {},
+      r.gross || 0,
+    );
+    row.orders += r.orders || 0;
+    row.gross += r.gross || 0;
+    row.platformIncome += commission;
+    row.restaurantIncome += restaurantShare;
+    row.hasLegacy = true;
+  }
+
+  return [...merged.values()]
+    .map((r) => ({
+      ...r,
+      commissionPercent: r.gross > 0
+        ? Math.round((r.platformIncome / r.gross) * 1000) / 10
+        : 0,
+      commissionMode: 'agreement',
+    }))
+    .sort((a, b) => b.gross - a.gross);
+}
+
 export const adminController = {
   // GET /api/admin/stats — umumiy analitika
   stats: asyncHandler(async (_req, res) => {
@@ -413,55 +475,97 @@ export const adminController = {
   // GET /api/admin/revenue — har muassasa bo'yicha daromad + platforma daromadi
   revenue: asyncHandler(async (_req, res) => {
     /*
-     * ═══ TUZATILDI ═══
+     * ═══ HAR RESTORAN — O'Z KELISHUVI BO'YICHA ═══
      *
-     * ILGARI: BARCHA restoranlarga bitta GLOBAL foiz
-     * (Settings.commissionPercent/commissionMode) qo'llanardi —
-     * restoranning o'ziga individual belgilangan foizi (masalan
-     * 5%, 7%, 15%) butunlay e'tiborsiz qoldirilardi. Har bir
-     * qatordagi "Bizga" summasi haqiqiy emas edi.
+     * XATO TUZATILDI: foiz `resolveCommission()` dan olinardi, u
+     * esa ESKI manbaga qaraydi — `Restaurant.commissionPercent`,
+     * bo'lmasa `Settings.commissionPercent`. Kelishuvlar endi
+     * `CommissionAgreement` da saqlanadi va restoranlarda eski
+     * maydon to'ldirilmagan, shuning uchun HAMMASI umumiy
+     * standartga (10%) tushib qolardi — Totli 5%, Tutti 6%
+     * bo'lsa ham jadvalda 10% ko'rinardi.
      *
-     * ENDI: har bir restoran uchun `resolveCommission()` —
-     * services/billing.js dagi, YAGONA, restoran o'z qiymatiga
-     * ega bo'lsa o'sha, bo'lmasa umumiy standartga tushadigan
-     * funksiya (xuddi buyurtma hisob-kitobida ishlatiladigani).
-     * Ikkita alohida formula endi yo'q.
+     * ENDI: yangi buyurtmalarda hisob `order.finance` SNAPSHOT'idan
+     * olinadi. U buyurtma yaratilganda amal qilgan kelishuv bilan
+     * muzlatilgan, ya'ni:
+     *   • har restoran o'z foizi bilan hisoblanadi;
+     *   • kelishuv keyin o'zgarsa ham eski hisobot o'zgarmaydi.
+     *
+     * Eski (snapshot'siz) buyurtmalar avvalgi mantiq bilan
+     * qo'shiladi — ularni qayta hisoblash o'tmishdagi raqamlarni
+     * buzardi.
      */
     const { resolveCommission, calcCommission } = await import('../services/billing.js');
+    const { tiyinToSom } = await import('../services/orderFinance.js');
 
-    const byRestaurant = await Order.aggregate([
-      { $match: { status: 'delivered' } },
-      { $group: { _id: '$restaurantId', name: { $first: '$restaurantName' }, orders: { $sum: 1 }, gross: { $sum: '$subtotal' } } },
-      { $sort: { gross: -1 } },
+    // ─── Yangi buyurtmalar: snapshot'dan (summalar TIYINDA) ───
+    const v2 = await Order.aggregate([
+      { $match: { status: 'delivered', 'finance.model': 'v2' } },
+      /*
+       * Snapshot maydonlari avval YUZAGA chiqariladi, keyin
+       * guruhlanadi. Ichki yo'l (`$finance.foodSubtotal`) bilan
+       * to'g'ridan-to'g'ri guruhlash ba'zi MongoDB mos
+       * muhitlarida noto'g'ri (nol) natija beradi.
+       */
+      {
+        $project: {
+          restaurantId: 1,
+          foodSubtotal: '$finance.foodSubtotal',
+          commission: '$finance.lokmaGrossCommission',
+          restaurantShare: '$finance.restaurantFoodPayout',
+        },
+      },
+      {
+        $group: {
+          _id: '$restaurantId',
+          orders: { $sum: 1 },
+          foodSubtotal: { $sum: '$foodSubtotal' },
+          commission: { $sum: '$commission' },
+          restaurantShare: { $sum: '$restaurantShare' },
+        },
+      },
     ]);
 
-    const restaurants = await Restaurant.find({ _id: { $in: byRestaurant.map((r) => r._id) } })
-      .select('commissionPercent commissionMode').lean();
+    // ─── Eski buyurtmalar: avvalgi mantiq (summalar SO'MDA) ───
+    const legacy = await Order.aggregate([
+      { $match: { status: 'delivered', 'finance.model': { $ne: 'v2' } } },
+      {
+        $group: {
+          _id: '$restaurantId',
+          orders: { $sum: 1 },
+          gross: { $sum: '$subtotal' },
+        },
+      },
+    ]);
+
+    const ids = [...new Set([...v2, ...legacy].map((r) => String(r._id)))];
+    /*
+     * Nom restoran hujjatidan olinadi, buyurtmadagi nusxadan
+     * emas: restoran nomini o'zgartirsa, hisobotda DOLZARB nom
+     * ko'rinadi (buyurtmadagi nusxa eski nom bilan qolib ketardi).
+     */
+    const restaurants = await Restaurant.find({ _id: { $in: ids } })
+      .select('name commissionPercent commissionMode').lean();
     const restMap = new Map(restaurants.map((r) => [String(r._id), r]));
 
-    const rows = await Promise.all(byRestaurant.map(async (r) => {
-      const restaurant = restMap.get(String(r._id)) || {};
-      const { percent, mode } = await resolveCommission(restaurant);
-      const { commission, restaurantShare } = calcCommission(r.gross, percent, mode);
-      return {
-        restaurantId: r._id,
-        name: r.name,
-        orders: r.orders,
-        gross: r.gross,
-        restaurantIncome: restaurantShare,
-        platformIncome: commission,
-        commissionPercent: percent,
-        commissionMode: mode,
-      };
-    }));
+    const rows = mergeRevenueRows({
+      v2, legacy, restMap,
+      legacyCommission: async (restaurant, gross) => {
+        const { percent, mode } = await resolveCommission(restaurant);
+        return calcCommission(gross, percent, mode);
+      },
+      tiyinToSom,
+    });
 
-    const totalGross = rows.reduce((s, r) => s + r.gross, 0);
-    const totalPlatform = rows.reduce((s, r) => s + r.platformIncome, 0);
-    const totalRestaurant = rows.reduce((s, r) => s + r.restaurantIncome, 0);
+    const resolved = await rows;
 
     res.json({
-      rows,
-      totals: { gross: totalGross, platform: totalPlatform, restaurant: totalRestaurant },
+      rows: resolved,
+      totals: {
+        gross: resolved.reduce((s, r) => s + r.gross, 0),
+        platform: resolved.reduce((s, r) => s + r.platformIncome, 0),
+        restaurant: resolved.reduce((s, r) => s + r.restaurantIncome, 0),
+      },
     });
   }),
 

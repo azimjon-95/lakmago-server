@@ -20,7 +20,8 @@
     "test:broadcast": "node tests/bot-broadcast.test.mjs",
     "test:menu": "node tests/bot-menu.test.mjs",
     "test:delivery": "node tests/delivery-pricing.test.mjs",
-    "test:coords": "node tests/coords-chain.test.mjs"
+    "test:coords": "node tests/coords-chain.test.mjs",
+    "test:revenue": "node tests/revenue.test.mjs"
   },
   "dependencies": {
     "@socket.io/redis-adapter": "^8.3.0",
