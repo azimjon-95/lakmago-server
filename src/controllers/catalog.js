@@ -198,6 +198,8 @@ export const restaurantController = {
         'serviceFeePercent', 'serviceFeeMin', 'serviceFeeMax',
         'pickupEnabled', 'pickupDiscountPercent',
         'deliveryEnabled',
+        // Naqd qabul qilinadimi — savatda to'lov tanlovi uchun
+        'cashEnabled',
         'prepMinutes',
         'shopTypes',
         'reservationEnabled', 'reservationNote',
