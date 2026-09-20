@@ -236,11 +236,38 @@ function broadcast(order) {
   const io = getIO();
   if (!io) return;
 
-  // Mijoz — buyurtma kuzatuvi sahifasi
-  io.to(`order:${order._id}`).emit('order:status', {
+  const payload = {
     orderId: String(order._id),
     status: order.status,
-  });
+    restaurantId: String(order.restaurantId || ''),
+  };
+
+  // Mijoz — buyurtma kuzatuvi sahifasi (bitta buyurtma ochiq)
+  io.to(`order:${order._id}`).emit('order:status', payload);
+
+  /*
+   * Mijoz — BUYURTMALAR RO'YXATI.
+   *
+   * XATO TUZATILDI: holat faqat `order:<id>` xonasiga ketardi,
+   * unga esa faqat kuzatuv sahifasi qo'shilardi. Ro'yxat sahifasi
+   * `user:<id>` xonasida turardi va hech narsa olmasdi — mijoz
+   * buyurtma qabul qilinganini ko'rish uchun sahifani qo'lda
+   * yangilashi kerak edi.
+   *
+   * Endi holat foydalanuvchi xonasiga ham boradi. Ro'yxat sahifasi
+   * allaqachon shu hodisani tinglaydi — qo'shimcha o'zgarish
+   * shart emas.
+   */
+  /*
+   * DIQQAT: `userId` `populate()` qilingan bo'lishi mumkin —
+   * u holda bu butun User hujjati, ObjectId emas. To'g'ridan
+   * to'g'ri satrga aylantirilsa xona nomi butunlay boshqa
+   * chiqadi va xabar hech kimga bormaydi.
+   */
+  const uid = order.userId?._id || order.userId;
+  if (uid) {
+    io.to(`user:${uid}`).emit('order:status', payload);
+  }
 
   // Restoran paneli
   io.to(`restaurant:${order.restaurantId}`).emit('order:update', order);
