@@ -3,6 +3,46 @@ import { asyncHandler } from '../middleware/error.js';
 import { Ledger } from '../models/Ledger.js';
 import { Restaurant } from '../models/Restaurant.js';
 import { recordPayout, getRestaurantSummary, getAllRestaurantsOrderCounts } from '../services/billing.js';
+import { Order } from '../models/Order.js';
+import { tiyinToSom } from '../services/orderFinance.js';
+
+/*
+ * ═══ CLICK ULUSHI ═══
+ *
+ * To'lov tizimi mijoz to'lovidan 1.5% ushlab qoladi va qolganini
+ * LokmaGo hisobiga tashlaydi. Bu xarajat LokmaGo ULUSHIDAN
+ * chiqadi — restoran ulushi undan kamaymaydi.
+ *
+ * Shuning uchun moliya bo'limida uchta raqam ko'rsatiladi:
+ *   Komissiya (brutto) — kelishuv bo'yicha LokmaGo daromadi
+ *   Click 1.5%         — to'lov tizimi ushlagani
+ *   Sof daromad        — brutto − Click
+ *
+ * Summalar buyurtmaning `finance` snapshot'idan olinadi (u
+ * buyurtma paytidagi shartlar bilan muzlatilgan). Naqd
+ * buyurtmalarda Click haqi 0 — u hech qanday shlyuzga tegmaydi.
+ *
+ * Eski (snapshot'siz) buyurtmalarda bu ma'lumot yo'q: o'sha
+ * paytda Click haqi alohida yozilmasdi. Ular 0 sifatida
+ * qo'shiladi va hisobotda "legacy" deb ajratilmaydi — brutto
+ * raqam baribir to'g'ri.
+ */
+export async function clickFeeByRestaurant() {
+  const rows = await Order.aggregate([
+    { $match: { 'finance.model': 'v2', 'finance.clickFeeAmount': { $gt: 0 } } },
+    { $project: { restaurantId: 1, fee: '$finance.clickFeeAmount' } },
+    { $group: { _id: '$restaurantId', fee: { $sum: '$fee' } } },
+  ]).catch(() => []);
+
+  const map = new Map();
+  let total = 0;
+  for (const r of rows) {
+    const som = tiyinToSom(r.fee || 0);
+    map.set(String(r._id), som);
+    total += som;
+  }
+  return { map, total };
+}
 
 export const billingController = {
   // GET /api/admin/billing/overview — umumiy holat
@@ -25,14 +65,26 @@ export const billingController = {
       { $group: { _id: null, totalDebt: { $sum: '$balance' } } },
     ]);
 
+    const { total: clickFee } = await clickFeeByRestaurant();
+
+    const komissiya = t.commission || 0;
+    const qaytarilgan = Math.abs(t.refund || 0);
+
     res.json({
       tushum: t.payment_in || 0,
-      komissiya: t.commission || 0,
+      komissiya,
       restoranlarUlushi: t.restaurant_due || 0,
       tolangan: Math.abs(t.payout || 0),
-      qaytarilgan: Math.abs(t.refund || 0),
-      // Platformada qolgan: komissiya − qaytarilgan
-      platformaDaromadi: (t.commission || 0) - Math.abs(t.refund || 0),
+      qaytarilgan,
+      // To'lov tizimi ushlagan summa — LokmaGo ulushidan chiqadi
+      clickFee,
+      /*
+       * Platformada QOLGAN pul: kelishuv bo'yicha komissiya,
+       * minus to'lov tizimi haqi, minus qaytarilganlar.
+       */
+      platformaDaromadi: komissiya - clickFee - qaytarilgan,
+      // Click ayirilmasidan oldingi summa (solishtirish uchun)
+      komissiyaBrutto: komissiya,
       restoranlargaQarz: totalDebt,
     });
   }),
@@ -68,6 +120,7 @@ export const billingController = {
 
     const map = new Map(rows.map((r) => [String(r._id), r.types]));
     const counts = await getAllRestaurantsOrderCounts(req.query.from, req.query.to);
+    const { map: clickMap } = await clickFeeByRestaurant();
 
     res.json(restaurants.map((r) => {
       const types = Object.fromEntries(
@@ -80,7 +133,11 @@ export const billingController = {
         commissionPercent: r.commissionPercent,
         commissionMode: r.commissionMode,
         tushum: types.payment_in || 0,
+        // Kelishuv bo'yicha LokmaGo daromadi (Click ayirilmagan)
         komissiya: types.commission || 0,
+        // To'lov tizimi ushlagani — shu komissiya ICHIDAN chiqadi
+        clickFee: clickMap.get(String(r._id)) || 0,
+        sofKomissiya: (types.commission || 0) - (clickMap.get(String(r._id)) || 0),
         balans: r.balance || 0,
         tolangan: r.totalPaidOut || 0,
         // Naqd/karta buyurtma soni — tanlangan sana oralig'i bo'yicha
