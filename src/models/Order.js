@@ -6,7 +6,19 @@ const orderItemSchema = new Schema(
     name: { type: String, required: true },
     quantity: { type: Number, required: true },
     unitPrice: { type: Number, required: true },
-    selectedOptions: [{ name: String, price: Number }],
+    /*
+     * Tanlangan hajm va qo'shimchalar.
+     * `group` — qaysi guruhdan ("Porsiya hajmi"), `variant` — hajm
+     * (narxni almashtirgan) yoki qo'shimcha. Restoran oshxonada
+     * AYNAN qaysi hajmni tayyorlashni shundan biladi.
+     * Eski yozuvlarda faqat name/price bor — ular ham o'qiladi.
+     */
+    selectedOptions: [{
+      name: String,
+      price: Number,
+      group: { type: String, default: undefined },
+      variant: { type: Boolean, default: undefined },
+    }],
 
     // Taomga izoh: "avokadosiz", "achchiq qilmang"
     note: { type: String },

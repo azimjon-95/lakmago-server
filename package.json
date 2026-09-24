@@ -22,7 +22,8 @@
     "test:delivery": "node tests/delivery-pricing.test.mjs",
     "test:coords": "node tests/coords-chain.test.mjs",
     "test:revenue": "node tests/revenue.test.mjs",
-    "test:agreement": "node tests/agreement-chain.test.mjs"
+    "test:agreement": "node tests/agreement-chain.test.mjs",
+    "test:variants": "node tests/dish-variants.test.mjs"
   },
   "dependencies": {
     "@socket.io/redis-adapter": "^8.3.0",

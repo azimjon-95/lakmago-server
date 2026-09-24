@@ -196,6 +196,22 @@ export function buildOrderText(order, { actorName = '', assignment = null, tz = 
     const sum = (Number(it.unitPrice) || 0) * (Number(it.quantity) || 0);
     const url = images?.get(String(it.dishId || ''));
     lines.push(`${Number(it.quantity) || 0}× ${dishName(it.name, url)} — ${som(sum)} so‘m`);
+
+    /*
+     * Hajm va qo'shimchalar — oshxona AYNAN nimani tayyorlashni
+     * bilishi uchun. Hajm alohida belgi bilan ajratiladi: u
+     * butun taomni belgilaydi, qo'shimcha esa ustiga keladi.
+     */
+    const opts = it.selectedOptions || [];
+    const variants = opts.filter((o) => o.variant);
+    const addons = opts.filter((o) => !o.variant);
+    if (variants.length) {
+      lines.push(`   📏 <b>${variants.map((o) => esc(o.name)).join(', ')}</b>`);
+    }
+    if (addons.length) {
+      lines.push(`   ➕ ${addons.map((o) => esc(o.name)).join(', ')}`);
+    }
+
     if (it.note) lines.push(`   <i>${esc(it.note)}</i>`);
   }
   if (images?.size) lines.push('<i>Rasmini ko‘rish uchun taom nomini bosing</i>');

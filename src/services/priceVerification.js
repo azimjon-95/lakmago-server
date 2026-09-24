@@ -1,4 +1,5 @@
 import { Dish } from '../models/Dish.js';
+import { isVariantGroup } from './dishVariants.js';
 
 /*
  * ═══════════════════════════════════════════════════════════
@@ -62,24 +63,73 @@ export async function verifyItemPrices(items, restaurantId) {
       return { ...item, quantity: qty, unitPrice: unit };
     }
 
-    // Tanlovlar narxi — faqat bazada MAVJUD bo'lganlari
+    /*
+     * Tanlovlar narxi — faqat bazada MAVJUD bo'lganlari.
+     *
+     * Har tanlov qaysi guruhga tegishli ekani ham yoziladi:
+     *   variant (hajm/razmer) — narxi taom narxini ALMASHTIRADI;
+     *   addon (qo'shimcha)    — narxi QO'SHILADI.
+     * Avval hammasi qo'shilardi va hajmli taomda (pitsa 33/40 sm)
+     * mijozdan ikki-uch barobar ko'p pul olinardi.
+     *
+     * Mantiq mijoz ilovasi bilan AYNAN bir xil (dishVariants.js).
+     */
     const allowed = new Map();
     for (const g of dish.optionGroups || []) {
-      for (const o of g.options || []) allowed.set(o.name, Number(o.price) || 0);
+      const variant = isVariantGroup(g, dish.price);
+      for (const o of g.options || []) {
+        allowed.set(o.name, { price: Number(o.price) || 0, variant, group: g.title });
+      }
     }
 
-    let optionsSom = 0;
-    const selected = (item?.selectedOptions || []).map((o) => {
-      const realPrice = allowed.get(o?.name);
-      if (realPrice === undefined) {
-        mismatches.push({ dishId: String(dish._id), reason: `noma'lum tanlov: ${o?.name}` });
-        return { name: o?.name, price: 0 };
-      }
-      optionsSom += realPrice;
-      return { name: o.name, price: realPrice };
-    });
+    let basePrice = Math.round(Number(dish.price) || 0);
+    let addonsSom = 0;
+    let variantChosen = null;
 
-    const serverUnit = Math.round(Number(dish.price) || 0) + optionsSom;
+    const selected = [];
+    for (const o of item?.selectedOptions || []) {
+      const real = allowed.get(o?.name);
+      if (!real) {
+        mismatches.push({ dishId: String(dish._id), reason: `noma'lum tanlov: ${o?.name}` });
+        continue;
+      }
+      if (real.variant) {
+        /*
+         * Bitta taomda faqat BITTA hajm. Ikkinchisi kelsa
+         * (eski ilova yoki soxta so'rov) — e'tiborsiz qoldiriladi.
+         */
+        if (variantChosen) {
+          mismatches.push({ dishId: String(dish._id), reason: `ortiqcha hajm: ${o.name}` });
+          continue;
+        }
+        variantChosen = o.name;
+        basePrice = Math.round(real.price);
+      } else {
+        addonsSom += real.price;
+      }
+      selected.push({ name: o.name, price: real.price, group: real.group, variant: real.variant });
+    }
+
+    /*
+     * Hajm guruhi bor, lekin mijoz birortasini tanlamagan (eski
+     * ilova) — ENG ARZON variant qo'llanadi. Baza narxi emas:
+     * import xatosi tufayli u variantlardan biriga teng bo'lmasligi
+     * mumkin.
+     */
+    if (!variantChosen) {
+      for (const g of dish.optionGroups || []) {
+        if (!isVariantGroup(g, dish.price)) continue;
+        const cheapest = [...(g.options || [])]
+          .sort((a, b) => (Number(a.price) || 0) - (Number(b.price) || 0))[0];
+        if (cheapest) {
+          basePrice = Math.round(Number(cheapest.price) || 0);
+          selected.unshift({ name: cheapest.name, price: cheapest.price, group: g.title, variant: true });
+        }
+        break;
+      }
+    }
+
+    const serverUnit = basePrice + addonsSom;
     const clientUnit = Math.round(Number(item?.unitPrice) || 0);
 
     if (clientUnit !== serverUnit) {

@@ -304,7 +304,13 @@ const singleOrderSchema = z.object({
     name: z.string(),
     quantity: z.number().int().positive(),
     unitPrice: z.number().nonnegative(),
-    selectedOptions: z.array(z.object({ name: z.string(), price: z.number() })).optional(),
+    selectedOptions: z.array(z.object({
+      name: z.string(),
+      price: z.number(),
+      // Ixtiyoriy — server baribir o'zi aniqlaydi, mijozga ishonmaydi
+      group: z.string().optional(),
+      variant: z.boolean().optional(),
+    }).passthrough()).optional(),
     note: z.string().optional(),
   })).min(1),
   subtotal: z.number(),

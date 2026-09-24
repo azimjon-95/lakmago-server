@@ -14,6 +14,14 @@ const optionGroupSchema = new Schema(
     title: { type: String, required: true },
     required: { type: Boolean, default: false },
     multiple: { type: Boolean, default: false },
+    /*
+     * Guruh turi:
+     *   'addon'   — qo'shimcha, narx QO'SHILADI (avvalgi xatti-harakat)
+     *   'variant' — hajm/razmer, narx ALMASHTIRILADI, bittasi tanlanadi
+     * Yozilmagan bo'lsa (eski ma'lumot) — ehtiyotkor aniqlash
+     * ishlaydi (services/dishVariants.js).
+     */
+    kind: { type: String, enum: ['addon', 'variant'], default: undefined },
     options: [optionSchema]
   },
   { _id: true }

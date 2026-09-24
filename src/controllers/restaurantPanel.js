@@ -37,6 +37,45 @@ function restaurantFinanceView(f) {
   };
 }
 
+/*
+ * ═══ HAJM VA QO'SHIMCHA GURUHLARI — VALIDATSIYA ═══
+ *
+ * Restoran taom qo'shganda (yoki tahrirlaganda) hajm/razmer
+ * yoki qo'shimcha guruhlarini kiritishi mumkin:
+ *
+ *   variant — "Porsiya hajmi": 33 sm — 61 500, 40 sm — 76 875.
+ *             Narx taom narxini ALMASHTIRADI, bittasi tanlanadi.
+ *   addon   — "Qo'shimcha": Pishloq +5 000. Narx QO'SHILADI.
+ *
+ * Qat'iy tekshiruv: bu ma'lumot to'g'ridan-to'g'ri narxga ta'sir
+ * qiladi, noto'g'ri kiritilsa mijozdan noto'g'ri pul olinadi.
+ */
+const optionGroupsSchema = z.array(z.object({
+  title: z.string().trim().min(1, 'Guruh nomi bo‘sh').max(60),
+  kind: z.enum(['addon', 'variant']).default('addon'),
+  required: z.boolean().optional(),
+  multiple: z.boolean().optional(),
+  options: z.array(z.object({
+    name: z.string().trim().min(1, 'Variant nomi bo‘sh').max(60),
+    price: z.number().min(0).max(100000000),
+  })).min(1).max(20),
+})).max(10)
+  .refine(
+    (groups) => groups.every((g) => g.kind !== 'variant' || g.options.length >= 2),
+    { message: 'Hajm guruhida kamida 2 ta variant bo‘lishi kerak' },
+  )
+  .refine(
+    (groups) => groups.filter((g) => g.kind === 'variant').length <= 1,
+    { message: 'Bitta taomda faqat bitta hajm guruhi bo‘lishi mumkin' },
+  )
+  /*
+   * Hajm guruhi har doim: bittasi tanlanadi va tanlash SHART.
+   * Restoran buni noto'g'ri belgilasa ham server to'g'rilaydi.
+   */
+  .transform((groups) => groups.map((g) => (g.kind === 'variant'
+    ? { ...g, required: true, multiple: false }
+    : { ...g, required: Boolean(g.required), multiple: g.multiple !== false })));
+
 export const restaurantPanelController = {
   // GET /api/panel/me — restoranning o'z profili
   profile: asyncHandler(async (req, res) => {
@@ -109,6 +148,8 @@ export const restaurantPanelController = {
       weightGram: z.number().optional(),
       imageUrl: z.string().optional(),
       images: z.array(z.string()).optional(),
+      // Hajm/razmer va qo'shimchalar (ixtiyoriy)
+      optionGroups: optionGroupsSchema.optional(),
     });
     const parsed = schema.safeParse(req.body);
     if (!parsed.success) {
@@ -139,6 +180,23 @@ export const restaurantPanelController = {
     const allowed = ['name', 'description', 'price', 'oldPrice', 'section', 'category', 'prepMinutes', 'icon', 'tint', 'isAvailable', 'isHit', 'isTrending', 'isDiscounted', 'calories', 'weight', 'weightGram', 'protein', 'fat', 'carbs', 'volume', 'drinkType', 'priceMode', 'dineInPrice', 'imageUrl', 'images'];
     const update = {};
     for (const k of allowed) if (k in req.body) update[k] = req.body[k];
+
+    /*
+     * Guruhlar boshqa maydonlardan farqli — ular narxga ta'sir
+     * qiladi, shuning uchun xomligicha EMAS, validatsiyadan
+     * o'tkazilib saqlanadi.
+     */
+    if ('optionGroups' in req.body) {
+      const groups = optionGroupsSchema.safeParse(req.body.optionGroups || []);
+      if (!groups.success) {
+        return res.status(400).json({
+          error: groups.error.issues[0]?.message || 'Hajm/qo‘shimcha noto‘g‘ri',
+          details: groups.error.issues,
+        });
+      }
+      update.optionGroups = groups.data;
+    }
+
     // Faqat o'z taomini o'zgartira olsin
     const dish = await Dish.findOneAndUpdate(
       { _id: req.params.id, restaurantId: rid(req) },
