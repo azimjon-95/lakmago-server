@@ -8,6 +8,7 @@ import { DeliveryAssignment } from '../models/DeliveryAssignment.js';
 import { getIO } from '../sockets/io.js';
 import { orderLabel } from './orderNumber.js';
 import { createShareLink, buildShareUrls } from './courierDispatch.js';
+import { pickupPaymentRow, handlePickupPaid } from './restaurantBotPickup.js';
 import {
   isRestaurantBotEnabled,
   sendToStaff,
@@ -34,8 +35,12 @@ import {
  *   pending    → [✅ Qabul qilish] [❌ Rad etish]
  *   accepted   → [🚴 Kuryerga ulashish] [✅ Tayyor]
  *   ready      → [🚴 Kuryerga ulashish] [🛵 Kuryerga topshirildi]
- *                (olib ketish: [🤝 Mijoz olib ketdi])
+ *                (olib ketish: [🤝 Mijozga topshirildi])
  *   delivering → tugmasiz (kuryer "Topshirdim" bosadi)
+ *
+ * OLIB KETISH + NAQD + hali to'lanmagan: har bosqichda qo'shimcha
+ * [💵 To'lov qilindi] (restaurantBotPickup.js). Taom topshirilgach
+ * ham qoladi — pul keyin olingan bo'lishi mumkin.
  *
  * Kuryerga ulashish OLIB KETISH buyurtmasida ko'rsatilmaydi —
  * u yerda kuryer yo'q. Kuryer topilgach ulashish tugmasi
@@ -164,7 +169,7 @@ function orderStatusLine(order, actorName = '') {
     case 'accepted': return `✅ <b>Qabul qilindi</b>${by}`;
     case 'preparing': return `🍳 <b>Tayyorlanmoqda</b>${by}`;
     case 'ready': return `📦 <b>Tayyor</b>${by}`;
-    case 'delivering': return pickup ? `🤝 <b>Mijoz olib ketdi</b>${by}` : `🛵 <b>Kuryer yo‘lda</b>${by}`;
+    case 'delivering': return pickup ? `🤝 <b>Mijozga topshirildi</b>${by}` : `🛵 <b>Kuryer yo‘lda</b>${by}`;
     case 'delivered': return pickup ? '✅ <b>Olib ketildi</b>' : '✅ <b>Yetkazildi</b>';
     case 'cancelled': {
       const reason = order.cancelReason ? `\n📝 Sabab: ${esc(order.cancelReason)}` : '';
@@ -255,6 +260,9 @@ export function buildOrderKeyboard(order, assignment = null) {
     ? [btn(assignment ? '🔁 Kuryerga qayta ulashish' : '🚴 Kuryerga ulashish', `o:share:${id}`, 'primary')]
     : null;
 
+  // Faqat olib ketish + naqd + to'lanmagan bo'lsa, aks holda null
+  const payRow = pickupPaymentRow(order);
+
   switch (order.status) {
     case 'pending':
       return kb([
@@ -263,10 +271,13 @@ export function buildOrderKeyboard(order, assignment = null) {
       ]);
     case 'accepted':
     case 'preparing':
-      return kb([shareBtn, [btn('✅ Tayyor', `o:ready:${id}`, 'success')]]);
+      return kb([payRow, shareBtn, [btn('✅ Tayyor', `o:ready:${id}`, 'success')]]);
     case 'ready':
-      if (!isDelivery) return kb([[btn('🤝 Mijoz olib ketdi', `o:delivering:${id}`, 'success')]]);
+      if (!isDelivery) return kb([payRow, [btn('🤝 Mijozga topshirildi', `o:delivering:${id}`, 'success')]]);
       return kb([shareBtn, [btn('🛵 Kuryerga topshirildi', `o:delivering:${id}`, 'success')]]);
+    case 'delivering':
+      // Yetkazishda payRow har doim null — avvalgidek tugmasiz
+      return payRow ? kb([payRow]) : null;
     default:
       return null;
   }
@@ -501,6 +512,12 @@ export async function handleOrderCallback(cq) {
     return;
   }
 
+  // Olib ketish — naqd to'lov qabul qilindi (restaurantBotPickup.js)
+  if (action === 'paid') {
+    await handlePickupPaid(cq, staff, orderId);
+    return;
+  }
+
   if (action === 'show') {
     const order = await Order.findOne({ _id: orderId, restaurantId: staff.restaurantId }).lean();
     if (!order) {
@@ -568,7 +585,7 @@ export async function handleOrderCallback(cq) {
     }
 
     const pickup = order?.fulfillment === 'pickup';
-    const toast = action === 'delivering' && pickup ? '🤝 Mijoz olib ketdi' : meta.toast;
+    const toast = action === 'delivering' && pickup ? '🤝 Mijozga topshirildi' : meta.toast;
     await answerCallback(cq.id, toast);
 
     await RestaurantTelegramStaff.updateOne({ _id: staff._id }, { lastActionAt: new Date() });

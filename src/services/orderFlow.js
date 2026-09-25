@@ -220,7 +220,26 @@ async function runSideEffects(order, status) {
   }
 
   const tgId = order.userId?.telegramId;
-  if (tgId && STATUS_TEXT[status]) notifyUser(tgId, STATUS_TEXT[status]);
+  const text = customerStatusText(order, status);
+  if (tgId && text) notifyUser(tgId, text);
+}
+
+/*
+ * Olib ketish buyurtmasida kuryer yo'q — "yo'lga chiqdi, tez orada
+ * yetib keladi" mijozni chalg'itardi: u taomni restoranda qo'lida
+ * ushlab turgan bo'ladi. Faqat pickup uchun ikki matn almashtiriladi,
+ * yetkazib berish xabarlari o'zgarmaydi.
+ */
+const PICKUP_STATUS_TEXT = {
+  ready: '🍽 Buyurtmangiz tayyor — restorandan olib ketishingiz mumkin',
+  delivering: '🤝 Buyurtmangiz sizga topshirildi. Yoqimli ishtaha!',
+};
+
+function customerStatusText(order, status) {
+  if (order?.fulfillment === 'pickup' && PICKUP_STATUS_TEXT[status]) {
+    return PICKUP_STATUS_TEXT[status];
+  }
+  return STATUS_TEXT[status];
 }
 
 /*
