@@ -170,7 +170,7 @@ function orderStatusLine(order, actorName = '') {
     case 'preparing': return `🍳 <b>Tayyorlanmoqda</b>${by}`;
     case 'ready': return `📦 <b>Tayyor</b>${by}`;
     case 'delivering': return pickup ? `🤝 <b>Mijozga topshirildi</b>${by}` : `🛵 <b>Kuryer yo‘lda</b>${by}`;
-    case 'delivered': return pickup ? '✅ <b>Olib ketildi</b>' : '✅ <b>Yetkazildi</b>';
+    case 'delivered': return pickup ? `🤝 <b>Mijozga topshirildi</b>${by}` : '✅ <b>Yetkazildi</b>';
     case 'cancelled': {
       const reason = order.cancelReason ? `\n📝 Sabab: ${esc(order.cancelReason)}` : '';
       return `❌ <b>Bekor qilindi</b>${by}${reason}`;
@@ -273,10 +273,18 @@ export function buildOrderKeyboard(order, assignment = null) {
     case 'preparing':
       return kb([payRow, shareBtn, [btn('✅ Tayyor', `o:ready:${id}`, 'success')]]);
     case 'ready':
-      if (!isDelivery) return kb([payRow, [btn('🤝 Mijozga topshirildi', `o:delivering:${id}`, 'success')]]);
+      if (!isDelivery) return kb([payRow, [btn('🤝 Mijozga topshirildi', `o:handover:${id}`, 'success')]]);
       return kb([shareBtn, [btn('🛵 Kuryerga topshirildi', `o:delivering:${id}`, 'success')]]);
     case 'delivering':
-      // Yetkazishda payRow har doim null — avvalgidek tugmasiz
+      /*
+       * Olib ketish bu holatga faqat eski yo'l bilan tushadi (panel
+       * yoki yangilanishdan oldingi buyurtma) — yakunlash imkoni
+       * beriladi. Yetkazishda avvalgidek tugmasiz.
+       */
+      if (!isDelivery) return kb([payRow, [btn('✅ Yakunlash', `o:handover:${id}`, 'success')]]);
+      return null;
+    case 'delivered':
+      // Olib ketish: taom berilgan, pul hali olinmagan bo'lishi mumkin
       return payRow ? kb([payRow]) : null;
     default:
       return null;
@@ -479,6 +487,9 @@ const ORDER_ACTIONS = {
   preparing: { status: 'preparing', toast: '🍳 Tayyorlanmoqda' },
   ready: { status: 'ready', toast: '✅ Tayyor deb belgilandi' },
   delivering: { status: 'delivering', toast: '🛵 Buyurtma yo‘lga chiqdi' },
+  // Olib ketish: taom mijozga berildi — buyurtma YAKUNLANADI.
+  // orderFlow faqat pickup'ga ruxsat beradi (yetkazishda rad etadi).
+  handover: { status: 'delivered', toast: '🤝 Mijozga topshirildi' },
   reject: { status: 'cancelled', toast: '❌ Buyurtma rad etildi' },
 };
 

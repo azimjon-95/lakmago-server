@@ -31,8 +31,13 @@ import { answerCallback, btn } from './restaurantBotApi.js';
  * ko'rinmasdi.
  */
 
-/** To'lov tugmasi qaysi holatlarda ko'rinadi. */
-const PAYABLE_STATUSES = ['accepted', 'preparing', 'ready', 'delivering'];
+/*
+ * To'lov tugmasi qaysi holatlarda ko'rinadi. 'delivered' ham —
+ * "Mijozga topshirildi" buyurtmani yakunlaydi, xodim esa pulni
+ * undan keyin qayd qilishi mumkin. Komissiya bunga bog'liq emas
+ * (billing.settleOrder isPaid'ga emas, paymentMethod'ga qaraydi).
+ */
+const PAYABLE_STATUSES = ['accepted', 'preparing', 'ready', 'delivering', 'delivered'];
 
 /** Buyurtmaga "To'lov qilindi" tugmasi kerakmi. */
 export function needsPickupCashPayment(order) {

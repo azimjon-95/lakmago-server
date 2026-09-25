@@ -64,12 +64,20 @@ for (const status of ['accepted', 'preparing']) {
   ok(has(kb, 'Mijozga topshirildi'), 'ready: "Mijozga topshirildi" bor');
   ok(!has(kb, 'Kuryerga ulashish') && !has(kb, 'Kuryerga topshirildi'), 'ready: kuryer tugmalari YO‘Q');
   ok(labels(kb)[0].includes('To‘lov'), 'to‘lov tugmasi birinchi qatorda');
+  const handover = flat(kb).find((b) => b.text.includes('Mijozga topshirildi'));
+  ok(handover?.callback_data === `o:handover:${o._id}`, '"Mijozga topshirildi" → o:handover (yakunlaydi)');
+}
+{
+  const o = base({ fulfillment: 'pickup', paymentMethod: 'cash', isPaid: false, status: 'delivered' });
+  const kb = buildOrderKeyboard(o);
+  ok(labels(kb).length === 1 && has(kb, 'To‘lov qilindi'),
+    'topshirilgach (delivered) to‘lanmagan bo‘lsa — faqat "To‘lov qilindi" qoladi');
 }
 {
   const o = base({ fulfillment: 'pickup', paymentMethod: 'cash', isPaid: false, status: 'delivering' });
   const kb = buildOrderKeyboard(o);
-  ok(labels(kb).length === 1 && has(kb, 'To‘lov qilindi'),
-    'topshirilgach ham to‘lanmagan bo‘lsa — faqat "To‘lov qilindi" qoladi');
+  ok(has(kb, 'To‘lov qilindi') && has(kb, 'Yakunlash'),
+    'eski yo‘l (delivering) — to‘lov + "Yakunlash" bor, osilib qolmaydi');
 }
 
 console.log('\n[2] To‘lov tugmasi KERAK BO‘LMAGAN holatlar');
@@ -87,8 +95,12 @@ console.log('\n[2] To‘lov tugmasi KERAK BO‘LMAGAN holatlar');
   const cancelled = base({ fulfillment: 'pickup', paymentMethod: 'cash', isPaid: false, status: 'cancelled' });
   ok(buildOrderKeyboard(cancelled) === null, 'bekor qilingan — tugmasiz');
 
-  const paidDelivering = base({ fulfillment: 'pickup', paymentMethod: 'cash', isPaid: true, status: 'delivering' });
-  ok(buildOrderKeyboard(paidDelivering) === null, 'topshirilgan va to‘langan — tugmasiz');
+  const paidDelivered = base({ fulfillment: 'pickup', paymentMethod: 'cash', isPaid: true, status: 'delivered' });
+  ok(buildOrderKeyboard(paidDelivered) === null, 'topshirilgan (delivered) va to‘langan — tugmasiz');
+  ok(buildOrderText(paidDelivered).includes('Mijozga topshirildi'), 'delivered matni: "Mijozga topshirildi"');
+
+  const cardDelivered = base({ fulfillment: 'pickup', paymentMethod: 'payme', isPaid: true, status: 'delivered' });
+  ok(buildOrderKeyboard(cardDelivered) === null, 'karta bilan yakunlangan — tugmasiz');
 }
 
 console.log('\n[3] REGRESSIYA: YETKAZIB BERISH oqimi o‘zgarmagan');
@@ -171,6 +183,63 @@ console.log('\n[6] Xavfsizlik va chegaralar');
   const cancelled = await mk({ status: 'cancelled' });
   await handlePickupPaid(cq(), staff, String(cancelled._id));
   ok((await Order.findById(cancelled._id).lean()).isPaid === false, 'bekor qilingan buyurtmaga ta‘sir qilmaydi');
+}
+
+/* ═══ YAKUNLASH — orderFlow.changeOrderStatus (bazada) ═══ */
+const { changeOrderStatus } = await import('../src/services/orderFlow.js');
+const { Restaurant } = await import('../src/models/Restaurant.js');
+await Restaurant.create({ _id: rid, name: 'R', cuisine: 'milliy', category: 'restoran', isActive: true });
+const dueCount = async (orderId) => mongoose.connection.db.collection('ledgers')
+  .countDocuments({ orderId, type: 'restaurant_due' });
+const wait = (ms = 300) => new Promise((r) => setTimeout(r, ms));
+
+console.log('\n[7] Olib ketish: "Mijozga topshirildi" buyurtmani YAKUNLAYDI');
+{
+  const o = await mk();
+  const { order, changed } = await changeOrderStatus({ orderId: o._id, restaurantId: rid, status: 'delivered' });
+  ok(changed && order.status === 'delivered', `ready → delivered: ${order.status}`);
+  ok(order.deliveredAt instanceof Date, 'deliveredAt yozildi');
+  await wait();
+  ok(await dueCount(o._id) === 1, 'komissiya DARHOL hisoblandi (restaurant_due yozuvi bor)');
+
+  // Yakunlangandan KEYIN pul olindi — to'lov baribir qayd qilinadi
+  await handlePickupPaid(cq(), staff, String(o._id));
+  const after = await Order.findById(o._id).lean();
+  ok(after.isPaid === true && after.status === 'delivered', 'yakunlangach ham "To‘lov qilindi" ishlaydi');
+  ok(await ledgerCount(o._id) === 1, 'to‘lov jurnalga 1 marta tushdi');
+  ok(await dueCount(o._id) === 1, 'komissiya QAYTA hisoblanmadi');
+}
+{
+  const o = await mk({ status: 'delivering' });
+  const { order } = await changeOrderStatus({ orderId: o._id, restaurantId: rid, status: 'delivered' });
+  ok(order.status === 'delivered', 'eski yo‘l: delivering → delivered ham ishlaydi');
+}
+
+console.log('\n[8] XAVFSIZLIK: yetkazib berishni restoran YAKUNLAY OLMAYDI');
+{
+  const o = await mk({ fulfillment: 'delivery', address: 'Manzil' });
+  let err = null;
+  try { await changeOrderStatus({ orderId: o._id, restaurantId: rid, status: 'delivered' }); } catch (e) { err = e; }
+  ok(err?.code === 'WRONG_STATE', `rad etildi: ${err?.code}`);
+  const after = await Order.findById(o._id).lean();
+  ok(after.status === 'ready' && !after.deliveredAt, 'buyurtma o‘zgarmagan');
+  await wait();
+  ok(await dueCount(o._id) === 0, 'komissiya hisoblanmagan');
+
+  const d = await mk({ fulfillment: 'delivery', address: 'Manzil', status: 'delivering' });
+  err = null;
+  try { await changeOrderStatus({ orderId: d._id, restaurantId: rid, status: 'delivered' }); } catch (e) { err = e; }
+  ok(err?.code === 'WRONG_STATE', 'kuryer yo‘ldagi buyurtmani ham yakunlab bo‘lmaydi');
+
+  const early = await mk({ status: 'accepted' });
+  err = null;
+  try { await changeOrderStatus({ orderId: early._id, restaurantId: rid, status: 'delivered' }); } catch (e) { err = e; }
+  ok(err?.code === 'WRONG_STATE', 'pickup ham TAYYOR bo‘lmasdan yakunlanmaydi');
+
+  const other = await mk();
+  err = null;
+  try { await changeOrderStatus({ orderId: other._id, restaurantId: otherRid, status: 'delivered' }); } catch (e) { err = e; }
+  ok(err?.code === 'NOT_FOUND', 'boshqa restoran yakunlay olmaydi');
 }
 
 console.log(fails ? `\n✗ ${fails} ta xato` : '\n✓ HAMMASI O‘TDI');

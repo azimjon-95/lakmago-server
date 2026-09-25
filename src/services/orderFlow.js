@@ -30,7 +30,26 @@ import { notifyUser } from './telegram.js';
  */
 
 /** Restoran o'zgartira oladigan statuslar. */
-export const RESTAURANT_STATUSES = ['accepted', 'preparing', 'ready', 'delivering', 'cancelled'];
+export const RESTAURANT_STATUSES = ['accepted', 'preparing', 'ready', 'delivering', 'delivered', 'cancelled'];
+
+/*
+ * ═══ FAQAT OLIB KETISH UCHUN ═══
+ *
+ * 'delivered' (yakunlandi) ni restoran FAQAT olib ketish
+ * buyurtmasiga qo'ya oladi: mijoz taomni xodimning qo'lidan
+ * olgan, bundan ortiq tasdiq kerak emas.
+ *
+ * Yetkazib berishda bu TAQIQLANGAN — u yerda buyurtmani kuryer
+ * ("Topshirdim") yoki mijoz ("Oldim") yakunlaydi. Restoran o'zi
+ * yakunlay olsa, kuryer taomni hali yetkazmasdan komissiya
+ * hisoblanib ketardi.
+ *
+ * Avval pickup "Mijoz olib ketdi" bilan 'delivering' da qolib
+ * ketardi: mijozga 20 daqiqadan keyin "Buyurtmangizni oldingizmi?"
+ * savoli borardi, komissiya esa u javob berguncha (yoki 12 soat)
+ * hisoblanmasdi.
+ */
+const PICKUP_ONLY_STATUSES = new Set(['delivered']);
 
 /*
  * Statusdan OLDIN qanday holatda bo'lishi kerak.
@@ -58,6 +77,9 @@ const REQUIRED_PREVIOUS = {
    */
   ready: ['accepted', 'preparing'],
   delivering: ['ready'],
+  // Olib ketish: 'delivering' — eski yo'l (panel yoki yangilanishdan
+  // oldingi buyurtmalar) orqali kelganlarni ham yakunlash uchun
+  delivered: ['ready', 'delivering'],
   // Bekor qilish yakunlanmagan har qanday holatdan mumkin
   cancelled: ['pending', 'accepted', 'preparing', 'ready'],
 };
@@ -97,8 +119,16 @@ export async function changeOrderStatus({ orderId, restaurantId, status, actorNa
   }
 
   const before = await Order.findOne({ _id: orderId, restaurantId })
-    .select('status').lean();
+    .select('status fulfillment').lean();
   if (!before) throw new OrderFlowError('NOT_FOUND', 'Buyurtma topilmadi');
+
+  const pickupOnly = PICKUP_ONLY_STATUSES.has(status);
+  if (pickupOnly && before.fulfillment !== 'pickup') {
+    throw new OrderFlowError(
+      'WRONG_STATE',
+      'Yetkazib berish buyurtmasini kuryer yoki mijoz yakunlaydi',
+    );
+  }
 
   // Allaqachon shu holatda — hech narsa qilmaymiz, lekin xato ham emas.
   // Tugma ikki marta bosilgan bo'lishi mumkin.
@@ -119,6 +149,7 @@ export async function changeOrderStatus({ orderId, restaurantId, status, actorNa
   if (status === 'accepted') update.acceptedAt = new Date();
   if (status === 'ready') update.readyAt = new Date();
   if (status === 'cancelled') update.cancelledAt = new Date();
+  if (status === 'delivered') update.deliveredAt = new Date();
   /*
    * Rad etish sababi status bilan BITTA atomik yozuvda — avval
    * alohida updateOne bilan keyin yozilardi va xodimlarning
@@ -139,7 +170,9 @@ export async function changeOrderStatus({ orderId, restaurantId, status, actorNa
    * Shu qator TZ 18-bandini ta'minlaydi.
    */
   const order = await Order.findOneAndUpdate(
-    { _id: orderId, restaurantId, status: { $in: allowedFrom } },
+    // pickupOnly: turi ham filtrda — tekshiruv bilan yozuv orasida
+    // hech narsa o'zgarib qololmaydi
+    { _id: orderId, restaurantId, status: { $in: allowedFrom }, ...(pickupOnly ? { fulfillment: 'pickup' } : {}) },
     update,
     { new: true },
   ).populate('userId');
@@ -233,6 +266,7 @@ async function runSideEffects(order, status) {
 const PICKUP_STATUS_TEXT = {
   ready: '🍽 Buyurtmangiz tayyor — restorandan olib ketishingiz mumkin',
   delivering: '🤝 Buyurtmangiz sizga topshirildi. Yoqimli ishtaha!',
+  delivered: '🤝 Buyurtmangiz sizga topshirildi. Yoqimli ishtaha!',
 };
 
 function customerStatusText(order, status) {
