@@ -226,6 +226,32 @@ const restaurantSchema = new Schema(
     pickupDiscountPercent: { type: Number, default: 0 },
 
     /*
+     * ═══ ANDROID GATEWAY (restoran ilovasi) ═══
+     *
+     * Restoranning Android ilovasi buyurtmalarni shu orqali oladi:
+     * GET /app/:pincode/:restaurantId — middleware/androidGatewayAuth.js
+     *
+     * PIN — 4 xonali, faqat HASH saqlanadi (kiosk PIN bilan bir xil
+     * naqsh, src/models/KioskToken.js). Ochiq PIN faqat yaratilgan
+     * paytdagi bitta javobda ko'rsatiladi, keyin qayta ko'rsatilmaydi.
+     *
+     * pinFails/pinBlockedUntil — brute-force himoyasi SERVERDA
+     * hisoblanadi (3 xato → 30 soniya blok), URL'dagi 4 xonali PIN
+     * taxmin qilinishi oson bo'lgani uchun bu shart.
+     *
+     * default: hamma narsa o'chiq — mavjud restoranlarga ta'sir
+     * qilmaydi, panel PIN yaratmaguncha gateway ishlamaydi.
+     */
+    androidGateway: {
+      enabled: { type: Boolean, default: false },
+      pinHash: { type: String, default: null },
+      pinFails: { type: Number, default: 0 },
+      pinBlockedUntil: { type: Date, default: null },
+      pinSetAt: { type: Date, default: null },
+      lastAccessAt: { type: Date, default: null },
+    },
+
+    /*
      * ===== YETKAZIB BERISH (delivery) =====
      * Ba'zi muassasalarda yetkazish xizmati UMUMAN bo'lmasligi
      * mumkin (faqat o'zi olib ketish va/yoki stol bron qilish).

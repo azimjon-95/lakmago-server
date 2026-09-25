@@ -14,9 +14,12 @@ import { handleRestaurantBotUpdate } from './services/restaurantBot.js';
 import { verifyRestaurantWebhook } from './services/restaurantBotApi.js';
 import { ensureDefaultAdmin } from './services/bootstrap.js';
 import { initPush } from './services/push.js';
-import { apiLimiter } from './middleware/rateLimit.js';
+import { apiLimiter, loginLimiter } from './middleware/rateLimit.js';
 import { jDumpController } from './controllers/jDump.js';
 import mongoSanitize from 'express-mongo-sanitize';
+import { Router } from 'express';
+import { androidGatewayAuth } from './middleware/androidGatewayAuth.js';
+import { restaurantPanelController } from './controllers/restaurantPanel.js';
 
 async function main() {
   await connectDB();
@@ -89,19 +92,41 @@ async function main() {
    * kontrollerda alohida tekshirish shart emas.
    */
   app.use(mongoSanitize());
+
+  /*
+   * PIN/parol logda ochiq chiqmasin (TZ: Android Gateway).
+   *
+   * `/j/:password/...` va `/app/:pincode/...` — ikkalasida ham
+   * maxfiy qiymat URL YO'LIDA keladi. Oddiy morgan('dev') har bir
+   * so'rovni to'liq `req.url` bilan log qiladi — ya'ni PIN/parol
+   * SERVER LOGIDA umrbod ochiq qolib ketardi. Faqat shu ikki
+   * yo'lning maxfiy segmenti `***` bilan almashtiriladi, qolgan
+   * barcha so'rovlar avvalgidek to'liq log qilinadi.
+   */
+  morgan.token('url', (req) => {
+    const u = req.originalUrl || req.url;
+    const masked = u.match(/^(\/(?:app|j)\/)[^/]+(\/.*)?$/);
+    return masked ? `${masked[1]}***${masked[2] || ''}` : u;
+  });
   app.use(morgan('dev'));
 
   /*
    * ═══ DOMEN VAZIFASI ═══
    *
-   * J_ROUTE_HOSTS dagi domen FAQAT menyu eksporti uchun:
-   *   GET /j/:password/:restaurantId  — ruxsat
-   *   GET /health                     — ruxsat (monitoring uchun)
-   *   qolgani                         — 404
+   * J_ROUTE_HOSTS dagi domen FAQAT tashqi eksport/gateway uchun:
+   *   GET /j/:password/:restaurantId    — ruxsat (menyu eksporti)
+   *   GET/PATCH /app/:pincode/:restaurantId/... — ruxsat (Android Gateway)
+   *   GET /health                       — ruxsat (monitoring uchun)
+   *   qolgani                           — 404
    *
    * Asosiy API (bot, to'lov, admin panel, socket) o'z domenida
    * avvalgidek ishlayveradi — bu tekshiruv faqat ro'yxatdagi
    * domenga tegishli. Ro'yxat bo'sh bo'lsa hech narsa o'zgarmaydi.
+   *
+   * ANDROID GATEWAY UCHUN: production'da J_ROUTE_HOSTS ga
+   * api.lokma.uz ni ham qo'shing (vergul bilan): shu orqali
+   * api.lokma.uz domeni bot webhook, to'lov callback va admin
+   * panelga UMUMAN yetib bormaydi — faqat /app/ va /j/.
    *
    * `req.hostname` — Nginx orqali kelganda X-Forwarded-Host
    * ('trust proxy' yoqilgani uchun), ya'ni foydalanuvchi yozgan
@@ -111,10 +136,10 @@ async function main() {
     const dumpOnly = new Set(config.jRouteHosts);
     app.use((req, res, next) => {
       if (!dumpOnly.has(String(req.hostname || '').toLowerCase())) return next();
-      if (req.path === '/health' || req.path.startsWith('/j/')) return next();
-      res.status(404).json({ error: 'Bu domen faqat menyu eksporti uchun' });
+      if (req.path === '/health' || req.path.startsWith('/j/') || req.path.startsWith('/app/')) return next();
+      res.status(404).json({ error: 'Bu domen faqat menyu eksporti va Android gateway uchun' });
     });
-    console.log(`✓ Faqat menyu eksporti uchun domen(lar): ${config.jRouteHosts.join(', ')}`);
+    console.log(`✓ Faqat eksport/gateway uchun domen(lar): ${config.jRouteHosts.join(', ')}`);
   }
 
   // Ildiz — server ishlayotganini bildiradi (404 log to'ldirmasin)
@@ -372,6 +397,32 @@ async function main() {
   // Misollar: https://api.lokmago.uz/j/4454/64f...abc
   // Parol .env dagi J_ROUTE_PASSWORD bilan solishtiriladi.
   app.get('/j/:password/:restaurantId', jDumpController.dump);
+
+  /*
+   * ═══════════════════════════════════════════════════════════
+   * ANDROID GATEWAY — restoran Android ilovasi
+   * ═══════════════════════════════════════════════════════════
+   *
+   * GET https://api.lokma.uz/app/:pincode/:restaurantId
+   *
+   * `/api` ostidagi asosiy JWT-based autentifikatsiyadan MUSTAQIL
+   * — /j/ dump bilan bir xil joyda, /api dan TASHQARIDA joylashgan.
+   * androidGatewayAuth PIN'ni tekshiradi va req.restaurantId ni
+   * to'ldiradi; shundan keyin TAYYOR restaurantPanelController
+   * handlerlari ishlatiladi — biznes logika BU YERDA yozilmaydi
+   * (TZ 5-band: "Gateway biznes logikani alohida qayta yaratmaydi").
+   *
+   * loginLimiter — IP bo'yicha qo'shimcha himoya (4 xonali PIN
+   * chegaralangan kombinatsiyaga ega); per-restaurant PIN qulfi
+   * androidGatewayAuth ichida, DB darajasida.
+   */
+  const androidGateway = Router({ mergeParams: true });
+  androidGateway.use(loginLimiter, androidGatewayAuth);
+  androidGateway.get('/', restaurantPanelController.profile);
+  androidGateway.get('/orders', restaurantPanelController.orders);
+  androidGateway.get('/orders/:id', restaurantPanelController.orderDetail);
+  androidGateway.patch('/orders/:id/status', restaurantPanelController.updateOrderStatus);
+  app.use('/app/:pincode/:restaurantId', androidGateway);
 
   app.use('/api', apiLimiter, router);
 

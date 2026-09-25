@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import bcrypt from 'bcryptjs';
 import { cached, KEYS, TTL } from '../services/cache.js';
 import { asyncHandler } from '../middleware/error.js';
 import { Restaurant } from '../models/Restaurant.js';
@@ -34,6 +35,31 @@ function restaurantFinanceView(f) {
     restaurantPayout: som(f.restaurantPayout),
     deliveryFee: som(f.deliveryFee),
     totalCharged: som(f.totalCharged),
+  };
+}
+
+/*
+ * Buyurtmani panelga (va Android gateway'ga) qulay ko'rinishga
+ * keltiradi — mijoz ma'lumotini bitta obyektga yig'adi.
+ * `orders()` va `orderDetail()` IKKALASI ham shu funksiyadan
+ * foydalanadi — mijoz ko'rinishi ikki joyda alohida yozilib,
+ * bir joyda tuzatilib ikkinchisida unutilib qolmasin.
+ *
+ * `finance` bu yerda ALLAQACHON restaurantFinanceView bilan
+ * qisqartirilgan bo'lishi kerak — chaqiruvchi javobgar.
+ */
+function shapeOrderForPanel(o) {
+  const u = o.userId || {};
+  return {
+    ...o,
+    userId: u._id ? String(u._id) : null,
+    customer: {
+      name: [u.firstName, u.lastName].filter(Boolean).join(' ') || 'Mijoz',
+      username: u.username || '',
+      telegramId: u.telegramId || '',
+      phone: o.phone || u.phone || '',
+      photoUrl: u.photoUrl || '',
+    },
   };
 }
 
@@ -81,8 +107,12 @@ export const restaurantPanelController = {
   profile: asyncHandler(async (req, res) => {
     // Shartnoma va moliya ma'lumotlari restoranga BERILMAYDI —
     // komissiya foizi, balans, to'langan summa faqat adminda.
+    // androidGateway.pinHash — hech qachon hech qanday javobda
+    // chiqmasligi kerak, hash bo'lsa ham (TZ: "PIN kod javobda
+    // ochiq ko'rsatilmaydi"). Shu joy Android gateway o'zi ham
+    // ishlatadigan profil bo'lgani uchun ayniqsa muhim.
     const restaurant = await Restaurant.findById(rid(req))
-      .select('-ownerId -__v -commissionPercent -commissionMode -balance -totalPaidOut -contractNumber -contractDate');
+      .select('-ownerId -__v -commissionPercent -commissionMode -balance -totalPaidOut -contractNumber -contractDate -androidGateway');
 
     if (!restaurant) return res.status(404).json({ error: 'Restoran topilmadi' });
     res.json(restaurant);
@@ -309,23 +339,29 @@ export const restaurantPanelController = {
       if (o.finance) o.finance = restaurantFinanceView(o.finance);
     }
 
-    // Mijozni qulay ko'rinishga keltiramiz
-    const items = orders.map((o) => {
-      const u = o.userId || {};
-      return {
-        ...o,
-        userId: u._id ? String(u._id) : null,
-        customer: {
-          name: [u.firstName, u.lastName].filter(Boolean).join(' ') || 'Mijoz',
-          username: u.username || '',
-          telegramId: u.telegramId || '',
-          phone: o.phone || u.phone || '',
-          photoUrl: u.photoUrl || '',
-        },
-      };
-    });
+    res.json(orders.map(shapeOrderForPanel));
+  }),
 
-    res.json(items);
+  /*
+   * GET /api/panel/orders/:id — bitta buyurtma to'liq tafsiloti.
+   *
+   * NEGA KERAK: ro'yxat (yuqorida) faqat oxirgi 80 tasini beradi
+   * va socket orqali kelgan `order:new`/`order:update` xabari
+   * HALI moliyaviy maydonlarni qisqartirilmagan holda o'z ichiga
+   * oladi (services/paymentRecord.js, orderFlow.js — bevosita
+   * Mongo hujjatini yuboradi). Shuning uchun Android gateway kabi
+   * kamroq ishonchli kanal socket orqali faqat "buyurtma X
+   * o'zgardi" signalini oladi va TAFSILOTNI shu endpointdan,
+   * o'zining restaurantId'siga cheklangan holda so'raydi — xuddi
+   * `orders()` dagi kabi restaurantFinanceView bilan qisqartirilgan.
+   */
+  orderDetail: asyncHandler(async (req, res) => {
+    const order = await Order.findOne({ _id: req.params.id, restaurantId: rid(req) })
+      .populate('userId', 'firstName lastName username telegramId phone photoUrl')
+      .lean();
+    if (!order) return res.status(404).json({ error: 'Buyurtma topilmadi' });
+    if (order.finance) order.finance = restaurantFinanceView(order.finance);
+    res.json(shapeOrderForPanel(order));
   }),
 
   // PATCH /api/panel/orders/:id/status  { status }
@@ -507,6 +543,54 @@ export const restaurantPanelController = {
     await Restaurant.findByIdAndUpdate(rid(req), { imageUrl: '', images: [] });
     getIO()?.to('admin').emit('restaurant:update', { _id: String(rid(req)) });
     res.json({ ok: true });
+  }),
+
+  /*
+   * ═══ ANDROID GATEWAY PIN — restoran o'ziga PIN yaratadi ═══
+   *
+   * Admin aralashuvisiz: restoran panelga o'zi kirib, Android
+   * ilova uchun 4 xonali PIN oladi va ilovaga shuni kiritadi.
+   * Naqsh KioskToken bilan bir xil (src/controllers/kiosk.js):
+   * PIN faqat SHU javobda ochiq, bazada faqat bcrypt hash qoladi,
+   * qayta ko'rsatib bo'lmaydi — faqat yangisini yaratish mumkin.
+   */
+
+  // GET /api/panel/android-pin — holatni ko'rish (PIN o'zi YO'Q)
+  androidGatewayStatus: asyncHandler(async (req, res) => {
+    const r = await Restaurant.findById(rid(req)).select('androidGateway').lean();
+    const g = r?.androidGateway || {};
+    res.json({
+      enabled: Boolean(g.enabled && g.pinHash),
+      pinSetAt: g.pinSetAt || null,
+      lastAccessAt: g.lastAccessAt || null,
+    });
+  }),
+
+  // POST /api/panel/android-pin/rotate — yangi PIN yaratadi (eskisi bekor bo'ladi)
+  rotateAndroidPin: asyncHandler(async (req, res) => {
+    const pin = String(Math.floor(1000 + Math.random() * 9000));
+    await Restaurant.findByIdAndUpdate(rid(req), {
+      androidGateway: {
+        enabled: true,
+        pinHash: await bcrypt.hash(pin, 10),
+        pinFails: 0,
+        pinBlockedUntil: null,
+        pinSetAt: new Date(),
+        lastAccessAt: null,
+      },
+    });
+    // PIN faqat shu javobda — logda, keyingi hech qanday
+    // so'rovda ko'rinmaydi (bazada hash qoladi)
+    res.json({ pin, enabled: true });
+  }),
+
+  // POST /api/panel/android-pin/disable — Android ilovani butunlay o'chirish
+  disableAndroidPin: asyncHandler(async (req, res) => {
+    await Restaurant.findByIdAndUpdate(rid(req), {
+      'androidGateway.enabled': false,
+      'androidGateway.pinHash': null,
+    });
+    res.json({ ok: true, enabled: false });
   }),
 
 };

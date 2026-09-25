@@ -153,6 +153,11 @@ router.get('/panel/banner', auth, requireRole('restaurant'), restaurantPanelCont
 router.put('/panel/banner', auth, requireRole('restaurant'), restaurantPanelController.setBanner);
 router.delete('/panel/banner', auth, requireRole('restaurant'), restaurantPanelController.deleteBanner);
 
+// Android gateway PIN — restoran o'ziga PIN yaratadi (admin shart emas)
+router.get('/panel/android-pin', ...R, restaurantPanelController.androidGatewayStatus);
+router.post('/panel/android-pin/rotate', ...R, writeLimiter, restaurantPanelController.rotateAndroidPin);
+router.post('/panel/android-pin/disable', ...R, writeLimiter, restaurantPanelController.disableAndroidPin);
+
 // ===== Cloudinary rasm yuklash imzosi =====
 // Faqat kirgan foydalanuvchi (restoran yoki admin) rasm yuklay oladi.
 router.get('/upload/signature', auth, uploadController.signature);
