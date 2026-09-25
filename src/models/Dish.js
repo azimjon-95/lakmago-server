@@ -4,7 +4,18 @@ import { cacheInvalidationPlugin } from './cacheInvalidation.js';
 const optionSchema = new Schema(
   {
     name: { type: String, required: true },
-    price: { type: Number, default: 0 }
+    price: { type: Number, default: 0 },
+    /*
+     * MAJBURIY QO'SHIMCHA (faqat 'addon' guruhida ma'no beradi).
+     *
+     * true bo'lsa — mijoz buyurtma qilganda bu qo'shimcha
+     * AVTOMATIK qo'shiladi va narxi HAR DOIM olinadi, mijoz
+     * yubormagan (yoki ataylab tashlab ketgan) taqdirda ham —
+     * priceVerification.js buni majburan qo'shadi, aks holda
+     * mijoz shu qo'shimchani "yubormaslik" orqali pulni
+     * kamaytirishi mumkin bo'lardi.
+     */
+    mandatory: { type: Boolean, default: false }
   },
   { _id: true }
 );

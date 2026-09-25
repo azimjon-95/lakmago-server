@@ -84,6 +84,13 @@ const optionGroupsSchema = z.array(z.object({
   options: z.array(z.object({
     name: z.string().trim().min(1, 'Variant nomi bo‘sh').max(60),
     price: z.number().min(0).max(100000000),
+    /*
+     * MAJBURIY QO'SHIMCHA — faqat 'addon' guruhida ma'no beradi.
+     * true bo'lsa mijoz buyurtma qilganda avtomatik qo'shiladi va
+     * uni olib tashlay olmaydi (narxi ham majburan olinadi —
+     * services/priceVerification.js).
+     */
+    mandatory: z.boolean().optional(),
   })).min(1).max(20),
 })).max(10)
   .refine(
@@ -97,10 +104,22 @@ const optionGroupsSchema = z.array(z.object({
   /*
    * Hajm guruhi har doim: bittasi tanlanadi va tanlash SHART.
    * Restoran buni noto'g'ri belgilasa ham server to'g'rilaydi.
+   *
+   * `mandatory` esa faqat addon guruhida ma'noli — variant
+   * guruhida (agar u yerdan qandaydir yo'l bilan kelib qolsa ham)
+   * XAVFSIZLIK uchun ataylab false'ga tushiriladi: aks holda hajm
+   * "majburiy" deb belgilanib, priceVerification'da variant
+   * bo'yicha alohida yo'l bilan ishlaydigan mantiqqa aralashib,
+   * kutilmagan natija berishi mumkin edi.
    */
   .transform((groups) => groups.map((g) => (g.kind === 'variant'
-    ? { ...g, required: true, multiple: false }
-    : { ...g, required: Boolean(g.required), multiple: g.multiple !== false })));
+    ? { ...g, required: true, multiple: false, options: g.options.map((o) => ({ ...o, mandatory: false })) }
+    : {
+      ...g,
+      required: Boolean(g.required),
+      multiple: g.multiple !== false,
+      options: g.options.map((o) => ({ ...o, mandatory: Boolean(o.mandatory) })),
+    })));
 
 export const restaurantPanelController = {
   // GET /api/panel/me — restoranning o'z profili

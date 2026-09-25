@@ -78,7 +78,13 @@ export async function verifyItemPrices(items, restaurantId) {
     for (const g of dish.optionGroups || []) {
       const variant = isVariantGroup(g, dish.price);
       for (const o of g.options || []) {
-        allowed.set(o.name, { price: Number(o.price) || 0, variant, group: g.title });
+        allowed.set(o.name, {
+          price: Number(o.price) || 0, variant, group: g.title,
+          // Faqat addon (qo'shimcha) uchun ma'noli — variant
+          // guruhida bo'lsa ham xavfsizlik uchun e'tiborsiz
+          // qoldiriladi (pastdagi majburan-qo'shish bosqichida).
+          mandatory: !variant && Boolean(o.mandatory),
+        });
       }
     }
 
@@ -107,7 +113,7 @@ export async function verifyItemPrices(items, restaurantId) {
       } else {
         addonsSom += real.price;
       }
-      selected.push({ name: o.name, price: real.price, group: real.group, variant: real.variant });
+      selected.push({ name: o.name, price: real.price, group: real.group, variant: real.variant, mandatory: real.mandatory });
     }
 
     /*
@@ -126,6 +132,28 @@ export async function verifyItemPrices(items, restaurantId) {
           selected.unshift({ name: cheapest.name, price: cheapest.price, group: g.title, variant: true });
         }
         break;
+      }
+    }
+
+    /*
+     * MAJBURIY QO'SHIMCHALAR — mijoz yubormagan bo'lsa ham
+     * MAJBURAN qo'shiladi va narxi olinadi.
+     *
+     * NEGA SHART: agar buni faqat mijoz ilovasi (DishModal.jsx)
+     * ta'minlasa, kimdir API'ga to'g'ridan-to'g'ri so'rov yuborib
+     * (yoki eski ilova versiyasidan) majburiy qo'shimchani
+     * selectedOptions'dan tashlab ketishi mumkin edi — shunda
+     * "server narxi g'olib" qoidasi buzilmasa-da, RESTORAN puli
+     * kamayardi (chunki bu qo'shimcha baribir tayyorlanadi).
+     * Shu bosqich CLAUDE.md 5-qoidani ("server narxga ishonmaydi")
+     * majburiy qo'shimchalarga ham qat'iy qo'llaydi.
+     */
+    const selectedNames = new Set(selected.map((s) => s.name));
+    for (const [name, info] of allowed) {
+      if (info.mandatory && !selectedNames.has(name)) {
+        addonsSom += info.price;
+        selected.push({ name, price: info.price, group: info.group, variant: false, mandatory: true });
+        selectedNames.add(name);
       }
     }
 

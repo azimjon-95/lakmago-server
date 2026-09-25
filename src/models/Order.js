@@ -18,6 +18,9 @@ const orderItemSchema = new Schema(
       price: Number,
       group: { type: String, default: undefined },
       variant: { type: Boolean, default: undefined },
+      // Majburiy qo'shimcha sifatida qo'shilganmi — oshxona/bot
+      // ko'rsatuvida "bu shart" deb ajratib ko'rsatish uchun.
+      mandatory: { type: Boolean, default: undefined },
     }],
 
     // Taomga izoh: "avokadosiz", "achchiq qilmang"
