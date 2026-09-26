@@ -26,7 +26,8 @@
     "test:variants": "node tests/dish-variants.test.mjs",
     "test:android": "node tests/android-gateway.test.mjs",
     "test:mandatory": "node tests/mandatory-addons.test.mjs",
-    "test:pickup": "node tests/pickup-bot.test.mjs"
+    "test:pickup": "node tests/pickup-bot.test.mjs",
+    "test:fair": "node tests/fair-feed.test.mjs"
   },
   "dependencies": {
     "@socket.io/redis-adapter": "^8.3.0",

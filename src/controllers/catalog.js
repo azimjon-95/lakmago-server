@@ -1,3 +1,4 @@
+import { fairOrder, parseFairCursor, makeFairCursor, randomSeed, isValidSeed } from '../services/fairFeed.js';
 import { asyncHandler } from '../middleware/error.js';
 import { cached, KEYS, TTL } from '../services/cache.js';
 import { Restaurant } from '../models/Restaurant.js';
@@ -465,17 +466,10 @@ export const dishController = {
     if (req.query.discounted === '1') filter.$expr = discountExpr();
     else if (req.query.discounted === '0') filter.$expr = { $not: [discountExpr()] };
 
-    if (andClauses.length) filter.$and = andClauses;
+    const DISH_SELECT = 'name description section category price oldPrice imageUrl images tint icon restaurantId isHit isDiscounted createdAt weight weightGram calories protein fat carbs prepMinutes ingredients optionGroups';
 
-    const dishes = await Dish.find(filter)
-      .select('name description section category price oldPrice imageUrl images tint icon restaurantId isHit isDiscounted createdAt weight weightGram calories protein fat carbs prepMinutes ingredients optionGroups')
-      .sort({ createdAt: -1, _id: -1 })
-      .limit(limit + 1)
-      .lean();
-
-    const hasMore = dishes.length > limit;
-    const pricedAll = await withCustomerPrices(hasMore ? dishes.slice(0, limit) : dishes);
-    const items = pricedAll.map((d) => {
+    // Restoran ma'lumoti (ikkala rejimda bir xil)
+    const attachRest = (d) => {
       const r = restMap.get(String(d.restaurantId));
       return {
         ...d,
@@ -493,8 +487,73 @@ export const dishController = {
         restaurantOpenTime: r?.openTime || '',
         restaurantCloseTime: r?.closeTime || '',
       };
-    });
-    const nextCursor = hasMore ? items[items.length - 1].createdAt : null;
+    };
+
+    /*
+     * ═══ ADOLATLI REJIM (fair=1) — bosh sahifa ═══
+     * Restoranlar bo'yicha navbatma-navbat, urug' bilan aralash.
+     * Tafsilot va barqarorlik sababi: services/fairFeed.js
+     *
+     * IKKI BOSQICH (xotira): tartib uchun faqat `_id restaurantId`
+     * olinadi (yengil); to'liq hujjat faqat sahifadagi 30-50 taom
+     * uchun. Har sahifada BARCHA taomlarni to'liq yuklash kerak emas.
+     *
+     * Urug': cursor'dan, bo'lmasa `?seed=` (klient sessiya davomida
+     * bir xil yuboradi — oyna fokusidagi qayta so'rovda qatorlar
+     * aralashib ketmasin), bo'lmasa tasodifiy.
+     */
+    if (req.query.fair === '1' || req.query.fair === 'true') {
+      const fairFilter = { ...filter };
+      delete fairFilter.createdAt; // vaqt cursor'i bu rejimga tegishli emas
+
+      const cur = parseFairCursor(req.query.cursor);
+      const qSeed = Number(req.query.seed);
+      const seed = cur?.seed ?? (isValidSeed(qSeed) ? qSeed : randomSeed());
+      const offset = cur?.offset ?? 0;
+
+      const light = await Dish.find(fairFilter).select('_id restaurantId').sort({ _id: 1 }).lean();
+      const ordered = fairOrder(light, seed);
+      const pageIds = ordered.slice(offset, offset + limit).map((d) => d._id);
+
+      const docs = await Dish.find({ ...fairFilter, _id: { $in: pageIds } }).select(DISH_SELECT).lean();
+      const byId = new Map(docs.map((d) => [String(d._id), d]));
+      // $in tartibni saqlamaydi — adolatli tartib qayta tiklanadi
+      const page = pageIds.map((id) => byId.get(String(id))).filter(Boolean);
+
+      const hasMore = offset + limit < ordered.length;
+      const priced = await withCustomerPrices(page);
+      res.json({
+        items: priced.map(attachRest),
+        nextCursor: hasMore ? makeFairCursor(seed, offset + limit) : null,
+        hasMore,
+        total: ordered.length,
+      });
+      return;
+    }
+
+    // ═══ ODDIY REJIM («Barchasi») — createdAt|_id ═══
+    if (andClauses.length) filter.$and = andClauses;
+
+    const dishes = await Dish.find(filter)
+      .select(DISH_SELECT)
+      .sort({ createdAt: -1, _id: -1 })
+      .limit(limit + 1)
+      .lean();
+
+    const hasMore = dishes.length > limit;
+    const pricedAll = await withCustomerPrices(hasMore ? dishes.slice(0, limit) : dishes);
+    const items = pricedAll.map(attachRest);
+
+    /*
+     * XATO TUZATILDI: avval faqat createdAt qaytarilardi. Menyu import
+     * qilinganda o'nlab taom AYNAN bir xil createdAt'ga ega — keyingi
+     * sahifa `createdAt < X` bilan boshlanib, o'shalarning qolgani
+     * TUSHIB QOLARDI. Yuqoridagi tahlil `createdAt|_id` ni allaqachon
+     * tushunadi (tenglikda _id bo'yicha davom etadi); endi server uni
+     * o'zi ham beradi. Eski (faqat sana) cursor hali ham qabul qilinadi.
+     */
+    const last = hasMore ? items[items.length - 1] : null;
+    const nextCursor = last ? `${new Date(last.createdAt).toISOString()}|${String(last._id)}` : null;
 
     res.json({ items, nextCursor, hasMore });
   })

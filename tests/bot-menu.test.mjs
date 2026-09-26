@@ -51,9 +51,16 @@ await RestaurantTelegramStaff.create({
   restaurantId: rest._id, username: 'a', telegramUserId: '9001',
   firstName: 'Aziz', isActive: true, connectedAt: new Date(),
 });
+/*
+ * Sana NISBIY — Toshkent bo'yicha ertaga. Avval '2026-09-25' qattiq
+ * yozilgan edi: o'sha kun o'tgach bron "faol" ro'yxatdan chiqib,
+ * test kod o'zgarmasa ham yiqilardi (vaqt bombasi).
+ */
+const RESERVATION_DATE = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Tashkent' })
+  .format(new Date(Date.now() + 24 * 3600 * 1000));
 await Reservation.create({
   userId: user._id, restaurantId: rest._id, restaurantName: 'Z',
-  date: '2026-09-25', time: '19:00', guests: 2, name: 'Ali', phone: '1',
+  date: RESERVATION_DATE, time: '19:00', guests: 2, name: 'Ali', phone: '1',
 });
 const order = await Order.create({
   userId: user._id, restaurantId: rest._id, restaurantName: 'Z',
