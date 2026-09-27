@@ -5,6 +5,7 @@ import { User } from '../models/User.js';
 import { getIO, getSupportPresence } from '../sockets/io.js';
 import { notify } from '../services/notifications.js';
 import { notifyUser } from '../services/telegram.js';
+import { notifySupportGroup } from '../services/supportGroupNotify.js';
 
 const messageSchema = z.object({
   text: z.string().min(1).max(2000),
@@ -100,6 +101,11 @@ export const supportController = {
       refId: chat._id,
       meta: { chatId: String(chat._id) },
     }).catch((e) => console.error('[notify:support]', e.message));
+
+    // Ichki Telegram guruhga ham — admin panelni ochib
+    // o'tirmasdan darhol bilinsin (SUPPORT_GROUP_CHAT_ID bo'sh
+    // bo'lsa jimgina o'tkazib yuboriladi)
+    notifySupportGroup(chat, text).catch((e) => console.error('[notify:supportGroup]', e.message));
 
     // Adminga real-time signal (to'liq ma'lumot bilan)
     getIO()?.to('admin').emit('support:message', {

@@ -161,6 +161,27 @@ export const config = {
    */
   courierAppUrl: (process.env.COURIER_APP_URL || 'https://kuryer.lokma.uz')
     .replace(/\/$/, ''),
+
+  /*
+   * Admin panel manzili -- "Xabarlar" bo'limiga havola uchun
+   * (services/supportGroupNotify.js). Kuryer manzili bilan bir
+   * xil qoida: default HAQIQIY domen, muhitga bog'liq emas.
+   */
+  adminPanelUrl: (process.env.ADMIN_PANEL_URL || 'https://admin.lokma.uz')
+    .replace(/\/$/, ''),
+
+  /*
+   * Mijoz yordam xabarlari yuboriladigan Telegram guruh ID'si
+   * (manfiy son, masalan -1001234567890). Bo'sh bo'lsa -- hech
+   * qanday guruhga yuborilmaydi, faqat admin panel orqali ko'rinadi
+   * (mavjud tizimga hech qanday ta'sir qilmaydi).
+   *
+   * Bot shu guruhda ADMIN bo'lishi shart emas (faqat xabar yozish
+   * uchun) -- lekin biriktirilgan xabarni pin qilish kabi kelajakdagi
+   * funksiyalar uchun admin qilib qo'yish tavsiya etiladi.
+   */
+  supportGroupChatId: process.env.SUPPORT_GROUP_CHAT_ID?.trim() || '',
+
   // Frontend manzillari (aniq ajratilган)
   webappOrigin,            // mijoz webapp'и (WEBAPP_URL)
   adminOrigins,            // admin panellar (CORS_ORIGINS)

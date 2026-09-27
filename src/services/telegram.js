@@ -163,6 +163,18 @@ export async function handleBotUpdate(update) {
     return;
   }
 
+  /*
+   * GURUH XABARLARI: bot yordam suhbatlari uchun ichki guruhga
+   * xabar YOZADI (services/supportGroupNotify.js), lekin u YERDAN
+   * hech narsa O'QIMAYDI. Guruhdagi tugma oddiy `url` turida --
+   * bosilganda botga umuman so'rov kelmaydi. Bu qulf esa
+   * ehtiyot uchun: kimdir guruhda biror narsa yozsa yoki eski
+   * inline tugmani bossa ham, quyidagi (mijozga tegishli)
+   * callback/matn ishlov beruvchilar ISHGA TUSHMAYDI.
+   */
+  const groupChatType = update.message?.chat?.type || update.callback_query?.message?.chat?.type;
+  if (groupChatType === 'group' || groupChatType === 'supergroup') return;
+
   // 2) Callback tugmalar
   // Inline so'rov — taomni rasm bilan ulashish
   if (update.inline_query) {
