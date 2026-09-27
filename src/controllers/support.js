@@ -10,7 +10,9 @@ const messageSchema = z.object({
   text: z.string().min(1).max(2000),
 });
 
-// Mijoz ma'lumotlarini suhbatga nusxalaymiz (admin ko'rishi uchun)
+// Mijoz ma'lumotlarini suhbatga nusxalaymiz (admin ko'rishi uchun).
+// FAQAT xabar yozilganda chaqiriladi (sendMessage) — mijoz panelni
+// ochib, hech narsa yozmasa suhbat UMUMAN yaratilmaydi.
 async function ensureChat(userId) {
   let chat = await SupportChat.findOne({ userId });
   if (chat) return chat;
@@ -38,9 +40,23 @@ export const supportController = {
 
   // ===== MIJOZ TOMONI =====
 
-  // GET /api/support/chat — mening suhbatim
+  /*
+   * GET /api/support/chat — mening suhbatim.
+   *
+   * XATO TUZATILDI: avval bu ham ensureChat() chaqirar, ya'ni
+   * mijoz panelni OCHISHNING O'ZIDA (hali bitta ham xabar
+   * yozmasdan) bazada bo'sh suhbat yaratilib qolardi — admin
+   * panelidagi "Faol" ro'yxati bunday bo'sh yozishmalar bilan
+   * to'lib ketardi. Endi FAQAT MAVJUD suhbat o'qiladi;
+   * yaratilishi sendMessage'gacha kechiktiriladi.
+   */
   myChat: asyncHandler(async (req, res) => {
-    const chat = await ensureChat(req.userId);
+    const chat = await SupportChat.findOne({ userId: req.userId });
+    if (!chat) {
+      // Hali birorta ham xabar yo'q — bazada hech narsa yaratilmaydi
+      return res.json({ messages: [], isResolved: false });
+    }
+
     // Mijoz ochdi — admin javoblari o'qilgan hisoblanadi
     if (chat.userUnreadCount > 0) {
       chat.userUnreadCount = 0;
@@ -107,7 +123,17 @@ export const supportController = {
 
   // GET /api/admin/support — barcha suhbatlar (o'qilmagan birinchi)
   list: asyncHandler(async (req, res) => {
-    const filter = req.query.resolved === 'true' ? { isResolved: true } : { isResolved: false };
+    /*
+     * "messages.0": { $exists: true } — kamida bitta xabar bor
+     * suhbatlarni oladi. Buni qo'shishdan oldin panel bo'sh
+     * (mijoz ochib hech narsa yozmagan) yozishmalar bilan to'lib
+     * ketardi — ular hech qachon o'chirilmagan edi. Bu shart
+     * ularni RO'YXATDA yashiradi, alohida tozalashga hojat yo'q.
+     */
+    const filter = {
+      isResolved: req.query.resolved === 'true',
+      'messages.0': { $exists: true },
+    };
     const chats = await SupportChat.find(filter)
       .select('-messages')                 // ro'yxatda xabarlar shart emas (tez)
       .sort({ unreadCount: -1, lastMessageAt: -1 })
@@ -115,7 +141,7 @@ export const supportController = {
       .lean();
 
     const totalUnread = await SupportChat.aggregate([
-      { $match: { isResolved: false } },
+      { $match: { isResolved: false, 'messages.0': { $exists: true } } },
       { $group: { _id: null, total: { $sum: '$unreadCount' } } },
     ]);
 

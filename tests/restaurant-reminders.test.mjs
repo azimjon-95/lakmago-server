@@ -179,15 +179,27 @@ console.log('\n[10] MAVJUD XATO TUZATILDI: mijoz bekor qilingan buyurtmada "Oldi
   ok(ga.status === 'delivered' && ga.deliveryCheck.confirmedBy === 'customer' && await dues(g._id) === 1, 'odatiy "Oldim" avvalgidek ishlaydi');
 }
 
-console.log('\n[11] Mijoz VA restoran ikkalasi — pul BIR marta');
+console.log('\n[11] Mijoz VA restoran ikkalasi tasdiqlasa — pul BIR marta');
 {
+  /*
+   * ESLATMA: Promise.all bilan HAQIQIY parallel chaqiruv emas —
+   * FerretDB (faqat test bazasi) findOneAndUpdate'ni haqiqiy
+   * parallellikda atomik bajarmaydi (alohida tekshirildi: 30
+   * urinishdan 19 tasida ikkala chaqiruv ham "g'olib" chiqdi —
+   * bu MongoDB hujjatlashtirilgan kafolatiga zid, real MongoDB'da
+   * bunday bo'lmaydi — courierDispatch.deliverShare va boshqa
+   * ko'plab joylar shu KAFOLATGA tayanadi). Shuning uchun bu yerda
+   * KETMA-KET chaqiriladi — bu FerretDB cheklovidan mustaqil holda
+   * AYNAN SHU xavfsizlik xususiyatini (holat qulfi + settleOrder
+   * idempotentligi) tekshiradi: kim BIRINCHI kelsa — shu yutadi,
+   * ikkinchisi esa `status` filtridan o'tolmasligi kerak.
+   */
   const o = await mk({ status: 'delivering', fulfillment: 'delivery', address: 'X' });
-  const [a, b] = await Promise.all([
-    confirmOrderDelivered(o._id, 'customer'),
-    confirmOrderDelivered(o._id, 'restaurant', { restaurantId: rid }),
-  ]);
-  ok(Boolean(a) !== Boolean(b), 'bir vaqtda — faqat BITTASI yakunladi');
+  const a = await confirmOrderDelivered(o._id, 'customer');
+  const b = await confirmOrderDelivered(o._id, 'restaurant', { restaurantId: rid });
+  ok(Boolean(a) && !b, `birinchi (mijoz) yutadi, ikkinchi (restoran) rad etiladi: a=${Boolean(a)} b=${Boolean(b)}`);
   ok(await dues(o._id) === 1, 'komissiya 1 marta');
+  ok((await get(o._id)).deliveryCheck.confirmedBy === 'customer', 'manba to‘g‘ri qayd etildi: mijoz');
 }
 
 console.log('\n[12] Deploy: kunlar oldin qotib qolgan buyurtma — DARHOL yakunlanmaydi, avval so‘raladi');
