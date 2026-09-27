@@ -148,6 +148,7 @@ export async function changeOrderStatus({ orderId, restaurantId, status, actorNa
   const update = { status };
   if (status === 'accepted') update.acceptedAt = new Date();
   if (status === 'ready') update.readyAt = new Date();
+  if (status === 'delivering') update.deliveringAt = new Date();
   if (status === 'cancelled') update.cancelledAt = new Date();
   if (status === 'delivered') update.deliveredAt = new Date();
   /*

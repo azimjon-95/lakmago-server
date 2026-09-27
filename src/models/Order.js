@@ -301,10 +301,35 @@ const orderSchema = new Schema(
       // Mijoz tasdiqladimi
       confirmed: { type: Boolean, default: false },
       confirmedAt: { type: Date, default: null },
+      // Kim yakunladi: mijoz ("Oldim"), restoran (eslatmaga javob)
+      // yoki avtomatik (eslatmalarga javob bo'lmadi). Faqat qayd —
+      // mantiqqa ta'sir qilmaydi, lekin nizo bo'lsa manba aniq.
+      confirmedBy: { type: String, enum: ['customer', 'restaurant', 'auto', null], default: null },
       // Sharh so'ralganmi (takror so'ramaslik uchun)
       reviewAsked: { type: Boolean, default: false },
       // Yulduz tanlangan, matn kutilmoqda
       pendingRating: { type: Number, default: null },
+    },
+
+    /*
+     * ═══ RESTORANGA ESLATMA (bot orqali) ═══
+     *
+     * Xodim buyurtmani YAKUNLASHNI unutishi mumkin (qabul qilgan,
+     * lekin "Kuryerga topshirildi" / kuryer "Topshirdim" / "Mijozga
+     * topshirildi" bosilmagan) — komissiya tushmay qolardi.
+     * services/restaurantReminders.js 2 marta so'raydi.
+     *
+     * forStatus — eslatmalar QAYSI holat uchun sanalgan. Xodim
+     * orada buyurtmani oldinga surgan bo'lsa (masalan "Tayyor"),
+     * hisob yangi holat uchun noldan boshlanadi.
+     *
+     * Eski buyurtmalarda bu maydon umuman YO'Q — kod buni
+     * "0 marta so'ralgan" deb tushunadi (bazada filtrlanmaydi).
+     */
+    restaurantReminder: {
+      askedCount: { type: Number, default: 0 },
+      lastAskedAt: { type: Date, default: null },
+      forStatus: { type: String, default: null },
     },
 
     rating: { type: Number, min: 1, max: 5 },
@@ -314,6 +339,10 @@ const orderSchema = new Schema(
     // Vaqt belgilari (jarayon nazorati uchun)
     acceptedAt: { type: Date },
     readyAt: { type: Date },
+    // Kuryerga topshirilgan vaqt — restaurantReminder shundan
+    // hisoblaydi (updatedAt emas: boshqa maydon o'zgarishi — masalan
+    // to'lov belgilanishi — bexosdan eslatma vaqtini surib qo'ymasin)
+    deliveringAt: { type: Date },
     deliveredAt: { type: Date },
   },
   { timestamps: true },

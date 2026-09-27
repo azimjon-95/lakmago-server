@@ -111,7 +111,65 @@ export async function checkDeliveries() {
   return { sent, checked: orders.length };
 }
 
-// ===== 3. MIJOZ JAVOBI =====
+// ===== 3. YAKUNLASH — MIJOZ, RESTORAN VA AVTOMATIK =====
+/*
+ * Buyurtmani "yetkazildi" qiladi, komissiyani hisoblaydi, real-time
+ * yangilaydi va (bir marta) baho so'raydi.
+ *
+ * UCH YO'LDAN chaqiriladi — mantiq bir joyda:
+ *   'customer'   — mijoz botda "✅ Oldim" (handleDeliveryResponse);
+ *   'restaurant' — xodim eslatmaga "✅ Yakunlandi" (restaurantReminders.js);
+ *   'auto'       — eslatmalarga javob bo'lmadi (restaurantReminders.js).
+ *
+ * ATOMIK: holat tekshiruvi va yozuv BITTA findOneAndUpdate'da
+ * (kuryer oqimi courierDispatch.deliverShare bilan bir xil naqsh).
+ * Avval holat alohida o'qilib, keyin saqlanardi — orada buyurtma
+ * bekor qilinsa ham "yetkazildi" bo'lib, komissiya hisoblanardi
+ * (mijoz bekor qilingan buyurtmada eski "Oldim"ni bossa — shunday
+ * bo'lardi). Endi faqat faol holatdagi buyurtma yakunlanadi.
+ * settleOrder o'zi ham takroriy hisobdan himoyalangan.
+ *
+ * @param {string|ObjectId} orderId
+ * @param {'customer'|'restaurant'|'auto'} confirmedBy
+ * @param {{ restaurantId?: string }} [opts] — berilsa, egalik ham filtrda
+ * @returns {Promise<object|null>} yakunlangan buyurtma yoki null
+ *   (topilmadi / allaqachon yakunlangan / bekor qilingan)
+ */
+export const COMPLETABLE_STATUSES = ['accepted', 'preparing', 'ready', 'delivering'];
+
+export async function confirmOrderDelivered(orderId, confirmedBy = 'customer', { restaurantId } = {}) {
+  const now = new Date();
+  const filter = { _id: orderId, status: { $in: COMPLETABLE_STATUSES } };
+  if (restaurantId) filter.restaurantId = restaurantId;
+
+  const order = await Order.findOneAndUpdate(filter, {
+    $set: {
+      status: 'delivered',
+      deliveredAt: now,
+      'deliveryCheck.confirmed': true,
+      'deliveryCheck.confirmedAt': now,
+      'deliveryCheck.confirmedBy': confirmedBy,
+    },
+  }, { new: true });
+  if (!order) return null;
+
+  const { settleOrder } = await import('./billing.js');
+  await settleOrder(order._id).catch((e) =>
+    console.error('[billing] settleOrder:', e.message));
+
+  const io = getIO();
+  const payload = { orderId: String(order._id), status: 'delivered' };
+  io?.to(`order:${order._id}`).emit('order:status', payload);
+  if (order.userId) io?.to(`user:${order.userId}`).emit('order:status', payload);
+  io?.to(`restaurant:${order.restaurantId}`).emit('order:update', order);
+  io?.to('admin').emit('order:update', order);
+
+  // Baho — bir marta (askRatingForOrder o'zi tekshiradi)
+  await askRatingForOrder(order).catch(() => {});
+  return order;
+}
+
+// ===== 4. MIJOZ JAVOBI =====
 export async function handleDeliveryResponse(cq) {
   const data = cq.data || '';
   const m = data.match(/^dlv_(got|not)_(.+)$/);
@@ -175,32 +233,12 @@ export async function handleDeliveryResponse(cq) {
   }
 
   // === Oldim ===
-  order.status = 'delivered';
-  order.deliveredAt = new Date();
-  order.deliveryCheck.confirmed = true;
-  order.deliveryCheck.confirmedAt = new Date();
-  await order.save();
-
-  // Yetkazildi — restoran ulushi hisoblanadi
-  const { settleOrder } = await import('./billing.js');
-  await settleOrder(order._id).catch((e) =>
-    console.error('[billing] settleOrder:', e.message));
-
-  await tg('answerCallbackQuery', { callback_query_id: cq.id, text: 'Rahmat!' });
-
-  // Real-time: ilovada holat yangilanadi
-  const io = getIO();
-  io?.to(`order:${order._id}`).emit('order:status', {
-    orderId: String(order._id), status: 'delivered',
+  const done = await confirmOrderDelivered(order._id, 'customer');
+  await tg('answerCallbackQuery', {
+    callback_query_id: cq.id,
+    text: done ? 'Rahmat!' : 'Bu buyurtma yakunlangan yoki bekor qilingan',
+    show_alert: !done,
   });
-  io?.to('admin').emit('order:update', order);
-
-  // Sharh so'raymiz (bir marta)
-  if (!order.deliveryCheck.reviewAsked) {
-    order.deliveryCheck.reviewAsked = true;
-    await order.save();
-    await askRating(cq.from.id, order);
-  }
   return true;
 }
 

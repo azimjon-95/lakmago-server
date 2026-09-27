@@ -465,6 +465,19 @@ async function main() {
     setInterval(() => checkDeliveries().catch((e) => console.error('Yetkazish tekshiruvi:', e.message)), 2 * 60_000);
   }
 
+  /*
+   * Restoranga eslatma — buyurtma yakunlanmasdan qolib ketmasin
+   * (kuryer "Topshirdim", xodim "Mijozga topshirildi" ni bosishni
+   * unutgan holatlar). Har 2 daqiqada — checkDeliveries bilan bir xil
+   * ohang. Alohida bot (RESTAURANT_BOT_TOKEN) — shu token bilan
+   * gate qilinadi, mijoz boti (telegramBotToken) bilan emas.
+   */
+  if (config.restaurantBotToken) {
+    const { checkRestaurantReminders } = await import('./services/restaurantReminders.js');
+    setTimeout(() => checkRestaurantReminders().catch((e) => console.error('Restoran eslatmasi:', e.message)), 45_000);
+    setInterval(() => checkRestaurantReminders().catch((e) => console.error('Restoran eslatmasi:', e.message)), 2 * 60_000);
+  }
+
   // Dine-in billingi — soatiga bir marta
   {
     const { runDineInBilling } = await import('./services/dineInBilling.js');

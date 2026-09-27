@@ -529,6 +529,13 @@ export async function handleOrderCallback(cq) {
     return;
   }
 
+  // Yakunlanishi unutilgan buyurtma — eslatmaga javob (restaurantReminders.js)
+  if (action === 'remyes' || action === 'remno') {
+    const { handleReminderCallback } = await import('./restaurantReminders.js');
+    await handleReminderCallback(cq, staff, action, orderId);
+    return;
+  }
+
   if (action === 'show') {
     const order = await Order.findOne({ _id: orderId, restaurantId: staff.restaurantId }).lean();
     if (!order) {
