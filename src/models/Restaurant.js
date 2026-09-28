@@ -162,10 +162,13 @@ const restaurantSchema = new Schema(
      * ma'lumoti o'chirilmaydi — keyin qayta almashtirish oson
      * bo'lsin uchun), lekin faqat `method` ko'rsatgani ishlatiladi.
      *
-     * Karta raqami TO'LIQ holda saqlanmaydi — faqat oxirgi 4
-     * xona (`cardLast4`). To'liq raqam faqat YANGILASH paytida
-     * bir martalik qabul qilinadi va shu zahoti maskalanadi —
-     * mijoz/restoran API'lariga umuman chiqarilmaydi (2-band).
+     * Karta raqami bu hujjatda FAQAT oxirgi 4 xona (`cardLast4`)
+     * sifatida turadi — ro'yxatlar va maskalangan ko'rinish uchun.
+     * To'liq raqam (buxgalter o'tkazma qilishi uchun kerak)
+     * SHIFRLANGAN holda ALOHIDA kolleksiyada saqlanadi —
+     * models/RestaurantPayoutSecret.js. Uni faqat Moliya
+     * ruxsati bor xodim ochib ko'radi va har ko'rish audit
+     * jurnaliga yoziladi. Mijoz/restoran API'lariga chiqmaydi.
      */
     payout: {
       // Qaysi usul asosiy — buxgalter pulni shu bo'yicha yuboradi

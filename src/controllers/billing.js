@@ -5,6 +5,10 @@ import { Restaurant } from '../models/Restaurant.js';
 import { recordPayout, getRestaurantSummary, getAllRestaurantsOrderCounts } from '../services/billing.js';
 import { Order } from '../models/Order.js';
 import { tiyinToSom } from '../services/orderFinance.js';
+import { User } from '../models/User.js';
+import { orderLabel } from '../services/orderNumber.js';
+import { canAccessPage } from '../config/permissions.js';
+import { resolvePeriod, deliveredWindow, paymentGroupFilter } from '../services/billingPeriod.js';
 
 /*
  * ═══ CLICK ULUSHI ═══
@@ -44,15 +48,82 @@ export async function clickFeeByRestaurant() {
   return { map, total };
 }
 
+/*
+ * Tanlangan DAVR uchun restoranlar bo'yicha summalar.
+ *
+ * Ledger yozuvlari — pul HARAKATI vaqti bo'yicha (createdAt):
+ * tushum, komissiya, restoran ulushi, o'tkazilgan (payout).
+ * Click haqi — buyurtma yetkazilgan sana bo'yicha (komissiya ham
+ * shu paytda hisoblanadi, shuning uchun "komissiya − Click" davr
+ * ichida ham to'g'ri chiqadi).
+ *
+ * `$project` + `$group` ikki bosqichda (clickFeeByRestaurant
+ * kabi): ichki maydonni to'g'ridan-to'g'ri $sum qilish ba'zi
+ * MongoDB-mos bazalarda 0 qaytaradi.
+ */
+async function periodStatsByRestaurant(period) {
+  const ledgerRows = await Ledger.aggregate([
+    { $match: { restaurantId: { $ne: null }, createdAt: period.cond } },
+    { $group: { _id: { restaurantId: '$restaurantId', type: '$type' }, total: { $sum: '$amount' } } },
+  ]);
+  /*
+   * Click haqi — aggregatsiya EMAS, oddiy find + JS'da yig'ish:
+   * ichki maydon ('finance.clickFeeAmount') ustida $project+$sum
+   * ba'zi MongoDB-mos bazalarda 0 qaytaradi va uni sinab
+   * ko'rib bo'lmaydi. Davr cheklangan (<=400 kun) va faqat karta
+   * buyurtmalari — hajm kichik. 200 000 — xotira uchun himoya.
+   */
+  const clickOrders = await Order.find({
+    status: 'delivered',
+    'finance.model': 'v2',
+    'finance.clickFeeAmount': { $gt: 0 },
+    ...deliveredWindow(period),
+  }).select('restaurantId finance.clickFeeAmount').limit(200000).lean();
+  const clickRows = [];
+  const feeSums = new Map();
+  for (const o of clickOrders) {
+    const k = String(o.restaurantId);
+    feeSums.set(k, (feeSums.get(k) || 0) + (o.finance?.clickFeeAmount || 0));
+  }
+  for (const [id, fee] of feeSums) clickRows.push({ _id: id, fee });
+
+  const byId = new Map();
+  const bucket = (id) => {
+    const k = String(id);
+    if (!byId.has(k)) byId.set(k, { types: {}, clickFee: 0 });
+    return byId.get(k);
+  };
+  for (const r of ledgerRows) bucket(r._id.restaurantId).types[r._id.type] = r.total;
+  for (const r of clickRows) bucket(r._id).clickFee = tiyinToSom(r.fee || 0);
+
+  const out = new Map();
+  for (const [id, { types, clickFee }] of byId) {
+    const komissiya = types.commission || 0;
+    out.set(id, {
+      tushum: types.payment_in || 0,
+      komissiya,
+      clickFee,
+      sofKomissiya: komissiya - clickFee,
+      restoranUlushi: types.restaurant_due || 0,
+      tolangan: Math.abs(types.payout || 0),
+      qaytarilgan: Math.abs(types.refund || 0),
+    });
+  }
+  return out;
+}
+
+const EMPTY_PERIOD = {
+  tushum: 0, komissiya: 0, clickFee: 0, sofKomissiya: 0, restoranUlushi: 0, tolangan: 0, qaytarilgan: 0,
+};
+
+const isObjectId = (v) => typeof v === 'string' && /^[a-f\d]{24}$/i.test(v);
+
 export const billingController = {
   // GET /api/admin/billing/overview — umumiy holat
   overview: asyncHandler(async (req, res) => {
     const match = {};
-    if (req.query.from || req.query.to) {
-      match.createdAt = {};
-      if (req.query.from) match.createdAt.$gte = new Date(req.query.from);
-      if (req.query.to) match.createdAt.$lte = new Date(req.query.to);
-    }
+    const overviewPeriod = resolvePeriod(req.query.from, req.query.to);
+    if (overviewPeriod) match.createdAt = overviewPeriod.cond;
 
     const rows = await Ledger.aggregate([
       { $match: match },
@@ -98,6 +169,13 @@ export const billingController = {
    * chunki balans "hozirgi holat", bir kunlik emas.
    */
   byRestaurant: asyncHandler(async (req, res) => {
+    // Noto'g'ri sana bo'lsa — 400 (jimgina e'tiborsiz qoldirilmaydi)
+    const period = resolvePeriod(req.query.from, req.query.to);
+    /*
+     * Bir bosqichli $group + JS'da yig'ish. Avval ikkinchi $group
+     * `$push` ishlatardi — natija bir xil, lekin ba'zi MongoDB-mos
+     * bazalarda ($push) qo'llanmaydi va so'rov 500 berardi.
+     */
     const rows = await Ledger.aggregate([
       { $match: { restaurantId: { $ne: null } } },
       {
@@ -106,26 +184,24 @@ export const billingController = {
           total: { $sum: '$amount' },
         },
       },
-      {
-        $group: {
-          _id: '$_id.restaurantId',
-          types: { $push: { type: '$_id.type', total: '$total' } },
-        },
-      },
     ]);
+    const typesByRestaurant = new Map();
+    for (const r of rows) {
+      const k = String(r._id.restaurantId);
+      if (!typesByRestaurant.has(k)) typesByRestaurant.set(k, {});
+      typesByRestaurant.get(k)[r._id.type] = r.total;
+    }
 
     const restaurants = await Restaurant.find({})
       .select('name balance totalPaidOut commissionPercent commissionMode')
       .lean();
 
-    const map = new Map(rows.map((r) => [String(r._id), r.types]));
+    
     const counts = await getAllRestaurantsOrderCounts(req.query.from, req.query.to);
     const { map: clickMap } = await clickFeeByRestaurant();
-
+    const periodMap = period ? await periodStatsByRestaurant(period) : null;
     res.json(restaurants.map((r) => {
-      const types = Object.fromEntries(
-        (map.get(String(r._id)) || []).map((x) => [x.type, x.total]),
-      );
+      const types = typesByRestaurant.get(String(r._id)) || {};
       const c = counts.get(String(r._id)) || { cashCount: 0, cardCount: 0 };
       return {
         _id: r._id,
@@ -143,6 +219,12 @@ export const billingController = {
         // Naqd/karta buyurtma soni — tanlangan sana oralig'i bo'yicha
         cashCount: c.cashCount,
         cardCount: c.cardCount,
+        /*
+         * Davr tanlangan bo'lsa — SHU DAVR uchun summalar.
+         * Yuqoridagi tushum/komissiya/tolangan doim JAMI qoladi,
+         * `balans` esa hozirgi holat (bir kunlik emas).
+         */
+        period: periodMap ? (periodMap.get(String(r._id)) || EMPTY_PERIOD) : null,
       };
     }));
   }),
@@ -152,22 +234,138 @@ export const billingController = {
     const filter = {};
     if (req.query.restaurantId) filter.restaurantId = req.query.restaurantId;
     if (req.query.type) filter.type = req.query.type;
-    if (req.query.from || req.query.to) {
-      filter.createdAt = {};
-      if (req.query.from) filter.createdAt.$gte = new Date(req.query.from);
-      if (req.query.to) filter.createdAt.$lte = new Date(req.query.to);
-    }
+    const ledgerPeriod = resolvePeriod(req.query.from, req.query.to);
+    if (ledgerPeriod) filter.createdAt = ledgerPeriod.cond;
 
     const limit = Math.min(Number(req.query.limit) || 100, 500);
     const items = await Ledger.find(filter)
       .populate('restaurantId', 'name')
       .populate('orderId', 'total status')
       .sort({ createdAt: -1 })
-      .limit(limit)
+        .limit(limit)
       .lean();
 
+    /*
+     * "Kim o'tkazdi" — createdBy → ism. populate ishlatilmaydi:
+     * `createdBy` ref'i 'Admin', xodimlar esa 'User' kolleksiyasida.
+     */
+    const ids = [...new Set(items.map((i) => i.createdBy).filter(Boolean).map(String))];
+    if (ids.length) {
+      const users = await User.find({ _id: { $in: ids } }).select('firstName lastName login').lean();
+      const names = new Map(users.map((u) => [String(u._id),
+        [u.firstName, u.lastName].filter(Boolean).join(' ') || u.login || '']));
+      for (const it of items) it.createdByName = it.createdBy ? (names.get(String(it.createdBy)) || '') : '';
+    }
     res.json(items);
   }),
+
+  /*
+   * GET /api/admin/billing/restaurant/:id/orders?method=cash|card&from&to
+   *
+   * Restoran kartasidagi "Naqd: N ta" / "Karta: N ta" sonining
+   * ORQASIDAGI buyurtmalar. Sanash qoidasi AYNAN bir xil
+   * (services/billing.js getAllRestaurantsOrderCounts): faqat
+   * yetkazilgan, naqd yoki (naqd EMAS) karta, yetkazilgan sana
+   * bo'yicha — shuning uchun ro'yxat uzunligi kartadagi songa teng.
+   *
+   * Summalar alohida ko'rsatiladi: taom puli, yetkazish puli,
+   * mijoz xizmat haqi. Jami — mijoz HAQIQATDA to'lagan summa
+   * (order.total); farq bo'lsa (chegirma, bonus) `adjustment`
+   * sifatida chiqadi — ustunlar doim jamiga tenglashadi.
+   *
+   * MIJOZ MA'LUMOTI: faqat 'orders' sahifasiga ruxsati bor
+   * xodim/admin ko'radi (DashboardPage dagi qoida bilan bir xil).
+   * Buxgalterga restoran bilan hisob-kitob uchun buyurtma tarkibi
+   * yetarli — mijozning ismi/telefoni kerak emas.
+   */
+  restaurantOrders: asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    if (!isObjectId(id)) return res.status(400).json({ error: 'Noto‘g‘ri restoran ID' });
+
+    const method = ['cash', 'card'].includes(req.query.method) ? req.query.method : 'all';
+    const period = resolvePeriod(req.query.from, req.query.to);
+
+    const restaurant = await Restaurant.findById(id).select('name').lean();
+    if (!restaurant) return res.status(404).json({ error: 'Restoran topilmadi' });
+
+    const LIMIT = 300;
+    const filter = {
+      restaurantId: id,
+      status: 'delivered',
+      ...paymentGroupFilter(method),
+      ...deliveredWindow(period),
+    };
+    const [rows, count] = await Promise.all([
+      Order.find(filter)
+        .populate('userId', 'firstName lastName phone')
+        .sort({ deliveredAt: -1, updatedAt: -1 })
+        .limit(LIMIT)
+        .lean(),
+      Order.countDocuments(filter),
+    ]);
+
+    const seesCustomer = req.role === 'admin' || canAccessPage(req.role, req.department, 'orders');
+    const round = (n) => Math.round((Number(n) || 0) * 100) / 100;
+
+    const orders = rows.map((o) => {
+      const f = o.finance?.model === 'v2' ? o.finance : null;
+      const foodTotal = f ? tiyinToSom(f.foodSubtotal) : round(o.subtotal);
+      const customerFee = f ? tiyinToSom(f.customerFeeAmount) : round(o.serviceFee);
+      const deliveryFee = f ? tiyinToSom(f.deliveryFee) : round(o.deliveryFee);
+      const total = round(o.total);
+      const u = o.userId && typeof o.userId === 'object' ? o.userId : null;
+
+      return {
+        _id: o._id,
+        label: orderLabel(o),
+        createdAt: o.createdAt,
+        deliveredAt: o.deliveredAt || o.updatedAt,
+        fulfillment: o.fulfillment,
+        paymentMethod: o.paymentMethod,
+        method: o.paymentMethod === 'cash' ? 'cash' : 'card',
+        isPaid: Boolean(o.isPaid),
+        customer: seesCustomer && u
+          ? { name: [u.firstName, u.lastName].filter(Boolean).join(' ') || 'Mijoz', phone: o.phone || u.phone || '' }
+          : null,
+        items: (o.items || []).map((it) => ({
+          name: it.name,
+          quantity: it.quantity,
+          unitPrice: round(it.unitPrice),
+          lineTotal: round((Number(it.unitPrice) || 0) * (Number(it.quantity) || 0)),
+          options: (it.selectedOptions || []).map((x) => x.name).filter(Boolean),
+        })),
+        foodTotal,
+        customerFee,
+        deliveryFee,
+        total,
+        // Chegirma/bonus (manfiy) yoki boshqa qo'shimcha (musbat)
+        adjustment: round(total - foodTotal - customerFee - deliveryFee),
+        // Faqat v2 snapshot bor buyurtmalarda (eskilarida yo'q — null)
+        restaurantShare: f ? tiyinToSom(f.restaurantPayout) : null,
+        lokmaCommission: f ? tiyinToSom(f.lokmaGrossCommission) : null,
+        clickFee: f ? tiyinToSom(f.clickFeeAmount) : null,
+      };
+    });
+
+    const sum = (key) => round(orders.reduce((a, o) => a + (o[key] || 0), 0));
+    res.json({
+      restaurant: { _id: restaurant._id, name: restaurant.name },
+      method,
+      count,
+      truncated: count > orders.length,
+      totals: {
+        foodTotal: sum('foodTotal'),
+        customerFee: sum('customerFee'),
+        deliveryFee: sum('deliveryFee'),
+        adjustment: sum('adjustment'),
+        total: sum('total'),
+        restaurantShare: sum('restaurantShare'),
+        lokmaCommission: sum('lokmaCommission'),
+      },
+      orders,
+    });
+  }),
+
 
   // GET /api/admin/billing/restaurant/:id
   restaurantSummary: asyncHandler(async (req, res) => {

@@ -1,3 +1,4 @@
+import { resolvePeriod, deliveredWindow } from './billingPeriod.js';
 import { Types } from 'mongoose';
 import { Ledger } from '../models/Ledger.js';
 import { Order } from '../models/Order.js';
@@ -863,21 +864,24 @@ export async function recordPayout(restaurantId, amount, adminId, note = '', ide
  * so'rov muammosi bo'lmasin).
  */
 export async function getAllRestaurantsOrderCounts(from, to) {
-  const match = { status: 'delivered' };
-  if (from || to) {
-    match.updatedAt = {};
-    if (from) match.updatedAt.$gte = new Date(from);
-    if (to) match.updatedAt.$lte = new Date(to);
-  }
+  /*
+   * Sana — YETKAZILGAN sana (deliveredAt), updatedAt emas: baho
+   * yoki "To'lov qilindi" bosilganda updatedAt o'zgarib, eski
+   * buyurtma boshqa kunga ko'chib ketardi (billingPeriod.js).
+   */
+  const match = { status: 'delivered', ...deliveredWindow(resolvePeriod(from, to)) };
 
+  /*
+   * To'lov turi bo'yicha guruhlanadi, naqd/karta ajratish esa JS'da
+   * (paymentGroupFilter bilan AYNAN bir xil qoida: 'cash' — naqd,
+   * qolgani — karta). Avval $group ichida $cond ishlatilardi — natija
+   * bir xil, lekin ba'zi MongoDB-mos bazalarda qo'llanmaydi.
+   */
   const rows = await Order.aggregate([
     { $match: match },
     {
       $group: {
-        _id: {
-          restaurantId: '$restaurantId',
-          method: { $cond: [{ $eq: ['$paymentMethod', 'cash'] }, 'cash', 'card'] },
-        },
+        _id: { restaurantId: '$restaurantId', paymentMethod: '$paymentMethod' },
         count: { $sum: 1 },
       },
     },
@@ -888,8 +892,8 @@ export async function getAllRestaurantsOrderCounts(from, to) {
     const id = String(r._id.restaurantId);
     if (!byRestaurant.has(id)) byRestaurant.set(id, { cashCount: 0, cardCount: 0 });
     const bucket = byRestaurant.get(id);
-    if (r._id.method === 'cash') bucket.cashCount = r.count;
-    else bucket.cardCount = r.count;
+    if (r._id.paymentMethod === 'cash') bucket.cashCount += r.count;
+    else bucket.cardCount += r.count;
   }
   return byRestaurant;
 }

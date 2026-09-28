@@ -290,9 +290,19 @@ router.get('/kiosk/dishes', kioskAuth, requireKioskSection('stoplist'), restaura
 router.patch('/kiosk/dishes/:id/stop', kioskAuth, requireKioskSection('stoplist'), restaurantPanelController.toggleStop);
 
 // Komissiya shartnomalari (admin) va yetkazish ustamasi (restoran)
-router.get('/admin/agreements', ...A, agreementController.list);
-router.put('/admin/agreements/:restaurantId', ...A, agreementController.upsert);
-router.get('/admin/agreements/:restaurantId/history', ...A, agreementController.history);
+/*
+ * Kelishuvlar (komissiya foizlari) — Moliya sahifasining ajralmas
+ * qismi: har bir restoran kartasida foiz shundan olinadi, "Kelishuv"
+ * tugmasi ham shu yerda. Avval faqat Super Admin'ga ochiq edi —
+ * buxgalter (billing) sahifani ochsa ham 403 olardi, frontend esa
+ * xatoni yutib, HAR restoranni "Kelishuv belgilanmagan" deb
+ * ko'rsatardi. Endi 'billing' ruxsati bor xodim ham ko'radi va
+ * o'zgartiradi (o'zgarish versiyalanadi: eskisi arxivlanadi,
+ * `createdBy` yoziladi — kim o'zgartirgani aniq).
+ */
+router.get('/admin/agreements', ...AS('billing'), agreementController.list);
+router.put('/admin/agreements/:restaurantId', ...AS('billing'), agreementController.upsert);
+router.get('/admin/agreements/:restaurantId/history', ...AS('billing'), agreementController.history);
 router.get('/panel/agreement', ...R, agreementController.myAgreement);
 
 /*
@@ -451,6 +461,8 @@ router.get('/admin/billing/overview', ...AS('billing'), billingController.overvi
 router.get('/admin/billing/restaurants', ...AS('billing'), billingController.byRestaurant);
 router.get('/admin/billing/ledger', ...AS('billing'), billingController.ledger);
 router.get('/admin/billing/restaurant/:id', ...AS('billing'), billingController.restaurantSummary);
+// "Naqd: N ta / Karta: N ta" ortidagi buyurtmalar (taom, yetkazish, jami)
+router.get('/admin/billing/restaurant/:id/orders', ...AS('billing'), billingController.restaurantOrders);
 
 /*
  * ═══ RESTORAN TO'LOV REKVIZITI (Moliya moduli) ═══
@@ -461,6 +473,8 @@ router.get('/admin/billing/restaurant/:id', ...AS('billing'), billingController.
 router.get('/admin/restaurants/:id/payout', ...AS('billing'), restaurantPayoutController.get);
 router.patch('/admin/restaurants/:id/payout', ...AS('billing'), restaurantPayoutController.update);
 router.get('/admin/restaurants/:id/payout/audit', ...AS('billing'), restaurantPayoutController.audit);
+// TO'LIQ rekvizit (bank hisob / karta raqami) — har ko'rish audit'ga yoziladi
+router.get('/admin/restaurants/:id/payout/reveal', ...AS('billing'), restaurantPayoutController.reveal);
 router.post('/admin/billing/payout', ...AS('billing'), billingController.payout);
 router.patch('/admin/restaurants/:id/commission', auth, requireRole('admin'), billingController.setCommission);
 
@@ -571,7 +585,10 @@ router.delete('/admin/restaurants/:id', auth, requireRole('admin'), adminControl
 router.patch('/admin/restaurants/:id/block', auth, requireRole('admin'), adminController.toggleBlock);
 router.get('/admin/settings', auth, requireRole('admin'), adminController.getSettingsData);
 router.patch('/admin/settings', auth, requireRole('admin'), adminController.updateSettings);
-router.get('/admin/revenue', auth, requireRole('admin'), adminController.revenue);
+// 'revenue' sahifasiga ruxsati bor xodim (buxgalter, buyurtmalar nazorati)
+// ham ko'ra olishi kerak — avval faqat Super Admin edi, sahifa ochilar
+// lekin ma'lumot 403 bilan qaytardi (frontend jim yutardi).
+router.get('/admin/revenue', ...AS('revenue'), adminController.revenue);
 router.get('/admin/banners', ...AS('banners'), adminController.banners);
 router.post('/admin/banners', auth, requireRole('admin'), adminController.createBanner);
 router.patch('/admin/banners/:id', auth, requireRole('admin'), adminController.updateBanner);

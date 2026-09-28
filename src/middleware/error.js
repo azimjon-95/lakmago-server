@@ -38,6 +38,11 @@ export function errorHandler(err, req, res, _next) {
     });
   }
 
+  // Moliya: noto'g'ri sana oralig'i — foydalanuvchi xatosi (services/billingPeriod.js)
+  if (err?.name === 'PeriodError') {
+    return res.status(400).json({ error: err.message, code: 'PERIOD' });
+  }
+
   // Takrorlanuvchi unique qiymat
   if (err?.code === 11000) {
     const field = Object.keys(err.keyPattern || {})[0] || 'qiymat';
