@@ -159,10 +159,26 @@ export function calcDeliveryPrice(distanceKm, restaurant, subtotal = 0) {
 
   if (mode === 'perKm') {
     const perKm = Math.max(0, Math.round(Number(restaurant?.delivery?.perKm) || 0));
-    const freeKm = Math.max(0, Number(restaurant?.delivery?.freeKm) || 0);
+        const freeKm = Math.max(0, Number(restaurant?.delivery?.freeKm) || 0);
+    /*
+     * Boshlang'ich narx: `freeKm` masofagacha olinadigan summa.
+     * 0 bo'lsa shu masofagacha BEPUL (avvalgi xatti-harakat), 0 dan
+     * katta bo'lsa — masalan 5 000 — shu masofa ichida (0.3 km ham,
+     * 1 km ham) aynan shu summa, keyin har km uchun perKm QO'SHILADI.
+     * Butun so'mgacha yaxlitlanadi; restoran kiritgan summa
+     * o'zgartirilmaydi (100 ga yaxlitlash faqat km qismiga tegishli).
+     */
+    const basePrice = Math.max(0, Math.round(Number(restaurant?.delivery?.basePrice) || 0));
 
     if (!Number.isFinite(distanceKm)) {
-      breakdown = { mode: 'perKm', fallback: true, perKm, freeKm };
+      /*
+       * Masofa noma'lum: qat'iy narxga qaytamiz, lekin boshlang'ich
+       * narxdan KAM emas — aks holda (qat'iy narx 0 bo'lsa) mijoz
+       * tekin oladi, restoran esa hech bo'lmaganda boshlang'ich
+       * summani kutgan edi.
+       */
+      fee = Math.max(flatFee, basePrice);
+      breakdown = { mode: 'perKm', fallback: true, perKm, freeKm, basePrice };
     } else {
       // Bepul masofadan keyingi qism uchun to'lanadi
       const paidKm = Math.max(0, distanceKm - freeKm);
@@ -170,9 +186,10 @@ export function calcDeliveryPrice(distanceKm, restaurant, subtotal = 0) {
        * 100 so'mgacha yaxlitlanadi — mijoz "4 733 so'm" kabi
        * g'alati summani ko'rmasin.
        */
-      fee = Math.round((paidKm * perKm) / 100) * 100;
+            const extraFee = Math.round((paidKm * perKm) / 100) * 100;
+      fee = basePrice + extraFee;
       breakdown = {
-        mode: 'perKm', perKm, freeKm,
+        mode: 'perKm', perKm, freeKm, basePrice, extraFee,
         distanceKm: Math.round(distanceKm * 10) / 10,
         paidKm: Math.round(paidKm * 10) / 10,
       };

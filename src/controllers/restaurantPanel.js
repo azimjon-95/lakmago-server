@@ -467,6 +467,8 @@ export const restaurantPanelController = {
         // Narx rejimi: qat'iy narx yoki kilometr bo'yicha
         pricingMode: z.enum(['flat', 'perKm']).optional(),
         freeKm: z.number().min(0).max(200).optional(),
+        // Boshlang'ich narx: freeKm masofagacha olinadigan summa (0 = bepul)
+        basePrice: z.number().min(0).max(500000).optional(),
         perKm: z.number().min(0).max(1000000).optional(),
       }).optional(),
       openTime: z.string().regex(/^\d{2}:\d{2}$/).optional(),
@@ -506,6 +508,23 @@ export const restaurantPanelController = {
     }
 
     const data = { ...parsed.data };
+
+    /*
+     * `delivery` — ichma-ich obyekt. `findByIdAndUpdate(id, { delivery: {...} })`
+     * uni BUTUNLAY ALMASHTIRADI (tekshirilgan): yuborilmagan maydonlar
+     * o'chib, defaultga qaytadi. Eski (keshlangan) panel yangi
+     * `basePrice` ni bilmaydi va uni yubormaydi — restoran har qanday
+     * maydonni saqlasa, boshlang'ich narx JIMGINA 0 bo'lib, mijozlar
+     * tekin yetkazish ko'rib qolardi. Shuning uchun har maydon alohida
+     * yo'l ('delivery.basePrice') bilan yoziladi: FAQAT yuborilgani
+     * o'zgaradi.
+     */
+    if (data.delivery) {
+      for (const [key, value] of Object.entries(data.delivery)) {
+        data[`delivery.${key}`] = value;
+      }
+      delete data.delivery;
+    }
 
     // Yetkazish vaqti mantiqiy bo'lsin
     if (data.deliveryMin != null && data.deliveryMax != null

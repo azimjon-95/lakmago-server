@@ -119,6 +119,16 @@ const restaurantSchema = new Schema(
 
       // perKm rejimi uchun: shu masofagacha yetkazish bepul
       freeKm: { type: Number, default: 0, min: 0, max: 200 },
+      /*
+       * perKm rejimi uchun: BOSHLANG'ICH NARX — `freeKm` masofagacha
+       * (shu masofa ichida) olinadigan qat'iy summa.
+       *   0        — shu masofagacha yetkazish BEPUL (avvalgi xatti-harakat);
+       *   masalan 5000 va freeKm=1 — 1 km gacha 5 000 so'm;
+       * `freeKm` dan keyin har km uchun `perKm` ustiga QO'SHILADI:
+       *   narx = basePrice + (masofa − freeKm) × perKm
+       * default 0 — mavjud restoranlar narxi O'ZGARMAYDI.
+       */
+      basePrice: { type: Number, default: 0, min: 0, max: 500000 },
       // perKm rejimi uchun: bepul masofadan keyin har km narxi
       perKm: { type: Number, default: 0, min: 0, max: 1000000 },
     },

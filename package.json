@@ -31,7 +31,8 @@
     "test:reminders": "node tests/restaurant-reminders.test.mjs",
     "test:support": "node tests/support-chat.test.mjs",
     "test:support-group": "node tests/support-group.test.mjs",
-    "test:finance": "node tests/finance-accountant.test.mjs"
+    "test:finance": "node tests/finance-accountant.test.mjs",
+    "test:baseprice": "node tests/delivery-baseprice.test.mjs"
   },
   "dependencies": {
     "@socket.io/redis-adapter": "^8.3.0",
