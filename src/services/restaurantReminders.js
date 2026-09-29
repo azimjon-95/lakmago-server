@@ -2,7 +2,8 @@ import { Order } from '../models/Order.js';
 import { RestaurantBotMessage } from '../models/RestaurantBotMessage.js';
 import { activeStaff, refreshOrderMessages } from './restaurantBotOrders.js';
 import { sendToStaff, tgCall, answerCallback, btn, esc } from './restaurantBotApi.js';
-import { confirmOrderDelivered, COMPLETABLE_STATUSES } from './deliveryCheck.js';
+import { confirmOrderDelivered } from './deliveryCheck.js';
+import { COMPLETABLE_STATUSES, REMINDER_RULES, planReminder } from './reminderRules.js';
 import { orderLabel } from './orderNumber.js';
 
 /*
@@ -47,59 +48,12 @@ import { orderLabel } from './orderNumber.js';
  *     qilingan buyurtma yakunlanmaydi, pul ikki marta yozilmaydi.
  */
 
-const MIN = 60_000;
-const HOUR = 60 * MIN;
-export const REMINDER_RULES = {
-  firstAfterMin: 30,
-  secondAfterMin: 30,
-  maxReminders: 2,
-  autoAfterStageHours: 12,
-  autoGraceAfterLastHours: 3,
-  lookbackDays: 30,
-};
+// Sof qoidalar (jadval, planReminder, tasdiqlash sharti) — reminderRules.js da.
+// Bu yerdan qayta eksport qilinadi: mavjud importlar va testlar o'zgarmaydi.
+export { REMINDER_RULES, planReminder, confirmEligibility } from './reminderRules.js';
+
+const HOUR = 60 * 60_000;
 const TZ = 'Asia/Tashkent';
-
-/** Buyurtma joriy holatga qachon o'tgan (rejalashtirilgan vaqtdan oldin emas). */
-function stageAt(o) {
-  const byStatus = {
-    accepted: o.acceptedAt,
-    preparing: o.acceptedAt,
-    ready: o.readyAt,
-    delivering: o.deliveringAt,
-  }[o.status];
-  let t = new Date(byStatus || o.updatedAt || o.createdAt).getTime();
-  if (o.scheduledFor) t = Math.max(t, new Date(o.scheduledFor).getTime());
-  return t;
-}
-
-/**
- * Sof qaror: bu buyurtma bilan hozir nima qilish kerak.
- * @returns {{ action: 'none' } | { action: 'ask', n: number } | { action: 'auto' }}
- */
-export function planReminder(o, now = Date.now()) {
-  if (!COMPLETABLE_STATUSES.includes(o.status)) return { action: 'none' };
-  if (!['delivery', 'pickup'].includes(o.fulfillment)) return { action: 'none' };
-
-  const rr = o.restaurantReminder || {};
-  const count = rr.forStatus === o.status ? (rr.askedCount || 0) : 0;
-  const base = stageAt(o);
-  if (now < base) return { action: 'none' }; // rejalashtirilgan — vaqti kelmagan
-
-  const R = REMINDER_RULES;
-  if (count < R.maxReminders) {
-    const due = count === 0
-      ? base + R.firstAfterMin * MIN
-      : new Date(rr.lastAskedAt || base).getTime() + R.secondAfterMin * MIN;
-    return now >= due ? { action: 'ask', n: count } : { action: 'none' };
-  }
-
-  if (o.fulfillment === 'delivery' && o.status === 'delivering') return { action: 'none' };
-  const last = new Date(rr.lastAskedAt || base).getTime();
-  if (now - base >= R.autoAfterStageHours * HOUR && now - last >= R.autoGraceAfterLastHours * HOUR) {
-    return { action: 'auto' };
-  }
-  return { action: 'none' };
-}
 
 function when(o) {
   return new Intl.DateTimeFormat('ru-RU', {
@@ -157,7 +111,7 @@ async function ask(o, n) {
 }
 
 /** Barcha xodimlardagi eslatma nusxalaridan tugmalarni olib tashlaydi. */
-async function clearReminderButtons(orderId) {
+export async function clearReminderButtons(orderId) {
   const msgs = await RestaurantBotMessage.find({ orderId, kind: 'reminder' }).lean();
   await Promise.all(msgs.map((m) => tgCall('editMessageReplyMarkup', {
     chat_id: m.telegramUserId, message_id: m.messageId, reply_markup: { inline_keyboard: [] },

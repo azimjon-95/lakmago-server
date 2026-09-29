@@ -8,59 +8,11 @@ import { Order } from '../models/Order.js';
 import { Banner } from '../models/User.js';
 import { getIO } from '../sockets/io.js';
 import { changeOrderStatus, OrderFlowError } from '../services/orderFlow.js';
+import { toPanelOrder } from '../services/panelOrderView.js';
 
 // Restoran token'idagi restaurantId'ni oladi (auth middleware qo'ygan)
 function rid(req) {
   return req.restaurantId;
-}
-
-/**
- * Restoran ko'radigan moliyaviy tasvir.
- *
- * Faqat restoranga tegishli raqamlar: taom summasi, ushlangan
- * komissiya va qo'lga tegadigan summa. LokmaGo daromadi, shlyuz
- * residuali va mijoz xizmat haqining taqsimoti KO'RSATILMAYDI.
- *
- * Summalar so'mda (snapshot tiyinda saqlanadi).
- */
-function restaurantFinanceView(f) {
-  const som = (t) => Math.round(Number(t) || 0) / 100;
-  return {
-    model: f.model,
-    currency: f.currency,
-    foodSubtotal: som(f.foodSubtotal),
-    discountAmount: som(f.discountAmount),
-    restaurantCommissionPercent: f.restaurantCommissionPercent,
-    restaurantCommissionAmount: som(f.restaurantCommissionAmount),
-    restaurantPayout: som(f.restaurantPayout),
-    deliveryFee: som(f.deliveryFee),
-    totalCharged: som(f.totalCharged),
-  };
-}
-
-/*
- * Buyurtmani panelga (va Android gateway'ga) qulay ko'rinishga
- * keltiradi — mijoz ma'lumotini bitta obyektga yig'adi.
- * `orders()` va `orderDetail()` IKKALASI ham shu funksiyadan
- * foydalanadi — mijoz ko'rinishi ikki joyda alohida yozilib,
- * bir joyda tuzatilib ikkinchisida unutilib qolmasin.
- *
- * `finance` bu yerda ALLAQACHON restaurantFinanceView bilan
- * qisqartirilgan bo'lishi kerak — chaqiruvchi javobgar.
- */
-function shapeOrderForPanel(o) {
-  const u = o.userId || {};
-  return {
-    ...o,
-    userId: u._id ? String(u._id) : null,
-    customer: {
-      name: [u.firstName, u.lastName].filter(Boolean).join(' ') || 'Mijoz',
-      username: u.username || '',
-      telegramId: u.telegramId || '',
-      phone: o.phone || u.phone || '',
-      photoUrl: u.photoUrl || '',
-    },
-  };
 }
 
 /*
@@ -354,11 +306,8 @@ export const restaurantPanelController = {
       .limit(80)
       .lean();
 
-    for (const o of orders) {
-      if (o.finance) o.finance = restaurantFinanceView(o.finance);
-    }
-
-    res.json(orders.map(shapeOrderForPanel));
+    // toPanelOrder: finance qisqartiriladi, mijoz ko'rinishi yig'iladi (unutib bo'lmaydi)
+    res.json(orders.map((o) => toPanelOrder(o)));
   }),
 
   /*
@@ -379,8 +328,7 @@ export const restaurantPanelController = {
       .populate('userId', 'firstName lastName username telegramId phone photoUrl')
       .lean();
     if (!order) return res.status(404).json({ error: 'Buyurtma topilmadi' });
-    if (order.finance) order.finance = restaurantFinanceView(order.finance);
-    res.json(shapeOrderForPanel(order));
+    res.json(toPanelOrder(order));
   }),
 
   // PATCH /api/panel/orders/:id/status  { status }
@@ -396,17 +344,35 @@ export const restaurantPanelController = {
    */
   updateOrderStatus: asyncHandler(async (req, res) => {
     try {
-      const { order } = await changeOrderStatus({
+      const { order, changed } = await changeOrderStatus({
         orderId: req.params.id,
         restaurantId: rid(req),
         status: req.body.status,
       });
-      return res.json(order);
+      /*
+       * XAVFSIZLIK: avval `res.json(order)` — XOM Mongoose hujjati edi:
+       *   • finance.lokmaNetCommission va clickFeeAmount (LokmaGo ichki
+       *     ko'rsatkichlari, tiyinda) restoranga/gateway'ga chiqib ketardi;
+       *   • `userId` populate qilingan BUTUN mijoz hujjati edi (saqlangan
+       *     manzillar, kartalar, bonus balansi, sevimlilar).
+       * Endi ro'yxat va tafsilot bilan AYNAN bir xil xavfsiz ko'rinish
+       * (toPanelOrder) + `changed`:
+       *   changed: true  — holat shu so'rov bilan o'zgardi;
+       *   changed: false — allaqachon shu holatda edi (tugma ikki marta
+       *                    bosilgan / boshqa qurilma oldin bajargan), xato emas.
+       * `changed` buyurtma maydoni emas — Order'da bunday nom yo'q.
+       */
+      return res.json({ ...toPanelOrder(order), changed });
     } catch (e) {
       if (e instanceof OrderFlowError) {
-        // NOT_FOUND -> 404, qolgani -> 400 (mijoz xatosi)
-        const code = e.code === 'NOT_FOUND' ? 404 : 400;
-        return res.status(code).json({ error: e.message });
+        /*
+         * NOT_FOUND → 404; RACE_LOST → 409 (boshqa qurilma/xodim shu
+         * onda o'zgartirib ulgurdi: mijoz xatosi emas, holat to'qnashuvi);
+         * qolgani (noto'g'ri status, mumkin bo'lmagan o'tish) → 400.
+         * `code` — mashinaga o'qiladigan: matn o'zgarsa ham moslash buzilmaydi.
+         */
+        const http = e.code === 'NOT_FOUND' ? 404 : e.code === 'RACE_LOST' ? 409 : 400;
+        return res.status(http).json({ error: e.message, code: e.code });
       }
       throw e;
     }

@@ -1,3 +1,4 @@
+import { COMPLETABLE_STATUSES } from './reminderRules.js';
 import { config } from '../config/index.js';
 import { Order } from '../models/Order.js';
 import { Restaurant } from '../models/Restaurant.js';
@@ -135,7 +136,8 @@ export async function checkDeliveries() {
  * @returns {Promise<object|null>} yakunlangan buyurtma yoki null
  *   (topilmadi / allaqachon yakunlangan / bekor qilingan)
  */
-export const COMPLETABLE_STATUSES = ['accepted', 'preparing', 'ready', 'delivering'];
+// Ro'yxat services/reminderRules.js da (sof modul); mavjud importlar buzilmasin deb qayta eksport
+export { COMPLETABLE_STATUSES };
 
 export async function confirmOrderDelivered(orderId, confirmedBy = 'customer', { restaurantId } = {}) {
   const now = new Date();

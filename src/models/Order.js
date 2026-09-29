@@ -1,4 +1,5 @@
 import { Schema, model } from 'mongoose';
+import { orderEventsPlugin } from './orderEvents.js';
 
 const orderItemSchema = new Schema(
   {
@@ -363,5 +364,8 @@ orderSchema.index(
     partialFilterExpression: { dailyNumber: { $type: 'number' } },
   },
 );
+
+// BFF ga hodisa: buyurtma QANDAY yo'l bilan o'zgarsa ham avtomatik (models/orderEvents.js)
+orderSchema.plugin(orderEventsPlugin);
 
 export const Order = model('Order', orderSchema);

@@ -33,7 +33,9 @@
     "test:support-group": "node tests/support-group.test.mjs",
     "test:finance": "node tests/finance-accountant.test.mjs",
     "test:baseprice": "node tests/delivery-baseprice.test.mjs",
-    "test:address": "node tests/address-update.test.mjs"
+    "test:address": "node tests/address-update.test.mjs",
+    "test:bff-events": "node tests/bff-events.test.mjs",
+    "test:gateway": "node tests/gateway-service.test.mjs"
   },
   "dependencies": {
     "@socket.io/redis-adapter": "^8.3.0",

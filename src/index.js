@@ -19,6 +19,8 @@ import { jDumpController } from './controllers/jDump.js';
 import mongoSanitize from 'express-mongo-sanitize';
 import { Router } from 'express';
 import { androidGatewayAuth } from './middleware/androidGatewayAuth.js';
+import { serviceGatewayAuth, logServiceGatewayStatus } from './middleware/serviceGatewayAuth.js';
+import { gatewayOrdersController } from './controllers/gatewayOrders.js';
 import { restaurantPanelController } from './controllers/restaurantPanel.js';
 
 async function main() {
@@ -416,12 +418,46 @@ async function main() {
    * chegaralangan kombinatsiyaga ega); per-restaurant PIN qulfi
    * androidGatewayAuth ichida, DB darajasida.
    */
+  /*
+   * Ikkala kirish (PIN va servis kaliti) AYNAN BIR XIL marshrutlarni
+   * ishlatadi — funksiya bir marta yoziladi, ikkinchisi eskirib qolmasin.
+   * Faqat autentifikatsiya farq qiladi (pastda).
+   *
+   * MUHIM TARTIB: `/orders/history` va `/stats` `/orders/:id` dan OLDIN.
+   */
+  const mountGatewayRoutes = (r) => {
+    r.get('/', restaurantPanelController.profile);
+    r.get('/orders', restaurantPanelController.orders);
+    r.get('/orders/history', gatewayOrdersController.history);
+    r.get('/stats', gatewayOrdersController.stats);
+    r.get('/orders/:id', restaurantPanelController.orderDetail);
+    r.patch('/orders/:id/status', restaurantPanelController.updateOrderStatus);
+    r.post('/orders/:id/confirm-delivered', gatewayOrdersController.confirmDelivered);
+  };
+
+  /*
+   * SERVIS-SERVIS (BFF): /app/service/:restaurantId/...  + x-gateway-key +
+   * IP ro'yxati. PIN va loginLimiter'dan CHIQARILGAN (middleware/
+   * serviceGatewayAuth.js). PIN routeridan OLDIN: 'service' 4-8 xonali
+   * PIN bo'la olmaydi, shuning uchun ikkisi hech qachon to'qnashmaydi.
+   */
+  const serviceGateway = Router({ mergeParams: true });
+  serviceGateway.use(serviceGatewayAuth);
+  mountGatewayRoutes(serviceGateway);
+  /*
+   * YAKUNIY: mos kelmagan yo'l shu yerda 404. Aks holda so'rov keyingi
+   * `/app/:pincode/:restaurantId` (PIN) routeriga o'tib ketardi:
+   * 'service' PIN deb o'qilib 401 "PIN noto'g'ri" qaytardi va IP bo'yicha
+   * loginLimiter'ga muvaffaqiyatsiz urinish bo'lib yozilardi.
+   */
+  serviceGateway.use((req, res) => res.status(404).json({ error: 'Topilmadi' }));
+  app.use('/app/service/:restaurantId', serviceGateway);
+  logServiceGatewayStatus();
+
+  // PIN bilan (Android ilova to'g'ridan-to'g'ri)
   const androidGateway = Router({ mergeParams: true });
   androidGateway.use(loginLimiter, androidGatewayAuth);
-  androidGateway.get('/', restaurantPanelController.profile);
-  androidGateway.get('/orders', restaurantPanelController.orders);
-  androidGateway.get('/orders/:id', restaurantPanelController.orderDetail);
-  androidGateway.patch('/orders/:id/status', restaurantPanelController.updateOrderStatus);
+  mountGatewayRoutes(androidGateway);
   app.use('/app/:pincode/:restaurantId', androidGateway);
 
   app.use('/api', apiLimiter, router);
@@ -463,6 +499,12 @@ async function main() {
     const { checkDeliveries } = await import('./services/deliveryCheck.js');
     setTimeout(() => checkDeliveries().catch((e) => console.error('Yetkazish tekshiruvi:', e.message)), 30_000);
     setInterval(() => checkDeliveries().catch((e) => console.error('Yetkazish tekshiruvi:', e.message)), 2 * 60_000);
+  }
+
+  // BFF ga buyurtma hodisalari (BFF_BASE_URL + BFF_WEBHOOK_SECRET bo'lsa) — services/bffEvents.js
+  {
+    const { startBffEventWorker } = await import('./services/bffEvents.js');
+    startBffEventWorker();
   }
 
   /*

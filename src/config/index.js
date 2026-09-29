@@ -385,6 +385,38 @@ export const config = {
       .replace(/\/.*$/, '')            // yo'l
       .replace(/:\d+$/, ''))           // port
     .filter(Boolean),
+
+  /*
+   * ═══ ANDROID GATEWAY — SERVIS-SERVIS KIRISH (BFF) ═══
+   *
+   * PIN (4 xonali) URL'da turadi va IP bo'yicha `loginLimiter` (10 ta
+   * muvaffaqiyatsiz so'rov / 15 daq) ostida: BFF barcha restoranlar
+   * uchun BITTA IP bo'lgani uchun bitta restoranning ikki marta
+   * bosilgan tugmasi (10 ta 400) butun kanalni 15 daqiqaga o'chirardi.
+   *
+   * Servis kaliti: `x-gateway-key` sarlavhasi + BFF IP ro'yxati.
+   * Marshrut: /app/service/:restaurantId/...  (PIN yo'q, restaurantId yo'lda).
+   * PIN va loginLimiter'dan CHIQARILGAN.
+   *
+   * IKKALASI ham sozlanmasa marshrut YO'Q (404): kalit bor-u IP ro'yxati
+   * bo'sh bo'lsa — ochiq qoldirilmaydi (fail-closed).
+   *   GATEWAY_SERVICE_KEY   — kamida 24 belgi (openssl rand -hex 32)
+   *   GATEWAY_ALLOWED_IPS   — vergul bilan: 203.0.113.5, 10.0.0.0/24, ::1
+   */
+  gatewayServiceKey: String(process.env.GATEWAY_SERVICE_KEY || '').trim(),
+  gatewayAllowedIps: String(process.env.GATEWAY_ALLOWED_IPS || '')
+    .split(',').map((x) => x.trim()).filter(Boolean),
+
+  /*
+   * ═══ BFF GA BUYURTMA HODISALARI ═══
+   *
+   * Buyurtma o'zgarganda BFF'ga `POST {BFF_BASE_URL}/internal/orders/events`
+   * `{event, restaurantId, orderId}` + `x-webhook-secret` yuboriladi
+   * (services/bffEvents.js). Ikkalasi ham to'lmasa — o'chiq, hech narsa
+   * yuborilmaydi va hech qanday yuk yo'q.
+   */
+  bffBaseUrl: String(process.env.BFF_BASE_URL || '').trim().replace(/\/+$/, ''),
+  bffWebhookSecret: String(process.env.BFF_WEBHOOK_SECRET || '').trim(),
 };
 
 /*
