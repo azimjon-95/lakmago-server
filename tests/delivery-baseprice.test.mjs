@@ -300,6 +300,58 @@ console.log('\n[D] Client nusxasi (lib/pricing.js) serverdagi formula bilan HAR 
   }
 }
 
+/* ═══ [E] MIJOZGA KO'RSATILADIGAN MISOLLAR = SERVER NARXI ═══ */
+console.log('\n[E] Mijoz ilovasi "Masalan, 3 km — 9 000" desa — server AYNAN shuni hisoblaydi');
+{
+  const { existsSync } = await import('node:fs');
+  const { fileURLToPath, pathToFileURL } = await import('node:url');
+  const p = fileURLToPath(new URL('../../lakmago-client/src/lib/deliveryInfo.js', import.meta.url));
+  if (!existsSync(p)) {
+    console.log('  – lakmago-client yonma-yon topilmadi — o‘tkazib yuborildi');
+  } else {
+    const { deliveryTerms, isFreeDelivery, cardDeliveryLabel } = await import(pathToFileURL(p).href);
+    let checked = 0; let bad = null; let examples = 0;
+    for (const basePrice of [0, 3000, 5000, 5050]) for (const freeKm of [0, 1, 2.5, 4]) for (const perKm of [0, 1700, 2000])
+      for (const maxDistanceKm of [0, 4, 20]) for (const deliveryFee of [0, 15000]) {
+        const rest = { deliveryEnabled: true, deliveryFee, freeDeliveryThreshold: 300000, delivery: { maxDistanceKm, pricingMode: 'perKm', freeKm, perKm, basePrice } };
+        const t = deliveryTerms(rest);
+        checked++;
+        // Ko'rsatilgan har bir misol server narxiga teng (kichik summa — bepul chegarasi aralashmasin)
+        for (const ex of (t.examples || [])) {
+          examples++;
+          const q = calcDeliveryPrice(ex.km, rest, 1);
+          if (!q.available || q.price !== ex.price) { if (!bad) bad = { basePrice, freeKm, perKm, maxDistanceKm, km: ex.km, ui: ex.price, server: q.price, available: q.available }; }
+        }
+        // "Bepul yetkazish" belgisi faqat server HAR QANDAY masofada 0 desa
+        if (isFreeDelivery(rest)) {
+          for (const km of [0.3, 1, 3, 9]) {
+            if (maxDistanceKm && km > maxDistanceKm) continue;
+            const q = calcDeliveryPrice(km, rest, 1);
+            if (q.available && q.price !== 0 && !bad) bad = { free: true, basePrice, freeKm, perKm, km, server: q.price };
+          }
+        }
+        // Kartochkadagi "X dan" — QUYI chegara: hech bir masofada server narxi
+        // undan past emas va 0 km da aynan teng (yolg'on "arzon" va'da yo'q)
+        const lab = cardDeliveryLabel(rest);
+        if (lab?.kind === 'from' && !bad) {
+          const prices = [0, 0.3, 1, 2.5, 3, 9].filter((km) => !maxDistanceKm || km <= maxDistanceKm).map((km) => calcDeliveryPrice(km, rest, 1).price);
+          if (Math.min(...prices) !== lab.price) bad = { from: lab.price, serverMin: Math.min(...prices), basePrice, freeKm, perKm };
+        }
+        // "N km gacha bepul" — server shu masofagacha haqiqatan 0 desin
+        if (lab?.kind === 'freeUpTo' && !bad) {
+          const inside = [0.1, lab.km / 2, lab.km].filter((km) => km <= lab.km && (!maxDistanceKm || km <= maxDistanceKm));
+          if (inside.some((km) => calcDeliveryPrice(km, rest, 1).price !== 0)) bad = { freeUpTo: lab.km, basePrice, freeKm, perKm };
+        }
+      }
+    ok(!bad, `${checked} ta sozlama, ${examples} ta misol: ekrandagi narx = server narxi${bad ? ' — FARQ ' + JSON.stringify(bad) : ''}`);
+
+    // Skrinshotdagi TOTLI
+    const totli = { deliveryEnabled: true, deliveryFee: 15000, freeDeliveryThreshold: 300000, delivery: { maxDistanceKm: 20, pricingMode: 'perKm', freeKm: 1, perKm: 2000, basePrice: 5000 } };
+    ok(JSON.stringify(deliveryTerms(totli).examples) === JSON.stringify([{ km: 3, price: 9000 }, { km: 5, price: 13000 }]), 'TOTLI: 3 km = 9 000, 5 km = 13 000');
+    ok(calcDeliveryPrice(3, totli, 1).price === 9000 && calcDeliveryPrice(5, totli, 1).price === 13000, 'server ham shunday hisoblaydi');
+  }
+}
+
 console.log(fails ? `\n✗ ${fails} ta xato` : '\n✓ HAMMASI O‘TDI');
 await mongoose.disconnect();
 process.exit(fails ? 1 : 0);
