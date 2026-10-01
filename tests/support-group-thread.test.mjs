@@ -10,7 +10,7 @@ process.env.MONGO_URI = 'mongodb://127.0.0.1:27017/lokma_support_thread';
 process.env.TELEGRAM_BOT_TOKEN = '1:TEST';
 process.env.SUPPORT_GROUP_CHAT_ID = '-100777';
 process.env.ADMIN_PANEL_URL = 'https://admin.lokma.uz';
-process.env.SUPPORT_GROUP_THREAD_MINUTES = '60';
+process.env.SUPPORT_GROUP_THREAD_MINUTES = '0'; // standart: sessiya yopilguncha, vaqt chegarasisiz
 process.env.JWT_SECRET = 'x'.repeat(40);
 
 const calls = [];
@@ -53,6 +53,17 @@ async function call(fn, req) {
 const A = await User.create({ firstName: 'Murodbek', lastName: 'Amanov', username: 'muq', telegramId: '111', phone: '+998900000001' });
 const B = await User.create({ firstName: 'Sitora', telegramId: '222', phone: '+998900000002' });
 const adminU = await User.create({ firstName: 'Bahrom', login: 'bahrom' });
+
+
+// `resolve` handleri findByIdAndUpdate(...).select('-messages') ishlatadi; FerretDB (faqat test bazasi)
+// findAndModify'da proyeksiyani qo'llamaydi. Handlerning O'ZI (va uning guruh postiga ulanishi) sinaladi,
+// faqat shu bitta chaqiruv almashtiriladi.
+async function resolveChat(id, resolved) {
+  const orig = SupportChat.findByIdAndUpdate;
+  SupportChat.findByIdAndUpdate = (cid, upd) => ({ select: async () => { await SupportChat.updateOne({ _id: cid }, upd); return { _id: cid, ...upd }; } });
+  try { return await call(supportController.resolve, { params: { id: String(id) }, body: { resolved } }); }
+  finally { SupportChat.findByIdAndUpdate = orig; }
+}
 
 const say = (u, text) => call(supportController.sendMessage, { userId: u._id, body: { text } });
 const chatOf = (u) => SupportChat.findOne({ userId: u._id }).lean();
@@ -127,53 +138,98 @@ console.log('\n[4] ADMIN JAVOBI: o‘sha post tahrirlanadi — ✅✅ Javob beri
   ok(r.status === 201, 'admin javobi qabul qilindi (201)');
   ok(edits().length === 1 && edits()[0].body.message_id === 501 && sends().length === 0, 'A ning posti tahrirlandi (yangi xabar YO‘Q)');
   const t = edits()[0].body.text;
-  ok(t.includes('✅✅ <b>Javob berildi</b> · Bahrom') && !t.includes('⏳'), 'holat: ✅✅ Javob berildi · Bahrom (⏳ yo‘qoldi)');
+  ok(/✅✅ <b>Javob berildi<\/b> · Bahrom · <i>\d\d:\d\d<\/i>/.test(t) && !t.includes('⏳'), 'pastki holat: ✅✅ Javob berildi · Bahrom · vaqt (⏳ yo‘qoldi)');
   ok(t.includes('«Hop»') && t.includes('«Men yana yozdim»') && t.includes('🆘'), 'mijoz satrlari va sarlavha joyida');
-  ok(/✅✅ <b>Javob berildi<\/b> · Bahrom · <i>\d\d:\d\d<\/i>/.test(t), 'javob vaqti ham bor');
+  ok((t.match(/javob berdi/g) || []).length === 0, 'oxirgi javob faqat pastki holatda (satrlar orasida takrorlanmaydi)');
   ok(edits()[0].body.reply_markup.inline_keyboard[0][0].text.includes('Xabarlar'), 'tugma joyida');
   const cA = await chatOf(A);
-  ok(cA.groupPost.repliedAt && cA.groupPost.repliedBy === 'Bahrom', 'holat bazada (repliedAt, repliedBy)');
+  const lastLine = cA.groupPost.lines[cA.groupPost.lines.length - 1];
+  ok(lastLine.kind === 'reply' && lastLine.by === 'Bahrom', 'javob bazada satr sifatida (kind: reply)');
   ok(!edits().some((e) => e.body.message_id !== 501), 'boshqa mijozlar postiga TEGILMADI');
 
   reset();
   await adminReply(A, 'Yana bir javob');
-  ok(edits().length === 0, 'ikkinchi javob — qayta tahrir yo‘q (holat allaqachon ✅✅)');
+  ok(edits().length === 0, 'ketma-ket ikkinchi javob — qayta tahrir yo‘q (holat allaqachon ✅✅)');
 }
 
-console.log('\n[5] Javobdan keyin mijoz yana yozsa — YANGI post (bildirishnoma), eskisi ✅✅ qoladi');
+console.log('\n[5] JAVOBDAN KEYIN mijoz yana yozsa — ALOHIDA post EMAS, o‘sha postga qo‘shiladi (sessiya yopilguncha bitta)');
 {
   reset();
   await say(A, 'Rahmat, yana savol bor');
-  ok(sends().length === 1 && edits().length === 0, 'yangi post yuborildi (eskisi tahrirlanmadi)');
-  const t = sends()[0].body.text;
-  ok(t.includes('Yangi mijoz xabari') && t.includes('«Rahmat, yana savol bor»') && !t.includes('«Hop»') && t.includes('⏳'), 'yangi post: faqat yangi xabar, ⏳');
+  ok(sends().length === 0 && edits().length === 1 && edits()[0].body.message_id === 501, 'yangi post YO‘Q — 501-post tahrirlandi');
+  let t = lastText();
+  const iHop = t.indexOf('«Hop»'); const iMarker = t.indexOf('✅✅ <i>Bahrom javob berdi</i>'); const iNew = t.indexOf('«Rahmat, yana savol bor»');
+  ok(iHop > 0 && iMarker > iHop && iNew > iMarker, 'tartib: eski xabarlar → ✅✅ javob belgisi (joyida qoldi) → YANGI xabar pastda');
+  ok(t.includes('⏳ <i>Javob kutilmoqda</i>') && !t.includes('<b>Javob berildi</b>'), 'holat qayta ⏳ (mijoz yana javob kutyapti)');
+  ok((t.match(/🆘/g) || []).length === 1 && t.startsWith('🆘 <b>Yangi mijoz xabari</b>'), 'sarlavha bitta');
   const cA = await chatOf(A);
-  ok(cA.groupPost.messageId !== 501 && !cA.groupPost.repliedAt && cA.groupPost.lines.length === 1, 'joriy post yangisiga almashdi');
-  const newId = cA.groupPost.messageId;
+  ok(cA.groupPost.messageId === 501 && cA.groupPost.lines.map((l) => l.kind).join() === 'user,user,user,user,reply,user', `bazada satrlar: ${cA.groupPost.lines.map((l) => l.kind).join()}`);
+
   reset();
-  await say(A, 'Yana');
-  ok(edits().length === 1 && edits()[0].body.message_id === newId, 'keyingi xabar — yangi postni tahrirlaydi');
+  await say(A, 'Yana yozaman');
+  ok(sends().length === 0 && edits().length === 1, 'keyingi xabarlar ham shu postga');
+  reset();
+  await adminReply(A, 'Ikkinchi javob');
+  t = edits()[0].body.text;
+  ok(/✅✅ <i>Bahrom javob berdi<\/i> · <i>\d\d:\d\d<\/i>/.test(t) && /✅✅ <b>Javob berildi<\/b> · Bahrom/.test(t), 'birinchi javob satrlar orasida, ikkinchisi pastki holatda');
+  ok(t.includes('«Yana yozaman»') && t.includes('«Rahmat, yana savol bor»') && !t.includes('⏳'), 'hamma xabarlar bir postda, ⏳ yo‘q');
+  reset();
+  await say(A, 'Oxirgi savol');
+  t = lastText();
+  ok((t.match(/javob berdi<\/i>/g) || []).length === 2 && t.includes('⏳') && sends().length === 0, 'ikkala javob belgisi satrlar orasida, pastda ⏳; hamon bitta post');
 }
 
-console.log('\n[6] Vaqt chegarasi: uzoq jimlikdan keyin yangi post; 0 — cheklovsiz');
+console.log('\n[5b] SESSIYA YOPILSA: post "🔒" bo‘ladi, keyingi xabar YANGI post');
+{
+  reset();
+  const chatA = await chatOf(A);
+  const r = await resolveChat(chatA._id, true);
+  ok(r.status === 200, 'admin sessiyani yopdi');
+  ok(edits().length === 1 && edits()[0].body.message_id === 501 && /🔒 <b>Suhbat yopildi<\/b> · <i>\d\d:\d\d<\/i>/.test(edits()[0].body.text), 'post tahrirlandi: 🔒 Suhbat yopildi');
+  ok(edits()[0].body.text.includes('«Hop»') && edits()[0].body.text.includes('«Oxirgi savol»') && (edits()[0].body.text.match(/javob berdi<\/i>/g) || []).length === 2, 'yopilganda tarix to‘liq (barcha xabarlar va ikkala ✅✅)');
+  ok(!edits()[0].body.text.includes('⏳'), 'yopilgan postda ⏳ yo‘q');
+  ok((await chatOf(A)).groupPost.closedAt, 'closedAt bazada');
+
+  reset();
+  await say(A, 'Yangi mavzu');
+  ok(sends().length === 1 && edits().length === 0, 'yopilgandan keyingi xabar — YANGI post');
+  ok(sends()[0].body.text.includes('«Yangi mavzu»') && !sends()[0].body.text.includes('«Hop»') && sends()[0].body.text.includes('⏳'), 'yangi post: faqat yangi xabar, ⏳');
+  const newId = (await chatOf(A)).groupPost.messageId;
+  ok(newId !== 501 && !(await chatOf(A)).groupPost.closedAt, 'joriy post yangisiga almashdi');
+  reset();
+  await say(A, 'Davomi');
+  ok(edits().length === 1 && edits()[0].body.message_id === newId, 'yangi sessiya ham bitta postda');
+
+  // resolved:false (qayta ochish) postga tegmaydi; ikkinchi yopish — qayta tahrir yo'q
+  reset();
+  const cA2 = await chatOf(A);
+  await resolveChat(cA2._id, false);
+  ok(edits().length === 0, 'resolved:false (qayta ochish) — post tahrirlanmadi');
+  await resolveChat(cA2._id, true);
+  reset();
+  await resolveChat(cA2._id, true);
+  ok(edits().length === 0, 'allaqachon yopilgan post — qayta tahrir yo‘q');
+}
+
+console.log('\n[6] Vaqt chegarasi — IXTIYORIY (standart: yo‘q); musbat bo‘lsa uzoq jimlikdan keyin yangi post');
 {
   reset();
   const cB = await chatOf(B);
-  await SupportChat.updateOne({ _id: cB._id }, { 'groupPost.lastLineAt': new Date(Date.now() - 61 * 60_000) });
-  await say(B, 'Soat o‘tdi');
-  ok(sends().length === 1 && edits().length === 0, '61 daqiqa jimlikdan keyin — YANGI post (tahrir bildirishnoma bermaydi)');
+  await SupportChat.updateOne({ _id: cB._id }, { 'groupPost.lastLineAt': new Date(Date.now() - 48 * 3_600_000) });
+  await say(B, 'Ikki kundan keyin');
+  ok(edits().length === 1 && sends().length === 0, 'STANDART (0): 48 soatdan keyin ham o‘sha post (sessiya yopilmagan)');
+  config.supportGroupThreadMinutes = 60;
   reset();
   const cB2 = await chatOf(B);
-  await SupportChat.updateOne({ _id: cB2._id }, { 'groupPost.lastLineAt': new Date(Date.now() - 59 * 60_000) });
+  await SupportChat.updateOne({ _id: cB2._id }, { 'groupPost.lastLineAt': new Date(Date.now() - 61 * 60_000) });
+  await say(B, 'Soat o‘tdi');
+  ok(sends().length === 1 && edits().length === 0, 'THREAD_MINUTES=60: 61 daqiqa jimlikdan keyin — yangi post');
+  reset();
+  const cB3 = await chatOf(B);
+  await SupportChat.updateOne({ _id: cB3._id }, { 'groupPost.lastLineAt': new Date(Date.now() - 59 * 60_000) });
   await say(B, 'Hali erta');
   ok(edits().length === 1 && sends().length === 0, '59 daqiqa — hali o‘sha post');
-  reset();
   config.supportGroupThreadMinutes = 0;
-  const cB3 = await chatOf(B);
-  await SupportChat.updateOne({ _id: cB3._id }, { 'groupPost.lastLineAt': new Date(Date.now() - 48 * 3_600_000) });
-  await say(B, 'Ikki kundan keyin');
-  ok(edits().length === 1 && sends().length === 0, 'THREAD_MINUTES=0: 48 soatdan keyin ham (javobgacha) o‘sha post');
-  config.supportGroupThreadMinutes = 60;
 }
 
 console.log('\n[7] POYGA: bir mijozning 5 ta xabari BIR VAQTDA — bitta post, 5 satr');
@@ -245,10 +301,12 @@ console.log('\n[9] JAVOB belgisida xato bo‘lsa ham javob qayd etiladi; post yo
   reset(); editMode = 'notfound';
   const r = await adminReply(E);
   ok(r.status === 201, 'admin javobi baribir yuborildi (201)');
-  ok((await chatOf(E)).groupPost.repliedAt, 'repliedAt qayd etildi (post o‘chirilgan bo‘lsa ham)');
-  editMode = 'ok'; reset();
+  const lines = (await chatOf(E)).groupPost.lines;
+  ok(lines[lines.length - 1].kind === 'reply', 'javob satr sifatida qayd etildi (post guruhdan o‘chirilgan bo‘lsa ham)');
+  reset(); editMode = 'notfound';
   await say(E, 'yana');
-  ok(sends().length === 1, 'shundan keyingi xabar — yangi post');
+  ok(sends().length === 1 && sends()[0].body.text.includes('«yana»'), 'post o‘chirilgan bo‘lsa — keyingi xabar yangi postda yetib boradi');
+  editMode = 'ok';
 
   // Guruh sozlanmagan paytdagi eski suhbat: post yo'q
   reset();
@@ -256,6 +314,24 @@ console.log('\n[9] JAVOB belgisida xato bo‘lsa ham javob qayd etiladi; post yo
   const cF = await SupportChat.create({ userId: F._id, firstName: 'Eski', messages: [{ from: 'user', text: 'eski xabar' }] });
   const res = await call(supportController.reply, { userId: adminU._id, params: { id: String(cF._id) }, body: { text: 'j' } });
   ok(res.status === 201 && calls.filter(inGroup).length === 0, 'post bo‘lmagan suhbatga javob — guruhga hech narsa yuborilmadi, xato yo‘q');
+  const rs = await resolveChat(cF._id, true);
+  ok(rs.status === 200 && calls.filter(inGroup).length === 0, 'post bo‘lmagan suhbatni yopish — jim');
+}
+
+console.log('\n[9b] ESKI shakldagi post (deploy paytida guruhda turgan): to‘g‘ri o‘qiladi va davom ettiriladi');
+{
+  reset();
+  const L = await User.create({ firstName: 'Eski', username: 'old', telegramId: '1010' });
+  const old = await SupportChat.create({
+    userId: L._id, firstName: 'Eski', username: 'old', telegramId: '1010', messages: [{ from: 'user', text: 'a' }],
+    groupPost: { chatId: '-100777', messageId: 321, lines: [{ text: 'eski savol', at: new Date(Date.now() - 600_000) }], startedAt: new Date(), lastLineAt: new Date(Date.now() - 600_000), repliedAt: new Date(Date.now() - 300_000), repliedBy: 'Admin' },
+  });
+  await call(supportController.sendMessage, { userId: L._id, body: { text: 'javobdan keyin' } });
+  ok(sends().length === 0 && edits().length === 1 && edits()[0].body.message_id === 321, 'eski javob berilgan post — yangi post EMAS, shu post tahrirlandi');
+  const t = edits()[0].body.text;
+  ok(t.indexOf('«eski savol»') < t.indexOf('✅✅ <i>Admin javob berdi</i>') && t.indexOf('✅✅ <i>Admin javob berdi</i>') < t.indexOf('«javobdan keyin»') && t.includes('⏳'), 'eski repliedAt javob belgisiga aylantirildi, tartib to‘g‘ri, ⏳');
+  const c = await SupportChat.findById(old._id).lean();
+  ok(c.groupPost.lines.map((l) => l.kind || 'user').join() === 'user,reply,user' && !c.groupPost.repliedAt, 'bazada yangi shaklga ko‘chdi');
 }
 
 console.log('\n[10] Uzun suhbat: post to‘lsa davomi yangi postda; Telegram chegarasidan oshmaydi');
@@ -307,10 +383,18 @@ console.log('\n[12] Eski shakl: `_id`siz oddiy obyekt — bitta post (test:suppo
 console.log('\n[13] buildPostText (sof funksiya)');
 {
   const at = new Date('2026-09-29T03:38:00Z'); // Toshkent 08:38
-  const t = buildPostText({ firstName: 'Ali', username: 'ali' }, { lines: [{ text: 'Hop', at }], repliedAt: new Date('2026-09-29T03:41:00Z'), repliedBy: 'Admin' });
+  const at2 = new Date('2026-09-29T03:41:00Z');
+  const t = buildPostText({ firstName: 'Ali', username: 'ali' }, { lines: [{ kind: 'user', text: 'Hop', at }, { kind: 'reply', by: 'Admin', at: at2 }] });
   ok(t.includes('«Hop» · <i>08:38</i>') && t.includes('✅✅ <b>Javob berildi</b> · Admin · <i>08:41</i>'), 'vaqt Toshkent bo‘yicha (UTC+5): 08:38 / 08:41');
-  ok(buildPostText({ firstName: 'Ali' }, { lines: [{ text: 'x', at }], continued: true }).includes('(davomi)'), 'continued → "(davomi)"');
-  ok(buildPostText({}, { lines: [{ text: 'x', at }] }).includes('<b>Mijoz</b>'), 'ismsiz mijoz → "Mijoz"');
+  ok(!t.includes('javob berdi'), 'oxirgi javob — faqat pastda');
+  const mid = buildPostText({ firstName: 'Ali' }, { lines: [{ kind: 'user', text: 'a', at }, { kind: 'reply', by: 'Admin', at: at2 }, { kind: 'user', text: 'b', at: at2 }] });
+  ok(mid.indexOf('✅✅ <i>Admin javob berdi</i> · <i>08:41</i>') > mid.indexOf('«a»') && mid.indexOf('«b»') > mid.indexOf('✅✅') && mid.endsWith('⏳ <i>Javob kutilmoqda</i>'), 'o‘rtadagi javob satrlar orasida, oxirida ⏳');
+  const closed = buildPostText({ firstName: 'Ali' }, { lines: [{ kind: 'user', text: 'a', at }, { kind: 'reply', by: 'Admin', at: at2 }], closedAt: at2 });
+  ok(closed.includes('✅✅ <i>Admin javob berdi</i>') && closed.endsWith('🔒 <b>Suhbat yopildi</b> · <i>08:41</i>') && !closed.includes('⏳'), 'yopilgan: oxirgi javob ham satrlar orasida, pastda 🔒');
+  ok(buildPostText({ firstName: 'Ali' }, { lines: [{ kind: 'user', text: 'x', at }], continued: true }).includes('(davomi)'), 'continued → "(davomi)"');
+  ok(buildPostText({}, { lines: [{ kind: 'user', text: 'x', at }] }).includes('<b>Mijoz</b>'), 'ismsiz mijoz → "Mijoz"');
+  const legacy = buildPostText({ firstName: 'Ali' }, { lines: [{ text: 'eski', at }], repliedAt: at2, repliedBy: 'Admin' });
+  ok(legacy.includes('«eski»') && legacy.includes('✅✅ <b>Javob berildi</b> · Admin'), 'eski shakl (kind yo‘q, repliedAt) to‘g‘ri chiziladi');
 }
 
 console.log(fails ? `\n✗ ${fails} ta xato` : '\n✓ HAMMASI O‘TDI');

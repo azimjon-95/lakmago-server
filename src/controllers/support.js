@@ -5,7 +5,7 @@ import { User } from '../models/User.js';
 import { getIO, getSupportPresence } from '../sockets/io.js';
 import { notify } from '../services/notifications.js';
 import { notifyUser } from '../services/telegram.js';
-import { notifySupportGroup, markSupportGroupReplied } from '../services/supportGroupNotify.js';
+import { notifySupportGroup, markSupportGroupReplied, markSupportGroupClosed } from '../services/supportGroupNotify.js';
 
 const messageSchema = z.object({
   text: z.string().min(1).max(2000),
@@ -243,6 +243,12 @@ export const supportController = {
       { new: true },
     ).select('-messages');
     if (!chat) return res.status(404).json({ error: 'Suhbat topilmadi' });
+
+    // Sessiya yopildi (qayta ochilmagan bo'lsa): Telegram'dagi post "🔒 yopildi" bo'ladi,
+    // mijozning keyingi xabari YANGI post bo'lib boshlanadi
+    if (req.body.resolved !== false) {
+      markSupportGroupClosed(chat._id).catch((e) => console.error('[supportGroup:close]', e.message));
+    }
 
     getIO()?.to('admin').emit('support:resolved', { chatId: String(chat._id) });
     res.json(chat);

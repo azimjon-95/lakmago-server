@@ -429,13 +429,15 @@ export const config = {
 
   /*
    * Yordam xabarlari guruhda MIJOZ BO'YICHA bitta postga jamlanadi
-   * (services/supportGroupNotify.js). Mijoz oxirgi xabaridan shuncha
-   * DAQIQA ichida yozsa — o'sha post tahrirlanadi; undan keyin — yangi post
-   * (tahrir Telegram'da bildirishnoma BERMAYDI: uzoq jimlikdan keyingi
-   * xabar adminlar e'tiboridan chetda qolmasin). 0 — cheklovsiz (javob
-   * berilguncha).
+   * (services/supportGroupNotify.js): mijozning barcha xabarlari va admin
+   * javoblari SESSIYA YOPILGUNCHA (admin "yopish"ni bosguncha) bitta postda.
+   *
+   * Standart 0 — vaqt cheklovi YO'Q. Musbat son — mijoz oxirgi xabaridan
+   * shuncha DAQIQA jim tursa, keyingi xabar yangi postda (Telegram TAHRIR
+   * uchun bildirishnoma bermaydi: uzoq jimlikdan keyingi xabar adminlar
+   * e'tiboridan chetda qolmasligi uchun ixtiyoriy himoya).
    */
-  supportGroupThreadMinutes: Math.max(0, Number(process.env.SUPPORT_GROUP_THREAD_MINUTES ?? 60) || 0),
+  supportGroupThreadMinutes: Math.max(0, Number(process.env.SUPPORT_GROUP_THREAD_MINUTES ?? 0) || 0),
 
   /*
    * Bazaning kunlik JSON zaxirasi yuboriladigan HISOBOT guruhi

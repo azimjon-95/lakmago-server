@@ -21,11 +21,24 @@ const messageSchema = new Schema({
 const groupPostSchema = new Schema({
   chatId: { type: String, required: true },     // qaysi guruhda (sozlama o'zgarsa eski post tahrirlanmaydi)
   messageId: { type: Number, required: true },
-  lines: [{ text: String, at: Date, _id: false }],
+  /*
+   * Post satrlari xronologik tartibda: mijoz xabari (`user`) yoki admin javobi
+   * belgisi (`reply`, ✅✅). Admin javobidan KEYIN mijoz yozsa ham shu postga
+   * qo'shiladi — sessiya yopilguncha bitta post.
+   */
+  lines: [{
+    kind: { type: String, enum: ['user', 'reply'], default: 'user' },
+    text: String,       // user uchun
+    by: String,         // reply uchun: admin ismi
+    at: Date,
+    _id: false,
+  }],
   continued: { type: Boolean, default: false },  // oldingi post to'lib, davomi
   startedAt: { type: Date, default: Date.now },
-  lastLineAt: { type: Date, default: Date.now },
-  repliedAt: { type: Date, default: null },      // admin javob bergan — ✅✅
+  lastLineAt: { type: Date, default: Date.now }, // MIJOZNING oxirgi xabari
+  closedAt: { type: Date, default: null },       // sessiya yopildi — keyingi xabar YANGI post
+  // ESKI shakl (kind'siz postlar): javob alohida maydonda edi. Yangi kod yozmaydi, faqat o'qiydi.
+  repliedAt: { type: Date, default: null },
   repliedBy: { type: String, default: '' },
 }, { _id: false });
 
