@@ -12,6 +12,23 @@ const messageSchema = new Schema({
   createdAt: { type: Date, default: Date.now },
 }, { _id: true });
 
+/*
+ * Telegram guruhdagi shu mijozning JORIY posti (services/supportGroupNotify.js).
+ * Mijoz qayta-qayta yozsa har safar yangi xabar emas — shu post tahrirlanadi
+ * (editMessageText), yangi satr pastdan qo'shiladi. Telegram xabar matnini
+ * qayta yig'ish uchun satrlar shu yerda saqlanadi.
+ */
+const groupPostSchema = new Schema({
+  chatId: { type: String, required: true },     // qaysi guruhda (sozlama o'zgarsa eski post tahrirlanmaydi)
+  messageId: { type: Number, required: true },
+  lines: [{ text: String, at: Date, _id: false }],
+  continued: { type: Boolean, default: false },  // oldingi post to'lib, davomi
+  startedAt: { type: Date, default: Date.now },
+  lastLineAt: { type: Date, default: Date.now },
+  repliedAt: { type: Date, default: null },      // admin javob bergan — ✅✅
+  repliedBy: { type: String, default: '' },
+}, { _id: false });
+
 const supportChatSchema = new Schema(
   {
     userId: { type: Schema.Types.ObjectId, ref: 'User', required: true, unique: true, index: true },
@@ -34,6 +51,8 @@ const supportChatSchema = new Schema(
 
     // Suhbat yopilganmi (hal qilingan)
     isResolved: { type: Boolean, default: false, index: true },
+    // Guruhdagi joriy post (null — hali yo'q yoki guruh o'chiq)
+    groupPost: { type: groupPostSchema, default: null },
   },
   { timestamps: true },
 );

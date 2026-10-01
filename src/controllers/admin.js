@@ -10,6 +10,42 @@ import { GroupChat } from '../models/GroupChat.js';
 import { Reservation } from '../models/Reservation.js';
 import { Ledger } from '../models/Ledger.js';
 import { getIO } from '../sockets/io.js';
+import { ALLOWED_VIDEO_MIME, looksLikeVideo } from '../middleware/adUpload.js';
+
+/*
+ * Reklama so'rovini (JSON yoki multipart) bitta shaklga keltiradi.
+ * multipart'da barcha maydonlar MATN keladi ("pin": "true"), shuning uchun
+ * mantiqiy qiymat alohida o'giriladi. `req.file` — xotiradagi video (bazaga
+ * yozilmaydi). Xato bo'lsa { error, status, code } qaytadi.
+ */
+function parseBroadcastBody(req) {
+  const bool = z.union([z.boolean(), z.enum(['true', 'false', '1', '0'])])
+    .transform((v) => v === true || v === 'true' || v === '1');
+  const schema = z.object({
+    text: z.string().optional().default(''),
+    imageUrl: z.string().optional().default(''),
+    buttonText: z.string().optional().default(''),
+    buttonUrl: z.string().optional().default(''),
+    pin: bool.optional().default(false),
+  });
+  const parsed = schema.safeParse(req.body || {});
+  if (!parsed.success) return { error: 'Ma‘lumot noto‘g‘ri' };
+  const data = parsed.data;
+
+  const file = req.file;
+  if (file) {
+    if (!ALLOWED_VIDEO_MIME.includes(file.mimetype) || !looksLikeVideo(file.buffer)) {
+      return { error: 'Faqat video fayl (MP4, MOV, WEBM) yuklang', status: 415, code: 'UNSUPPORTED_VIDEO' };
+    }
+    if (data.imageUrl) return { error: 'Rasm yoki video — bittasini tanlang', code: 'IMAGE_AND_VIDEO' };
+    const ext = file.mimetype === 'video/quicktime' ? 'mov' : file.mimetype === 'video/webm' ? 'webm' : 'mp4';
+    data.video = { buffer: file.buffer, mimetype: file.mimetype, filename: `reklama.${ext}` };
+  }
+  if (!data.text && !data.imageUrl && !data.video) {
+    return { error: 'Matn, rasm yoki video bo‘lishi shart' };
+  }
+  return data;
+}
 
 /**
  * ═══ DAROMAD JADVALI — SOF MANTIQ ═══
@@ -700,26 +736,25 @@ export const adminController = {
     }
   }),
 
-  // POST /api/admin/groups/:chatId/broadcast — MOSLASHUVCHAN reklama
-  // { text?, imageUrl?, buttonText?, buttonUrl?, pin? }
+  /*
+   * POST /api/admin/groups/:chatId/broadcast — MOSLASHUVCHAN reklama
+   *
+   * Ikki shakl (ikkalasi ham shu endpoint):
+   *   • JSON:                 { text?, imageUrl?, buttonText?, buttonUrl?, pin? }
+   *   • multipart/form-data:  yuqoridagi maydonlar + `video` (fayl, 50 MB gacha)
+   * Rasm YOKI video — bittasi. Video bazaga saqlanmaydi (middleware/adUpload.js).
+   */
   broadcast: asyncHandler(async (req, res) => {
-    const schema = z.object({
-      text: z.string().optional().default(''),
-      imageUrl: z.string().optional().default(''),
-      buttonText: z.string().optional().default(''),
-      buttonUrl: z.string().optional().default(''),
-      pin: z.boolean().optional().default(false),
-    });
-    const parsed = schema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ error: 'Ma‘lumot noto‘g‘ri' });
-    if (!parsed.data.text && !parsed.data.imageUrl) {
-      return res.status(400).json({ error: 'Matn yoki rasm bo‘lishi shart' });
-    }
+    const data = parseBroadcastBody(req);
+    if (data.error) return res.status(data.status || 400).json({ error: data.error, code: data.code });
 
     const { sendCustomBroadcast } = await import('../services/telegramGroup.js');
     try {
-      const result = await sendCustomBroadcast({ chatId: req.params.chatId, ...parsed.data });
-      res.json(result);
+      const { video, ...rest } = data;
+      const result = await sendCustomBroadcast({ chatId: req.params.chatId, ...rest, video });
+      // Ichki file_id mijozga qaytarilmaydi — kerak emas
+      const { videoFileId: _f, videoMethod: _m, ...publicResult } = result;
+      res.json(publicResult);
     } catch (e) {
       res.status(500).json({ error: e.message });
     }
@@ -727,31 +762,31 @@ export const adminController = {
 
   // POST /api/admin/groups/broadcast-all — bir vaqtda BARCHA faol guruhlarga
   broadcastAll: asyncHandler(async (req, res) => {
-    const schema = z.object({
-      text: z.string().optional().default(''),
-      imageUrl: z.string().optional().default(''),
-      buttonText: z.string().optional().default(''),
-      buttonUrl: z.string().optional().default(''),
-      pin: z.boolean().optional().default(false),
-    });
-    const parsed = schema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ error: 'Ma‘lumot noto‘g‘ri' });
-    if (!parsed.data.text && !parsed.data.imageUrl) {
-      return res.status(400).json({ error: 'Matn yoki rasm bo‘lishi shart' });
-    }
+    const data = parseBroadcastBody(req);
+    if (data.error) return res.status(data.status || 400).json({ error: data.error, code: data.code });
 
     const { sendCustomBroadcast } = await import('../services/telegramGroup.js');
     const groups = await GroupChat.find({ isActive: true, isBotAdmin: true });
     let sent = 0, failed = 0;
+    const failures = [];
+    // Video BIR marta yuklanadi; keyingi guruhlarga Telegram file_id bilan
+    let fileRef = null;
     for (const g of groups) {
       try {
-        await sendCustomBroadcast({ chatId: g.chatId, ...parsed.data });
+        const { video, ...rest } = data;
+        const r = await sendCustomBroadcast({
+          chatId: g.chatId,
+          ...rest,
+          ...(fileRef ? { videoFileId: fileRef.id, videoMethod: fileRef.method } : { video }),
+        });
+        if (video && r.videoFileId && !fileRef) fileRef = { id: r.videoFileId, method: r.videoMethod };
         sent++;
-      } catch {
+      } catch (e) {
         failed++;
+        if (failures.length < 5) failures.push({ chatId: g.chatId, title: g.title, error: e.message });
       }
     }
-    res.json({ total: groups.length, sent, failed });
+    res.json({ total: groups.length, sent, failed, ...(failures.length ? { failures } : {}) });
   }),
 
   /*

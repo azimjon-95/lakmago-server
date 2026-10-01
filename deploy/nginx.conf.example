@@ -14,8 +14,13 @@ server {
     listen 80;
     server_name api.SIZNING-DOMEN.uz;   # <-- o'z domeningiz
 
-    # Yuklanadigan rasm/fayllar uchun limit
-    client_max_body_size 10M;
+    # Yuklanadigan rasm/fayllar uchun limit.
+    # 55M — admin paneldan REKLAMA VIDEOSI (50 MB gacha, multipart) yuborish uchun.
+    # Bu qiymat 50 MB dan kichik bo'lsa, nginx so'rovni Node'ga yetkazmasdan 413 qaytaradi
+    # (admin "Xato: 413" ko'radi). Ishlab turgan serverdagi nginx'ni ham yangilang:
+    #   sudo nano /etc/nginx/sites-available/<sayt>  →  client_max_body_size 55M;
+    #   sudo nginx -t && sudo systemctl reload nginx
+    client_max_body_size 55M;
 
     location / {
         proxy_pass http://127.0.0.1:4000;

@@ -35,7 +35,10 @@
     "test:baseprice": "node tests/delivery-baseprice.test.mjs",
     "test:address": "node tests/address-update.test.mjs",
     "test:bff-events": "node tests/bff-events.test.mjs",
-    "test:gateway": "node tests/gateway-service.test.mjs"
+    "test:gateway": "node tests/gateway-service.test.mjs",
+    "test:video-ad": "node tests/video-broadcast.test.mjs",
+    "test:support-thread": "node tests/support-group-thread.test.mjs",
+    "test:db-backup": "node tests/db-backup.test.mjs"
   },
   "dependencies": {
     "@socket.io/redis-adapter": "^8.3.0",
@@ -51,6 +54,7 @@
     "jsonwebtoken": "^9.0.2",
     "mongoose": "^8.9.3",
     "morgan": "^1.10.0",
+    "multer": "^2.4.0",
     "pdfkit": "^0.19.1",
     "qrcode": "^1.5.4",
     "socket.io": "^4.8.1",

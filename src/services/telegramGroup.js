@@ -1,8 +1,9 @@
 import { config } from '../config/index.js';
 import { GroupChat } from '../models/GroupChat.js';
 import { buildMiniAppLink } from './telegram.js';
+import { tgCall, tgUpload } from './telegramApi.js';
 
-const TG_API = `https://api.telegram.org/bot${config.telegramBotToken}`;
+const TG_API = `${config.telegramApiBase}/bot${config.telegramBotToken}`;
 
 // Reklama matni — chiroyli, ishtaha ochadigan
 function promoText() {
@@ -273,46 +274,99 @@ export async function dailyGroupCheck() {
 
 // ===== MOSLASHUVCHAN REKLAMA (admin paneldan) =====
 // Admin istalgan guruhga istalgan reklama yuboradi:
-//   - matn + rasm + tugma
+//   - media (RASM yoki VIDEO) + matn + tugma
 //   - faqat matn + tugma
-//   - faqat rasm (+ izoh)
-//   - faqat matn
-// Telegram formatiga to'liq mos (sendPhoto yoki sendMessage tanlanadi).
+//   - faqat media (+ izoh)
+// Xabar tartibi: Media → Matn (HTML) → Tugma → Pin (tanlansa).
 //
 // opts = {
-//   chatId,               // qaysi guruhga
-//   text,                 // matn (HTML) — ixtiyoriy
-//   imageUrl,             // rasm URL — ixtiyoriy
-//   buttonText, buttonUrl,// tugma — ixtiyoriy (ikkalasi birga)
-//   pin,                  // true bo'lsa yuborilgach pin qiladi
+//   chatId,                 // qaysi guruhga
+//   text,                   // matn (HTML) — ixtiyoriy
+//   imageUrl,               // rasm URL — ixtiyoriy
+//   video,                  // { buffer, filename, mimetype } — XOTIRADAGI fayl, ixtiyoriy
+//   videoFileId,            // oldin yuklangan video (Telegram file_id) — ko'p guruhga yuborishda
+//   videoMethod,            // videoFileId qaysi usul bilan yuborilgan ('sendVideo' | 'sendDocument')
+//   buttonText, buttonUrl,  // tugma — ixtiyoriy (ikkalasi birga)
+//   pin,                    // true bo'lsa yuborilgach pin qiladi
 // }
+//
+// VIDEO BAZAGA SAQLANMAYDI: fayl faqat so'rov davomida xotirada (multer
+// memoryStorage) turadi va shu yerdan to'g'ridan-to'g'ri Telegram'ga
+// uzatiladi; diskka ham, MongoDB'ga ham, Cloudinary'ga ham yozilmaydi.
+// Bir nechta guruhga yuborilganda FAYL BIR MARTA yuklanadi: Telegram qaytargan
+// file_id keyingi guruhlarga ishlatiladi (tez, trafik tejaladi).
+
+/** Telegram izoh (caption) chegarasi — TEGLARSIZ 1024 belgi. */
+const CAPTION_LIMIT = 1024;
+
+/** HTML matnning ko'rinadigan uzunligi (teglar tashlanadi, &lt; kabilar 1 belgi). */
+export function visibleLength(html) {
+  return String(html || '')
+    .replace(/<[^>]*>/g, '')
+    .replace(/&(lt|gt|amp|quot|#39);/g, '.')
+    .length;
+}
+
 export async function sendCustomBroadcast(opts) {
-  const { chatId, text = '', imageUrl = '', buttonText = '', buttonUrl = '', pin = false } = opts;
+  const {
+    chatId, text = '', imageUrl = '', video = null, videoFileId = '', videoMethod = 'sendVideo',
+    buttonText = '', buttonUrl = '', pin = false,
+  } = opts;
 
   if (!config.telegramBotToken) {
     return { ok: true, demo: true };
   }
   if (!chatId) throw new Error('chatId kerak');
-  if (!text && !imageUrl) throw new Error('Matn yoki rasm bo‘lishi shart');
+  const hasVideo = Boolean(video || videoFileId);
+  if (!text && !imageUrl && !hasVideo) throw new Error('Matn, rasm yoki video bo‘lishi shart');
+  if (imageUrl && hasVideo) throw new Error('Rasm yoki video — bittasini tanlang');
 
   // Tugma (agar berilgan bo'lsa)
   const keyboard = (buttonText && buttonUrl)
     ? { inline_keyboard: [[{ text: buttonText, url: buttonUrl }]] }
     : undefined;
 
+  const hasMedia = Boolean(imageUrl) || hasVideo;
+  /*
+   * Izoh 1024 belgidan uzun bo'lsa Telegram butun so'rovni rad etardi
+   * ("message caption is too long") — reklama umuman ketmasdi. Endi media
+   * izohsiz yuboriladi, matn va tugma esa uning ortidan alohida xabarda.
+   */
+  const splitText = hasMedia && Boolean(text) && visibleLength(text) > CAPTION_LIMIT;
+  const caption = hasMedia && !splitText && text ? text : undefined;
+  const mediaKeyboard = hasMedia && !splitText ? keyboard : undefined;
+
   let msg;
-  if (imageUrl) {
+  let out = {};
+  if (hasVideo) {
+    const base = { chat_id: chatId, caption, parse_mode: caption ? 'HTML' : undefined, reply_markup: mediaKeyboard, supports_streaming: true };
+    if (video) {
+      msg = await tgUpload(
+        'sendVideo', base,
+        { field: 'video', blob: new Blob([video.buffer], { type: video.mimetype || 'video/mp4' }), filename: video.filename || 'video.mp4' },
+      );
+      // Telegram mp4 bo'lmagan faylni hujjat sifatida qabul qilishi mumkin — qayta ishlatish shunga mos
+      const asVideo = Boolean(msg.video);
+      out = { videoFileId: (msg.video || msg.document)?.file_id, videoMethod: asVideo ? 'sendVideo' : 'sendDocument' };
+    } else if (videoMethod === 'sendDocument') {
+      msg = await tgCall('sendDocument', { chat_id: chatId, document: videoFileId, caption, parse_mode: caption ? 'HTML' : undefined, reply_markup: mediaKeyboard });
+      out = { videoFileId, videoMethod };
+    } else {
+      msg = await tgCall('sendVideo', { ...base, video: videoFileId });
+      out = { videoFileId, videoMethod: 'sendVideo' };
+    }
+  } else if (imageUrl) {
     // Rasm bilan — sendPhoto (matn caption bo'ladi, 1024 belgigacha)
-    msg = await tg('sendPhoto', {
+    msg = await tgCall('sendPhoto', {
       chat_id: chatId,
       photo: imageUrl,
-      caption: text || undefined,
-      parse_mode: text ? 'HTML' : undefined,
-      reply_markup: keyboard,
+      caption,
+      parse_mode: caption ? 'HTML' : undefined,
+      reply_markup: mediaKeyboard,
     });
   } else {
     // Faqat matn — sendMessage
-    msg = await tg('sendMessage', {
+    msg = await tgCall('sendMessage', {
       chat_id: chatId,
       text,
       parse_mode: 'HTML',
@@ -321,16 +375,25 @@ export async function sendCustomBroadcast(opts) {
     });
   }
 
-  // So'ralса pin qilamiz
+  // Uzun matn: media ortidan alohida xabar (tugma shu xabarda)
+  let textMessageId;
+  if (splitText) {
+    const t = await tgCall('sendMessage', {
+      chat_id: chatId, text, parse_mode: 'HTML', reply_markup: keyboard, disable_web_page_preview: true,
+    });
+    textMessageId = t.message_id;
+  }
+
+  // So'ralса pin qilamiz (post = birinchi xabar: media, yoki oddiy matn)
   let pinned = false;
   if (pin) {
     try {
-      await tg('pinChatMessage', { chat_id: chatId, message_id: msg.message_id, disable_notification: true });
+      await tgCall('pinChatMessage', { chat_id: chatId, message_id: msg.message_id, disable_notification: true });
       pinned = true;
     } catch (e) {
       console.warn(`Pin xatosi (${chatId}):`, e.message);
     }
   }
 
-  return { ok: true, messageId: msg.message_id, pinned };
+  return { ok: true, messageId: msg.message_id, textMessageId, pinned, captionSplit: splitText, ...out };
 }

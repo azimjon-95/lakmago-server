@@ -5,7 +5,7 @@ import { User } from '../models/User.js';
 import { getIO, getSupportPresence } from '../sockets/io.js';
 import { notify } from '../services/notifications.js';
 import { notifyUser } from '../services/telegram.js';
-import { notifySupportGroup } from '../services/supportGroupNotify.js';
+import { notifySupportGroup, markSupportGroupReplied } from '../services/supportGroupNotify.js';
 
 const messageSchema = z.object({
   text: z.string().min(1).max(2000),
@@ -21,16 +21,26 @@ async function ensureChat(userId) {
   const user = await User.findById(userId)
     .select('telegramId firstName lastName username photoUrl phone').lean();
 
-  return SupportChat.create({
-    userId,
-    telegramId: user?.telegramId || '',
-    firstName: user?.firstName || '',
-    lastName: user?.lastName || '',
-    username: user?.username || '',
-    photoUrl: user?.photoUrl || '',
-    phone: user?.phone || '',
-    messages: [],
-  });
+  try {
+    return await SupportChat.create({
+      userId,
+      telegramId: user?.telegramId || '',
+      firstName: user?.firstName || '',
+      lastName: user?.lastName || '',
+      username: user?.username || '',
+      photoUrl: user?.photoUrl || '',
+      phone: user?.phone || '',
+      messages: [],
+    });
+  } catch (e) {
+    /*
+     * Mijoz "Yuborish"ni qo'sh bosdi: ikkala so'rov ham suhbat yo'qligini
+     * ko'rib yaratmoqchi bo'ladi, userId unique — ikkinchisi E11000 bilan
+     * yiqilib mijozga 500 qaytardi. Yaratib ulgurgan suhbatni olamiz.
+     */
+    if (e?.code === 11000) return SupportChat.findOne({ userId });
+    throw e;
+  }
 }
 
 export const supportController = {
@@ -77,15 +87,28 @@ export const supportController = {
     const parsed = messageSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: 'Xabar bo‘sh' });
 
-    const chat = await ensureChat(req.userId);
+    const existing = await ensureChat(req.userId);
     const text = parsed.data.text.trim();
 
-    chat.messages.push({ from: 'user', text });
-    chat.unreadCount += 1;
-    chat.isResolved = false;               // yangi xabar — suhbat qayta ochiladi
-    chat.lastMessageAt = new Date();
-    chat.lastMessageText = text.slice(0, 120);
-    await chat.save();
+    /*
+     * ATOMIK qo'shish ($push/$inc/$set BIR so'rovda). Avval `chat.messages.push()`
+     * + `chat.save()` edi: o'qib-o'zgartirib-yozish, va `unreadCount += 1` MUTLAQ
+     * qiymat sifatida yozilardi ($set), ya'ni mijoz "Yuborish"ni qo'sh bossa
+     * o'qilmagan xabarlar hisobi 2 emas, 1 bo'lib qolardi. Endi $inc.
+     * (Eslatma: FerretDB test bazasi parallel yozuvni atomik bajarmaydi —
+     * shuning uchun qo'sh bosishda xabarlar SONI testda tekshirilmaydi;
+     * real MongoDB'da $push/$inc atomik.)
+     */
+    const chat = await SupportChat.findOneAndUpdate(
+      { _id: existing._id },
+      {
+        $push: { messages: { from: 'user', text } },
+        $inc: { unreadCount: 1 },
+        // yangi xabar — suhbat qayta ochiladi
+        $set: { isResolved: false, lastMessageAt: new Date(), lastMessageText: text.slice(0, 120) },
+      },
+      { new: true },
+    );
 
     // Markaziy bildirishnoma — yordam so'rovi ham boshqa
     // hodisalar kabi saqlanadi va uzilishdan keyin tiklanadi
@@ -183,11 +206,20 @@ export const supportController = {
     const admin = await User.findById(req.userId).select('firstName login').lean();
     const adminName = admin?.firstName || admin?.login || 'Operator';
 
-    chat.messages.push({ from: 'admin', text, adminName });
-    chat.userUnreadCount += 1;
-    chat.lastMessageAt = new Date();
-    chat.lastMessageText = text.slice(0, 120);
-    await chat.save();
+    // Atomik ($push/$inc) — sendMessage bilan bir xil sabab
+    const updated = await SupportChat.findOneAndUpdate(
+      { _id: chat._id },
+      {
+        $push: { messages: { from: 'admin', text, adminName } },
+        $inc: { userUnreadCount: 1 },
+        $set: { lastMessageAt: new Date(), lastMessageText: text.slice(0, 120) },
+      },
+      { new: true },
+    );
+    chat.messages = updated.messages;
+
+    // Telegram guruhdagi shu mijozning posti: ✅✅ Javob berildi (tahrirlanadi)
+    markSupportGroupReplied(chat._id, adminName).catch((e) => console.error('[supportGroup:reply]', e.message));
 
     // Mijozga real-time (ilova ochiq bo'lsa)
     getIO()?.to(`user:${chat.userId}`).emit('support:reply', {

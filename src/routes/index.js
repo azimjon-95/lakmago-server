@@ -43,6 +43,7 @@ import {
 } from '../middleware/auth.js';
 import { loginLimiter, writeLimiter } from '../middleware/rateLimit.js';
 import { botBroadcastController } from '../controllers/botBroadcast.js';
+import { adAttachment } from '../middleware/adUpload.js';
 
 export const router = Router();
 
@@ -597,8 +598,9 @@ router.delete('/admin/banners/:id', auth, requireRole('admin'), adminController.
 router.get('/admin/groups', auth, requireRole('admin'), adminController.groups);
 router.post('/admin/groups/add', auth, requireRole('admin'), adminController.addGroup);
 router.post('/admin/groups/:chatId/resend', auth, requireRole('admin'), adminController.resendPromo);
-router.post('/admin/groups/:chatId/broadcast', auth, requireRole('admin'), adminController.broadcast);
-router.post('/admin/groups/broadcast-all', auth, requireRole('admin'), adminController.broadcastAll);
+// `adAttachment` — multipart video (xotirada, bazaga yozilmaydi); JSON so'rovga tegmaydi
+router.post('/admin/groups/:chatId/broadcast', auth, requireRole('admin'), adAttachment, adminController.broadcast);
+router.post('/admin/groups/broadcast-all', auth, requireRole('admin'), adAttachment, adminController.broadcastAll);
 router.post('/admin/groups/refresh-promo-buttons', auth, requireRole('admin'), adminController.refreshPromoButtons);
 router.post('/admin/groups/check', auth, requireRole('admin'), adminController.runGroupCheck);
 // Buyurtmalar nazorati

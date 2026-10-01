@@ -417,6 +417,32 @@ export const config = {
    */
   bffBaseUrl: String(process.env.BFF_BASE_URL || '').trim().replace(/\/+$/, ''),
   bffWebhookSecret: String(process.env.BFF_WEBHOOK_SECRET || '').trim(),
+
+  /*
+   * Telegram Bot API manzili. Standart — rasmiy (https://api.telegram.org).
+   * O'zgartirish sabablari: (1) o'z Bot API serveri (fayl chegarasi 50 MB
+   * o'rniga 2 GB), (2) testlarda soxta Telegram. FAQAT shu modullar
+   * ishlatadi: video reklama, yordam guruhi, bazani zaxiralash
+   * (services/telegramApi.js).
+   */
+  telegramApiBase: String(process.env.TELEGRAM_API_BASE || 'https://api.telegram.org').trim().replace(/\/+$/, ''),
+
+  /*
+   * Yordam xabarlari guruhda MIJOZ BO'YICHA bitta postga jamlanadi
+   * (services/supportGroupNotify.js). Mijoz oxirgi xabaridan shuncha
+   * DAQIQA ichida yozsa — o'sha post tahrirlanadi; undan keyin — yangi post
+   * (tahrir Telegram'da bildirishnoma BERMAYDI: uzoq jimlikdan keyingi
+   * xabar adminlar e'tiboridan chetda qolmasin). 0 — cheklovsiz (javob
+   * berilguncha).
+   */
+  supportGroupThreadMinutes: Math.max(0, Number(process.env.SUPPORT_GROUP_THREAD_MINUTES ?? 60) || 0),
+
+  /*
+   * Bazaning kunlik JSON zaxirasi yuboriladigan HISOBOT guruhi
+   * (services/dbBackup.js). Bo'sh bo'lsa zaxira o'chiq.
+   * Har kuni 23:59 (O'zbekiston vaqti).
+   */
+  backupGroupChatId: String(process.env.BACKUP_GROUP_CHAT_ID || '').trim(),
 };
 
 /*

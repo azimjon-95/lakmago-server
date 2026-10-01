@@ -501,6 +501,12 @@ async function main() {
     setInterval(() => checkDeliveries().catch((e) => console.error('Yetkazish tekshiruvi:', e.message)), 2 * 60_000);
   }
 
+  // Bazaning kunlik JSON zaxirasi → hisobot guruhi, 23:59 Toshkent (BACKUP_GROUP_CHAT_ID bo'lsa) — services/dbBackup.js
+  {
+    const { startBackupScheduler } = await import('./services/dbBackup.js');
+    startBackupScheduler();
+  }
+
   // BFF ga buyurtma hodisalari (BFF_BASE_URL + BFF_WEBHOOK_SECRET bo'lsa) — services/bffEvents.js
   {
     const { startBffEventWorker } = await import('./services/bffEvents.js');
