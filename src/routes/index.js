@@ -44,6 +44,7 @@ import {
 import { loginLimiter, writeLimiter } from '../middleware/rateLimit.js';
 import { botBroadcastController } from '../controllers/botBroadcast.js';
 import { adAttachment } from '../middleware/adUpload.js';
+import { restaurantPinsController } from '../controllers/restaurantPins.js';
 
 export const router = Router();
 
@@ -344,6 +345,13 @@ router.post('/panel/ads', ...R, panelAdsController.create);
 router.delete('/panel/ads/:id', ...R, panelAdsController.cancel);
 
 // Reklama tasdiqlash — admin / marketing bo'limi
+// Restoran PINi: "Barcha restoranlar"da 1/2/3-o'rin (muddat bilan) — Mijoz jalb qilish → Top joylar
+router.get('/admin/pins/restaurants', ...AS('marketing'), restaurantPinsController.restaurants);
+router.get('/admin/pins', ...AS('marketing'), restaurantPinsController.list);
+router.post('/admin/pins', ...AS('marketing'), restaurantPinsController.create);
+router.patch('/admin/pins/:id', ...AS('marketing'), restaurantPinsController.update);
+router.delete('/admin/pins/:id', ...AS('marketing'), restaurantPinsController.cancel);
+
 router.get('/admin/ads', ...AS('marketing'), adminAdsController.list);
 router.patch('/admin/ads/:id/approve', ...AS('marketing'), adminAdsController.approve);
 router.patch('/admin/ads/:id/reject', ...AS('marketing'), adminAdsController.reject);

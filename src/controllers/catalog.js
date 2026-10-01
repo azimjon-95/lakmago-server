@@ -5,6 +5,7 @@ import { Restaurant } from '../models/Restaurant.js';
 import { Dish } from '../models/Dish.js';
 import { Order } from '../models/Order.js';
 import { isRestaurantOpen } from '../services/restaurantTime.js';
+import { activePins } from '../services/restaurantPins.js';
 import { Types } from 'mongoose';
 import { dishCategoryValues, discountExpr } from '../constants/dishCategories.js';
 
@@ -73,6 +74,9 @@ async function withCustomerPrices(dishes) {
   }
 }
 
+// Mijoz ro'yxati maydonlari (keshlangan so'rov va pin qo'shiladigan restoranlar uchun BIR XIL)
+const LIST_SELECT = 'name cuisine category kind rating reviewCount deliveryMin deliveryMax deliveryFee freeDeliveryThreshold minOrderAmount discount isFresh tint icon images imageUrl createdAt pickupEnabled deliveryEnabled cashEnabled delivery pickupDiscountPercent prepMinutes shopTypes openTime closeTime timezone workingDays';
+
 export const restaurantController = {
   // GET /api/restaurants?category=milliy&cursor=<createdAt>&limit=20
   // Cursor-based pagination — katta ro'yxatlar tez yuklanadi
@@ -83,7 +87,20 @@ export const restaurantController = {
     }
     // Cursor: oldingi sahifaning oxirgi createdAt qiymati
     if (req.query.cursor) {
-      filter.createdAt = { $lt: new Date(req.query.cursor) };
+      /*
+       * nextCursor "<createdAt ISO>|<_id>" ko'rinishida beriladi, lekin avval
+       * butun satr `new Date()` ga berilardi — o‘zining bergan kursori 400 (CAST)
+       * qaytarardi. Endi ikkala shakl ham ishlaydi: faqat ISO (eski chaqiruvchilar —
+       * avvalgidek) va ISO|id (bir xil createdAt'li restoranlar sahifa chegarasida
+       * tushib qolmasligi uchun _id bo'yicha ham ajratiladi).
+       */
+      const [iso, cid] = String(req.query.cursor).split('|');
+      const at = new Date(iso);
+      if (cid && isValidId(cid)) {
+        filter.$or = [{ createdAt: { $lt: at } }, { createdAt: at, _id: { $lt: cid } }];
+      } else {
+        filter.createdAt = { $lt: at };
+      }
     }
     const limit = Math.min(Number(req.query.limit) || 20, 50);
 
@@ -105,10 +122,45 @@ export const restaurantController = {
     );
 
     const restaurants = await cached(cacheKey, TTL.catalog, () => Restaurant.find(filter)
-      .select('name cuisine category kind rating reviewCount deliveryMin deliveryMax deliveryFee freeDeliveryThreshold minOrderAmount discount isFresh tint icon images imageUrl createdAt pickupEnabled deliveryEnabled cashEnabled delivery pickupDiscountPercent prepMinutes shopTypes openTime closeTime timezone workingDays')
+      .select(LIST_SELECT)
       .sort({ createdAt: -1 })
       .limit(limit + 1)
       .lean());
+
+    // Keyingi sahifa bormi? (qo'shimcha +1 qator — faqat shu savol uchun, mijozga berilmaydi)
+    const hasMore = restaurants.length > limit;
+    const pageRows = hasMore ? restaurants.slice(0, limit) : restaurants;
+    const last = hasMore ? pageRows[pageRows.length - 1] : null;
+    const nextCursor = last
+      ? `${new Date(last.createdAt).toISOString()}|${String(last._id)}`
+      : null;
+
+    /*
+     * ═══ PIN (1/2/3-o'rin) — admin "Mijoz jalb qilish → Top joylar" ═══
+     *
+     * Faol pin (muddati hozir ichida) restoranga `pin: { position, endsAt }`
+     * qo'shadi; mijoz shu bo'yicha ro'yxatning boshiga qo'yadi va kartada
+     * belgi chizadi. Faollik SO'ROV VAQTIDA aniqlanadi (keshlangan emas):
+     * muddat tugashi/boshlanishi kechikmaydi. Pin yo'q bo'lsa javob avvalgidek.
+     *
+     * Mijoz faqat BIRINCHI sahifani oladi (createdAt bo'yicha eng yangi N ta).
+     * Pin qo'yilgan restoran shu sahifaga tushmasa — ro'yxatga QO'SHIB beriladi
+     * (aks holda eski restoranga pin qo'yib bo'lmasdi). Kategoriya filtri
+     * bo'lsa, unga mos kelmaydigan restoran qo'shilmaydi. cursor'li (keyingi)
+     * sahifalarga qo'shilmaydi: nextCursor o'zgarmaydi, takror bo'lmaydi.
+     */
+    const pinned = await activePins();
+    const pinMap = new Map(pinned.map((p) => [String(p.restaurantId), { position: p.position, endsAt: p.endsAt }]));
+    let extraRows = [];
+    if (pinned.length && !req.query.cursor) {
+      const have = new Set(pageRows.map((r) => String(r._id)));
+      const missingIds = pinned.map((p) => p.restaurantId).filter((id) => !have.has(String(id)));
+      if (missingIds.length) {
+        const extraFilter = { _id: { $in: missingIds }, isApproved: true, isActive: true, isBlocked: { $ne: true } };
+        if (req.query.category && req.query.category !== 'all') extraFilter.category = req.query.category;
+        extraRows = await Restaurant.find(extraFilter).select(LIST_SELECT).lean();
+      }
+    }
 
     /*
      * ═══ RESTORAN QAYSI KATEGORIYALARDA TAOMGA EGA ═══
@@ -131,7 +183,7 @@ export const restaurantController = {
      * Natija restoran ob'ektiga qo'shiladi va mijoz uni
      * to'g'ridan-to'g'ri ishlatadi.
      */
-    const pageIds = restaurants.map((r) => r._id);
+    const pageIds = [...pageRows, ...extraRows].map((r) => r._id);
     const catRows = pageIds.length
       ? await Dish.aggregate([
         { $match: { restaurantId: { $in: pageIds }, isAvailable: true } },
@@ -140,19 +192,22 @@ export const restaurantController = {
       : [];
     const catMap = new Map(catRows.map((r) => [String(r._id), r.categories.filter(Boolean)]));
 
-    // Keyingi sahifa bormi?
-    const hasMore = restaurants.length > limit;
-    const items = (hasMore ? restaurants.slice(0, limit) : restaurants)
+    let items = [...pageRows, ...extraRows]
       .map((r) => ({ ...r, dishCategories: catMap.get(String(r._id)) || [] }))
       // isOpen — DOIM Toshkent (yoki restoranning o'z) vaqt
       // mintaqasidan hisoblanadi, mijoz qurilmasi qaysi davlatda
       // bo'lishidan qat'i nazar bir xil natija. Mijoz o'zi
       // qayta hisoblamasin — bitta haqiqat manbai shu yerda.
-      .map((r) => ({ ...r, isOpen: isRestaurantOpen(r) }));
-    const last = hasMore ? items[items.length - 1] : null;
-    const nextCursor = last
-      ? `${new Date(last.createdAt).toISOString()}|${String(last._id)}`
-      : null;
+      .map((r) => ({ ...r, isOpen: isRestaurantOpen(r) }))
+      .map((r) => (pinMap.has(String(r._id)) ? { ...r, pin: pinMap.get(String(r._id)) } : r));
+
+    // Pin qo'yilganlar o'rin tartibida boshida (eski mijozlar ham to'g'ri ko'rsin); qolganlari o'z tartibida
+    if (pinMap.size) {
+      items = [
+        ...items.filter((r) => r.pin).sort((x, y) => x.pin.position - y.pin.position),
+        ...items.filter((r) => !r.pin),
+      ];
+    }
 
     res.json({ items, nextCursor, hasMore });
   }),
