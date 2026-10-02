@@ -93,6 +93,13 @@ async function drain(extraMs = 3000) {
   return received.map((r) => `${r.json?.event}:${r.json?.orderId}`);
 }
 const tag = (event, o) => `${event}:${o._id}`;
+/*
+ * NAQD buyurtma yakunlanganda server avtomatik "to'langan" qiladi (billing.finalizeCashPayment) —
+ * bu BFF ga `delivered` dan keyin yana bitta `updated` (isPaid o'zgardi) beradi. Bu to'g'ri:
+ * BFF `delivered` da buyurtmani o'qigan paytda to'lov hali yozilmagan bo'lishi mumkin,
+ * ikkinchi hodisa uni to'g'rilaydi. Tartib va vaqtga bog'liq emas: to'plam taqqoslanadi.
+ */
+const sameEvents = (ev, ...tags) => ev.length === tags.length && tags.every((x) => ev.includes(x));
 const clearQueue = async () => { await BffEvent.deleteMany({}); received.length = 0; };
 
 console.log('\n[1] Yuborish shakli: aynan {event, restaurantId, orderId}, sarlavhalar, yo‘l');
@@ -156,8 +163,8 @@ console.log('\n[3] Restoran/bot/Android yo‘li: changeOrderStatus (updated, can
   ev = await drain(); ok(ev.length === 1 && ev[0] === tag('cancelled', c), 'restoran bekor qildi → cancelled');
 
   const p = await mk({ status: 'ready', fulfillment: 'pickup' });
-  await changeOrderStatus({ orderId: p._id, restaurantId: R1._id, status: 'delivered' });
-  ev = await drain(); ok(ev.length === 1 && ev[0] === tag('delivered', p), 'pickup delivered → delivered');
+  await changeOrderStatus({ orderId: p._id, restaurantId: R1._id, status: 'delivered' }); await sleep(600);
+  ev = await drain(); ok(sameEvents(ev, tag('delivered', p), tag('updated', p)), `pickup delivered → delivered + naqd to‘lov updated: ${ev}`);
 
   // ikki marta bir xil status: changed:false — yozuv yo'q — hodisa yo'q
   await changeOrderStatus({ orderId: o._id, restaurantId: R1._id, status: 'delivering' });
@@ -174,8 +181,9 @@ console.log('\n[4] KURYER yo‘li: havola orqali qabul (ready→delivering) va "
   let ev = await drain(); ok(ev.length === 1 && ev[0] === tag('updated', o), `kuryer qabuli (delivering) → updated: ${ev}`);
   const del = await deliverShare(link.token, acc.secret);
   ok(del.ok === true, 'kuryer "Topshirdim" bosdi');
-  ev = await drain(); ok(ev.length === 1 && ev[0] === tag('delivered', o), `kuryer topshirdi → delivered: ${ev}`);
-  await deliverShare(link.token, acc.secret);
+  await sleep(600);
+  ev = await drain(); ok(sameEvents(ev, tag('delivered', o), tag('updated', o)), `kuryer topshirdi → delivered + naqd to‘lov updated: ${ev}`);
+  await deliverShare(link.token, acc.secret); await sleep(400);
   ok((await drain()).length === 0, 'takroriy "Topshirdim" — ikkinchi delivered yo‘q');
 }
 
@@ -184,12 +192,14 @@ console.log('\n[5] MIJOZ yo‘llari: bot "Oldim", ilovadagi "Ha, oldim", mijoz b
   await clearQueue();
   const a = await mk({ status: 'delivering' });
   await confirmOrderDelivered(a._id, 'customer');
-  let ev = await drain(); ok(ev.length === 1 && ev[0] === tag('delivered', a), `bot "Oldim" → delivered: ${ev}`);
+  await sleep(600);
+  let ev = await drain(); ok(sameEvents(ev, tag('delivered', a), tag('updated', a)), `bot "Oldim" → delivered + naqd to‘lov updated: ${ev}`);
 
   const b = await mk({ status: 'delivering' });
   const conf = await call(orderController.confirmDelivery, { userId: user._id, params: { id: String(b._id) }, body: { rating: 5, comment: 'zo‘r' } });
   ok(conf.status === 200, 'ilovadagi PATCH /orders/:id/confirm ishladi');
-  ev = await drain(); ok(ev.length === 1 && ev[0] === tag('delivered', b), `ilova "Ha, oldim" → delivered: ${ev}`);
+  await sleep(600);
+  ev = await drain(); ok(sameEvents(ev, tag('delivered', b), tag('updated', b)), `ilova "Ha, oldim" → delivered + naqd to‘lov updated: ${ev}`);
 
   const c = await mk({ status: 'pending' }); await drain();
   const cancel = await call(orderController.cancelOrder, { userId: user._id, params: { id: String(c._id) } });
@@ -202,9 +212,9 @@ console.log('\n[6] AVTO-YAKUNLASH yo‘llari: 12 soatlik updateMany va restoran 
   await clearQueue();
   // deliveryCheck.checkDeliveries: 12 soatdan oshgan 'delivering' — updateMany
   const stale = await mk({ status: 'delivering' }); await aged(stale._id, 13);
-  await checkDeliveries();
+  await checkDeliveries(); await sleep(600);
   let ev = await drain();
-  ok(ev.length === 1 && ev[0] === tag('delivered', stale), `12 soatlik avto-yakunlash (updateMany) → delivered: ${ev}`);
+  ok(sameEvents(ev, tag('delivered', stale), tag('updated', stale)), `12 soatlik avto-yakunlash (updateMany) → delivered + naqd to‘lov updated: ${ev}`);
   ok((await Order.findById(stale._id).lean()).status === 'delivered', 'buyurtma haqiqatan yakunlangan');
 
   // restaurantReminders: 2 eslatmadan keyin auto
@@ -269,8 +279,10 @@ console.log('\n[9] Boshqa restoran hodisasi o‘z restaurantId si bilan; bir buy
   const d = await mk({ status: 'delivering' });
   await confirmOrderDelivered(d._id, 'customer');
   await Order.findByIdAndUpdate(d._id, { status: 'delivered' }); // yana bir yo'l (masalan legacy)
+  await sleep(600);
   const ev = await drain();
-  ok(ev.length === 1, `ikki yo‘ldan delivered — HODISA 1 ta: ${ev.length}`);
+  ok(ev.filter((e) => e.startsWith('delivered:')).length === 1, `ikki yo‘ldan delivered — "delivered" hodisasi 1 ta: ${ev}`);
+  ok(ev.filter((e) => e.startsWith('updated:')).length <= 1, 'naqd to‘lov "updated"i ko‘pi bilan 1 ta');
 }
 
 console.log('\n[10] Birlashtirish: ketma-ket updated — yuborilmagani bitta');

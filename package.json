@@ -39,7 +39,8 @@
     "test:video-ad": "node tests/video-broadcast.test.mjs",
     "test:support-thread": "node tests/support-group-thread.test.mjs",
     "test:db-backup": "node tests/db-backup.test.mjs",
-    "test:pins": "node tests/restaurant-pins.test.mjs"
+    "test:pins": "node tests/restaurant-pins.test.mjs",
+    "test:cash": "node tests/cash-payment.test.mjs"
   },
   "dependencies": {
     "@socket.io/redis-adapter": "^8.3.0",

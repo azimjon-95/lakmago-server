@@ -8,7 +8,7 @@ import { DeliveryAssignment } from '../models/DeliveryAssignment.js';
 import { getIO } from '../sockets/io.js';
 import { orderLabel } from './orderNumber.js';
 import { createShareLink, buildShareUrls } from './courierDispatch.js';
-import { pickupPaymentRow, handlePickupPaid } from './restaurantBotPickup.js';
+import { handlePickupPaid } from './restaurantBotPickup.js';
 import {
   isRestaurantBotEnabled,
   sendToStaff,
@@ -38,9 +38,10 @@ import {
  *                (olib ketish: [🤝 Mijozga topshirildi])
  *   delivering → tugmasiz (kuryer "Topshirdim" bosadi)
  *
- * OLIB KETISH + NAQD + hali to'lanmagan: har bosqichda qo'shimcha
- * [💵 To'lov qilindi] (restaurantBotPickup.js). Taom topshirilgach
- * ham qoladi — pul keyin olingan bo'lishi mumkin.
+ * NAQD TO'LOV: alohida tugma YO'Q — buyurtma yakunlanganda (taom topshirildi /
+ * yetkazildi) avtomatik "to'langan" bo'ladi (billing.finalizeCashPayment).
+ * YANGI naqd buyurtmada esa matnda katta "TO'LOV: NAQD" va "mijoz bilan
+ * gaplashib tasdiqlatib oling" ogohlantirishi bor (buildOrderText).
  *
  * Kuryerga ulashish OLIB KETISH buyurtmasida ko'rsatilmaydi —
  * u yerda kuryer yo'q. Kuryer topilgach ulashish tugmasi
@@ -191,7 +192,11 @@ export function buildOrderText(order, { actorName = '', assignment = null, tz = 
   const lines = [];
   const isPickup = order.fulfillment === 'pickup';
 
+  // Yangi NAQD buyurtma: to'lov turi eng tepada (sarlavha tagida) — birinchi ko'rinadigan narsa
+  const needsConfirm = order.status === 'pending' && order.paymentMethod === 'cash';
+
   lines.push(`🔔 <b>BUYURTMA ${esc(orderLabel(order))}</b>`);
+  if (needsConfirm) lines.push('💵 <b>TO‘LOV TURI: NAQD</b>');
   if (order.timingMode === 'scheduled' && order.scheduledFor) {
     lines.push(`⏰ <b>Belgilangan vaqt: ${fmtTime(order.scheduledFor, tz)}</b> (${fmtDayMonth(order.scheduledFor, tz)})`);
   }
@@ -227,9 +232,20 @@ export function buildOrderText(order, { actorName = '', assignment = null, tz = 
   if (order.bonusUsed > 0) lines.push(`🎁 Bonus: −${som(order.bonusUsed)} so‘m`);
   lines.push(`💰 <b>Jami: ${som(order.total)} so‘m</b>`);
 
-  const paid = order.isPaid ? 'To‘langan' : 'To‘lanmagan';
-  const method = order.paymentMethod === 'cash' ? '💵 Naqd' : '💳 Karta';
-  lines.push(`${method} · ${paid}`);
+  /*
+   * TO'LOV TURI. YANGI (qabul qilinmagan) NAQD buyurtmada katta va alohida:
+   * restoranlar naqd buyurtmani mijoz bilan gaplashmasdan qabul qilib, taom tayyor
+   * bo'lganda mijozni topa olmay qolardi (faqat naqdda). "TO'LOV TURI: NAQD" — sarlavha
+   * tagida (tepada); ogohlantirish matn OXIRIDA — aynan "Qabul qilish" tugmasi tepasida.
+   */
+  if (needsConfirm) {
+    // To'lov turi tepada (sarlavha tagida) va pastda ogohlantirishda — bu yerda takrorlanmaydi
+  } else if (order.paymentMethod === 'cash') {
+    // Naqd: yakunlanguncha "to'lanmagan" deb qo'rqitmaymiz — yakunlanganda o'zi "to'langan" bo'ladi
+    lines.push(order.isPaid ? '💵 Naqd · To‘langan' : '💵 Naqd · to‘lov topshirilganda');
+  } else {
+    lines.push(`💳 Karta · ${order.isPaid ? 'To‘langan' : 'To‘lanmagan'}`);
+  }
 
   lines.push('');
   if (isPickup) {
@@ -240,6 +256,11 @@ export function buildOrderText(order, { actorName = '', assignment = null, tz = 
   if (order.phone) lines.push(`📞 ${esc(order.phone)}`);
   if (order.addressNote) lines.push(`📝 ${esc(order.addressNote)}`);
   if (order.note) lines.push(`💬 ${esc(order.note)}`);
+
+  if (needsConfirm) {
+    lines.push('');
+    lines.push('⚠️ <b>To‘lov turi: NAQD.</b> Shuning uchun <b>mijoz bilan gaplashib, buyurtmani tasdiqlatib oling</b> — keyin qabul qiling.');
+  }
 
   const status = orderStatusLine(order, actorName);
   const courier = courierLine(order, assignment);
@@ -260,9 +281,6 @@ export function buildOrderKeyboard(order, assignment = null) {
     ? [btn(assignment ? '🔁 Kuryerga qayta ulashish' : '🚴 Kuryerga ulashish', `o:share:${id}`, 'primary')]
     : null;
 
-  // Faqat olib ketish + naqd + to'lanmagan bo'lsa, aks holda null
-  const payRow = pickupPaymentRow(order);
-
   switch (order.status) {
     case 'pending':
       return kb([
@@ -271,9 +289,9 @@ export function buildOrderKeyboard(order, assignment = null) {
       ]);
     case 'accepted':
     case 'preparing':
-      return kb([payRow, shareBtn, [btn('✅ Tayyor', `o:ready:${id}`, 'success')]]);
+      return kb([shareBtn, [btn('✅ Tayyor', `o:ready:${id}`, 'success')]]);
     case 'ready':
-      if (!isDelivery) return kb([payRow, [btn('🤝 Mijozga topshirildi', `o:handover:${id}`, 'success')]]);
+      if (!isDelivery) return kb([[btn('🤝 Mijozga topshirildi', `o:handover:${id}`, 'success')]]);
       return kb([shareBtn, [btn('🛵 Kuryerga topshirildi', `o:delivering:${id}`, 'success')]]);
     case 'delivering':
       /*
@@ -281,11 +299,10 @@ export function buildOrderKeyboard(order, assignment = null) {
        * yoki yangilanishdan oldingi buyurtma) — yakunlash imkoni
        * beriladi. Yetkazishda avvalgidek tugmasiz.
        */
-      if (!isDelivery) return kb([payRow, [btn('✅ Yakunlash', `o:handover:${id}`, 'success')]]);
+      if (!isDelivery) return kb([[btn('✅ Yakunlash', `o:handover:${id}`, 'success')]]);
       return null;
     case 'delivered':
-      // Olib ketish: taom berilgan, pul hali olinmagan bo'lishi mumkin
-      return payRow ? kb([payRow]) : null;
+      return null;
     default:
       return null;
   }

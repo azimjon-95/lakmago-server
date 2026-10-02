@@ -354,9 +354,56 @@ export async function recordPayment(order, provider, transactionId = null) {
  * Naqd to'lovda: pul restoranda qolgan, shuning uchun komissiya
  * miqdorida restoran BIZGA qarzdor bo'ladi (balans manfiyga ketadi).
  */
+/**
+ * NAQD BUYURTMA YAKUNLANDI → AVTOMATIK "TO'LANGAN".
+ *
+ * Avval restoran/xodim "To'lov qabul qilindi" tugmasini QO'LDA bosishi kerak edi.
+ * Unutilsa buyurtma "to'lanmagan" bo'lib qolardi va naqd to'lov moliya jurnaliga
+ * (payment_in) tushmasdi. Endi buyurtma yakunlanishi (taom topshirildi / yetkazildi —
+ * qaysi yo'l bilan bo'lmasin) naqd to'lovni ham yopadi: tugma KERAK EMAS.
+ *
+ * Panel tugmasi (restaurantPanel.markPaid) bilan AYNAN bir xil natija:
+ *   isPaid + paidAt, va jurnalga payment_in (recordPayment o'zi takroriy yozuvdan himoyalangan).
+ * Faqat naqd VA yakunlangan buyurtma: karta to'lovi o'z vaqtida (oldindan) qayd etilgan,
+ * yakunlanmagan buyurtmaga hech narsa yozilmaydi. Takroriy chaqiruv xavfsiz.
+ *
+ * settleOrder boshida chaqiriladi — u BARCHA yakunlash yo'llarida (panel, bot, kuryer,
+ * mijoz "Oldim", avto-yakunlash) ishlaydi, shuning uchun yo'llarni alohida yamash kerak emas.
+ */
+export async function finalizeCashPayment(orderId) {
+  const order = await Order.findById(orderId);
+  if (!order || order.paymentMethod !== 'cash' || order.status !== 'delivered') return null;
+
+  let patch = null;
+  if (!order.isPaid) {
+    const paidAt = order.deliveredAt || new Date();
+    // Atomik: ikki yo'l bir vaqtda yakunlasa ham bir marta
+    const updated = await Order.findOneAndUpdate(
+      { _id: order._id, isPaid: { $ne: true } },
+      { isPaid: true, paidAt },
+      { new: true },
+    );
+    if (updated) patch = { _id: String(updated._id), isPaid: true, paidAt: updated.paidAt };
+  }
+
+  // Jurnal: panel tugmasidagi bilan bir xil (idempotent)
+  await recordPayment(order, 'cash').catch((e) => console.error('[billing] recordPayment (naqd, avto):', e.message));
+
+  // Panel/admin ro'yxati darhol "To'langan" ko'rsin (kuryer yo'li status hodisasini minimal yuboradi)
+  if (patch) {
+    const io = getIO();
+    io?.to(`restaurant:${order.restaurantId}`).emit('order:update', patch);
+    io?.to('admin').emit('order:update', patch);
+  }
+  return { changed: Boolean(patch) };
+}
+
 export async function settleOrder(orderId) {
   const order = await Order.findById(orderId);
   if (!order) return null;
+
+  // Naqd buyurtma — yakunlangan bo'lsa avtomatik "to'langan" (komissiya hisobidan MUSTAQIL)
+  await finalizeCashPayment(order._id).catch((e) => console.error('[billing] finalizeCashPayment:', e.message));
 
   // Takroriy hisob-kitobdan himoya
   const already = await Ledger.findOne({ orderId: order._id, type: 'restaurant_due' });

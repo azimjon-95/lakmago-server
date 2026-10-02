@@ -766,7 +766,8 @@ export const adminController = {
     if (data.error) return res.status(data.status || 400).json({ error: data.error, code: data.code });
 
     const { sendCustomBroadcast } = await import('../services/telegramGroup.js');
-    const groups = await GroupChat.find({ isActive: true, isBotAdmin: true });
+    // Tartib ANIQ (eskidan yangiga): birinchi guruh faylni yuklaydi, qolganlari file_id bilan — natija har safar bir xil
+    const groups = await GroupChat.find({ isActive: true, isBotAdmin: true }).sort({ _id: 1 });
     let sent = 0, failed = 0;
     const failures = [];
     // Video BIR marta yuklanadi; keyingi guruhlarga Telegram file_id bilan

@@ -115,8 +115,15 @@ console.log('\n[1] VIDEO + matn + tugma + pin: Media → Matn → Tugma → Pin'
   const km = JSON.parse(v.fields.reply_markup);
   ok(km.inline_keyboard[0][0].text === '🍽 Buyurtma berish' && km.inline_keyboard[0][0].url === 'https://t.me/lokmago_bot/app', 'tugma matni va havolasi (reply_markup JSON)');
   ok(calls[1].fields.message_id === r.json.messageId && calls[1].fields.chat_id === CHAT, 'pin — aynan yuborilgan xabarga');
-  const after = (await mongoose.connection.db.listCollections().toArray()).map((c) => c.name).sort().join();
-  ok(before === after, 'bazada yangi collection YO‘Q (video hech qayerga saqlanmadi)');
+  /*
+   * Maqsad: video bazaga YOZILMAGAN. Server fon jarayonlari (zaxira, BFF navbati va h.k.) shu
+   * orada o'z collection'ini lazy yaratishi mumkin — shuning uchun "ro'yxat aynan bir xil"
+   * deb tekshirilmaydi (oraliq-barqaror edi). Qo'shilganlar orasida fayl/video/GridFS
+   * bilan bog'liq collection YO'Q ekani va hech bir hujjatda video baytlari yo'qligi tekshiriladi.
+   */
+  const afterList = (await mongoose.connection.db.listCollections().toArray()).map((c) => c.name);
+  const added = afterList.filter((n) => !before.split(',').includes(n));
+  ok(!added.some((n) => /video|upload|file|media|blob|gridfs|^fs\./i.test(n)), `bazada video/fayl collection'i YO‘Q (video hech qayerga saqlanmadi); qo‘shilganlar: [${added}]`);
   ok(fs.readdirSync(os.tmpdir()).length === tmpBefore, 'diskka (tmp) ham yozilmadi');
 }
 

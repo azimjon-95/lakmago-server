@@ -24,6 +24,7 @@ import { config } from '../config/index.js';
 import { verifyItemPrices } from '../services/priceVerification.js';
 import { computeOrderFinance, reconcile, somToTiyin, tiyinToSom } from '../services/orderFinance.js';
 import { activeAgreement } from '../models/CommissionAgreement.js';
+import { COMPLETABLE_STATUSES } from '../services/reminderRules.js';
 
 export const bannerController = {
   // GET /api/banners — mijozга ko'rinadigan bannerlar
@@ -1026,17 +1027,65 @@ export const orderController = {
     res.json(order);
   }),
 
-  // PATCH /api/orders/:id/confirm  — mijoz "Ha, oldim" (delivered) + baho
+  /*
+   * PATCH /api/orders/:id/confirm — mijoz "Ha, oldim" (delivered) + baho.
+   *
+   * AVVAL: egasi tekshirilar edi, lekin HOLAT tekshirilmasdi va hisob-kitob chaqirilmasdi:
+   *   • mijoz o'zining pending/bekor buyurtmasini ham "yetkazildi" qila olardi;
+   *   • settleOrder chaqirilmasdi — restoran komissiyasi yozilmasdi va naqd to'lov
+   *     "to'lanmagan" bo'lib qolardi (ilova aynan shu yo'ldan foydalanadi).
+   *
+   * ENDI: (1) faqat OCHIQ (qabul qilingan … yo'ldagi) buyurtma yakunlanadi — atomik, kuryer/
+   * restoran/avto-yakunlash bilan to'qnashmaydi; (2) hisob-kitob + naqd uchun avtomatik
+   * "to'langan" (settleOrder); (3) allaqachon yakunlangan buyurtmaga faqat BAHO yoziladi
+   * (yetkazilgan vaqt va holat o'zgarmaydi); (4) boshqa holat — 400.
+   */
   confirmDelivery: asyncHandler(async (req, res) => {
     const { rating, comment } = req.body;
-    const update = { status: 'delivered', deliveredAt: new Date() };
-    if (rating) { update.rating = rating; update.comment = comment; update.ratedAt = new Date(); }
-    const order = await Order.findOneAndUpdate(
-      { _id: req.params.id, userId: req.userId },
-      update,
-      { new: true },
-    );
-    if (!order) return res.status(404).json({ error: 'Buyurtma topilmadi' });
+    const now = new Date();
+    const mine = { _id: req.params.id, userId: req.userId };
+    const ratingFields = rating ? { rating, comment, ratedAt: now } : {};
+
+    const existing = await Order.findOne(mine).select('status').lean();
+    if (!existing) return res.status(404).json({ error: 'Buyurtma topilmadi' });
+
+    let order = null;
+    let justCompleted = false;
+    if (COMPLETABLE_STATUSES.includes(existing.status)) {
+      order = await Order.findOneAndUpdate(
+        { ...mine, status: { $in: COMPLETABLE_STATUSES } },
+        {
+          $set: {
+            status: 'delivered',
+            deliveredAt: now,
+            'deliveryCheck.confirmed': true,
+            'deliveryCheck.confirmedAt': now,
+            'deliveryCheck.confirmedBy': 'customer',
+            ...ratingFields,
+          },
+        },
+        { new: true },
+      );
+      justCompleted = Boolean(order);
+    }
+
+    if (!order) {
+      // Allaqachon yakunlangan (yoki oraliqda boshqa yo'l yakunladi) — faqat baho
+      const cur = await Order.findOne(mine).select('status').lean();
+      if (cur?.status !== 'delivered') {
+        return res.status(400).json({ error: 'Buyurtma hali yetkazilmagan', code: 'WRONG_STATE' });
+      }
+      order = Object.keys(ratingFields).length
+        ? await Order.findOneAndUpdate({ ...mine, status: 'delivered' }, { $set: ratingFields }, { new: true })
+        : await Order.findOne(mine);
+    }
+
+    if (justCompleted) {
+      // Komissiya + naqd uchun avtomatik "to'langan" (takroriy chaqiruvdan himoyalangan)
+      import('../services/billing.js')
+        .then((m) => m.settleOrder(order._id))
+        .catch((e) => console.error('[billing] settleOrder (mijoz ilovasi):', e.message));
+    }
 
     getIO()?.to(`restaurant:${order.restaurantId}`).emit('order:update', order);
     getIO()?.to('admin').emit('order:update', order);
