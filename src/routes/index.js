@@ -45,6 +45,7 @@ import { loginLimiter, writeLimiter } from '../middleware/rateLimit.js';
 import { botBroadcastController } from '../controllers/botBroadcast.js';
 import { adAttachment } from '../middleware/adUpload.js';
 import { restaurantPinsController } from '../controllers/restaurantPins.js';
+import { morningCheckController } from '../controllers/morningCheck.js';
 
 export const router = Router();
 
@@ -128,6 +129,9 @@ router.get('/panel/billing/daily', ...R, restaurantBillingController.daily);
 router.get('/panel/billing/ledger', ...R, restaurantBillingController.ledger);
 router.patch('/panel/me', auth, requireRole('restaurant'), restaurantPanelController.updateProfile);
 router.patch('/panel/me/active', auth, requireRole('restaurant'), restaurantPanelController.toggleActive);
+// Ertalabki ochilish tekshiruvi (banner + "Barchasi bor") — yangi controller, mavjud endpointlarga tegilmagan
+router.get('/panel/morning-check', auth, requireRole('restaurant'), morningCheckController.panelGet);
+router.post('/panel/morning-check/all-ok', auth, requireRole('restaurant'), morningCheckController.panelAllOk);
 router.get('/panel/dishes', auth, requireRole('restaurant'), restaurantPanelController.dishes);
 // Aniq yo'llar :id dan OLDIN — aks holda 'stopped' id deb qabul qilinadi
 router.get('/panel/dishes/stopped', auth, requireRole('restaurant'), restaurantPanelController.stoppedDishes);
@@ -346,6 +350,7 @@ router.delete('/panel/ads/:id', ...R, panelAdsController.cancel);
 
 // Reklama tasdiqlash — admin / marketing bo'limi
 // Restoran PINi: "Barcha restoranlar"da 1/2/3-o'rin (muddat bilan) — Mijoz jalb qilish → Top joylar
+router.get('/admin/morning-checks', ...AS('restaurants'), morningCheckController.adminList);
 router.get('/admin/pins/restaurants', ...AS('marketing'), restaurantPinsController.restaurants);
 router.get('/admin/pins', ...AS('marketing'), restaurantPinsController.list);
 router.post('/admin/pins', ...AS('marketing'), restaurantPinsController.create);

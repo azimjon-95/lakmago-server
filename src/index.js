@@ -526,6 +526,20 @@ async function main() {
     setInterval(() => checkRestaurantReminders().catch((e) => console.error('Restoran eslatmasi:', e.message)), 2 * 60_000);
   }
 
+  /*
+   * Ertalabki ochilish tekshiruvi — har daqiqada. Restoran ochilish vaqtida xodimlarga
+   * "taomlarni tekshiring, stopdagilarni Stop-listga qo'shing" xabari; javob bo'lmasa har
+   * soatda eslatma (faqat ish vaqti ichida). Bot sozlanmagan bo'lsa o'zi hech narsa qilmaydi.
+   * Bir restoran xatosi boshqalarni to'xtatmaydi; ikki jarayon ishlasa — atomik egallash
+   * (services/morningChecklist.js) takror yuborishning oldini oladi.
+   */
+  {
+    const { checkMorningChecklists } = await import('./services/morningChecklist.js');
+    const tick = () => checkMorningChecklists().catch((e) => console.error('[morningChecklist]', e.message));
+    setTimeout(tick, 50_000);
+    setInterval(tick, 60_000);
+  }
+
   // Dine-in billingi — soatiga bir marta
   {
     const { runDineInBilling } = await import('./services/dineInBilling.js');

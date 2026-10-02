@@ -302,6 +302,15 @@ export async function handleRestaurantBotUpdate(update) {
         await handleBroadcastCallback(cq);
         return;
       }
+      /*
+       * Ertalabki ochilish tekshiruvi (mc:). Alohida modul — buyurtma/bron/menyu oqimiga
+       * tegmaydi; dinamik import (aylanma bog'liqlik bo'lmasligi uchun).
+       */
+      if (data.startsWith('mc:')) {
+        const { handleMorningChecklistCallback } = await import('./morningChecklist.js');
+        await handleMorningChecklistCallback(cq);
+        return;
+      }
       // Noma'lum tugma (juda eski xabar) — "soat" belgisi qotib qolmasin
       await answerCallback(cq.id);
     }
