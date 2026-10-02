@@ -2,6 +2,7 @@ import { Order } from '../models/Order.js';
 import { User } from '../models/User.js';
 import { getIO } from '../sockets/io.js';
 import { notifyUser } from './telegram.js';
+import { emitOrderToRestaurant } from './orderSocket.js';
 
 /*
  * ═══════════════════════════════════════════════════════════
@@ -324,7 +325,7 @@ function broadcast(order) {
   }
 
   // Restoran paneli
-  io.to(`restaurant:${order.restaurantId}`).emit('order:update', order);
+  emitOrderToRestaurant(io, 'order:update', order);
 
   // LokmaGo admin
   io.to('admin').emit('order:update', order);

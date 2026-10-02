@@ -4,6 +4,7 @@ import { Order } from '../models/Order.js';
 import { Restaurant } from '../models/Restaurant.js';
 import { User } from '../models/User.js';
 import { getIO } from '../sockets/io.js';
+import { emitOrderToRestaurant } from './orderSocket.js';
 
 const TG_API = `https://api.telegram.org/bot${config.telegramBotToken}`;
 
@@ -163,7 +164,7 @@ export async function confirmOrderDelivered(orderId, confirmedBy = 'customer', {
   const payload = { orderId: String(order._id), status: 'delivered' };
   io?.to(`order:${order._id}`).emit('order:status', payload);
   if (order.userId) io?.to(`user:${order.userId}`).emit('order:status', payload);
-  io?.to(`restaurant:${order.restaurantId}`).emit('order:update', order);
+  await emitOrderToRestaurant(io, 'order:update', order);
   io?.to('admin').emit('order:update', order);
 
   // Baho — bir marta (askRatingForOrder o'zi tekshiradi)

@@ -3,6 +3,7 @@ import { Order } from '../models/Order.js';
 import { computeSplit, splitFromFinance } from './paymentSplit.js';
 import { getProvider } from './providers/index.js';
 import { getIO } from '../sockets/io.js';
+import { emitOrderToRestaurant } from './orderSocket.js';
 
 /**
  * To'lov muvaffaqiyatini qayd etish.
@@ -204,7 +205,7 @@ async function releaseOrderToKitchen(orderId, provider) {
 
   const io = getIO();
   io?.to(`order:${orderId}`).emit('order:paid', { orderId: String(orderId) });
-  io?.to(`restaurant:${order.restaurantId}`).emit('order:new', order);
+  await emitOrderToRestaurant(io, 'order:new', order);
 
   /*
    * Karta bilan to'langan buyurtma endi restoranga ko'rinadi —

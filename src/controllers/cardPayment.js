@@ -5,6 +5,7 @@ import { Order } from '../models/Order.js';
 import { Transaction } from '../models/Transaction.js';
 import { payWithCardToken, getPaymentStatus, ClickApiError } from '../services/clickCardToken.js';
 import { getIO } from '../sockets/io.js';
+import { emitOrderToRestaurant } from '../services/orderSocket.js';
 
 /**
  * SAQLANGAN KARTA BILAN TO'LOV.
@@ -190,7 +191,7 @@ export const cardPaymentController = {
 
     const io = getIO();
     io?.to(`order:${order._id}`).emit('order:paid', { orderId: String(order._id) });
-    io?.to(`restaurant:${updated.restaurantId}`).emit('order:new', updated);
+    await emitOrderToRestaurant(io, 'order:new', updated);
     io?.to('admin').emit('order:new', updated);
 
     res.json({

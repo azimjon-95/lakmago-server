@@ -25,6 +25,8 @@ import { verifyItemPrices } from '../services/priceVerification.js';
 import { computeOrderFinance, reconcile, somToTiyin, tiyinToSom } from '../services/orderFinance.js';
 import { activeAgreement } from '../models/CommissionAgreement.js';
 import { COMPLETABLE_STATUSES } from '../services/reminderRules.js';
+import { emitOrderToRestaurant } from '../services/orderSocket.js';
+import { customerOrderView } from '../services/customerOrderView.js';
 
 // Faol kelishuvi yo'q restoran: ogohlantirish soatiga BIR marta (har buyurtmada jurnal to'lib ketmasin)
 const noAgreementWarned = new Map();
@@ -900,7 +902,7 @@ export const orderController = {
        */
       if (doc.status !== 'awaiting_payment') {
         // Real-time: restoranga yangi buyurtma (signal chalinadi)
-        io?.to(`restaurant:${o.restaurantId}`).emit('order:new', doc);
+        await emitOrderToRestaurant(io, 'order:new', doc);
         io?.to('admin').emit('order:new', doc);
 
         /*
@@ -930,7 +932,7 @@ export const orderController = {
       }
     }
 
-    res.status(201).json({ groupId, orders: created, bonusUsed: bonusToUse });
+    res.status(201).json({ groupId, orders: created.map(customerOrderView), bonusUsed: bonusToUse });
   }),
 
   // GET /api/orders  (foydalanuvchi buyurtmalari — groupId bo'yicha guruhlangan)
@@ -996,19 +998,19 @@ export const orderController = {
       .then((m) => m.refreshOrderMessages(order._id))
       .catch((e) => console.error('[restaurantBot] mijoz bekor:', e.message));
 
-    res.json(order);
+    res.json(customerOrderView(order));
   }),
 
   myOrders: asyncHandler(async (req, res) => {
     const orders = await Order.find({ userId: req.userId }).sort({ createdAt: -1 });
-    res.json(orders);
+    res.json(orders.map(customerOrderView));
   }),
 
   // GET /api/orders/group/:groupId  (bitta buyurtma = bir necha restoran)
   getGroup: asyncHandler(async (req, res) => {
     const orders = await Order.find({ groupId: req.params.groupId, userId: req.userId }).sort({ createdAt: 1 });
     if (orders.length === 0) return res.status(404).json({ error: 'Buyurtma topilmadi' });
-    res.json(orders);
+    res.json(orders.map(customerOrderView));
   }),
 
   // GET /api/orders/active  (mijozning faol buyurtmalari)
@@ -1017,7 +1019,7 @@ export const orderController = {
       userId: req.userId,
       status: { $nin: ['delivered', 'cancelled'] },
     }).sort({ createdAt: -1 });
-    res.json(orders);
+    res.json(orders.map(customerOrderView));
   }),
 
   // GET /api/orders/:id
@@ -1035,7 +1037,7 @@ export const orderController = {
      */
     const order = await Order.findOne({ _id: req.params.id, userId: req.userId });
     if (!order) return res.status(404).json({ error: 'Buyurtma topilmadi' });
-    res.json(order);
+    res.json(customerOrderView(order));
   }),
 
   /*
@@ -1098,9 +1100,9 @@ export const orderController = {
         .catch((e) => console.error('[billing] settleOrder (mijoz ilovasi):', e.message));
     }
 
-    getIO()?.to(`restaurant:${order.restaurantId}`).emit('order:update', order);
+    await emitOrderToRestaurant(getIO(), 'order:update', order);
     getIO()?.to('admin').emit('order:update', order);
-    res.json(order);
+    res.json(customerOrderView(order));
   }),
 
   // PATCH /api/orders/:id/status  { status }  (restoran/admin)
