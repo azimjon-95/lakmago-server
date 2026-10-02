@@ -309,7 +309,12 @@ export const config = {
   adPricePerDaySom: num(process.env.AD_PRICE_PER_DAY, 20000),
 
   split: {
-    defaultLokmaPercent: num(process.env.SPLIT_LOKMA_PERCENT, 10),
+    /*
+     * LokmaGo ulushi (komissiya) bu yerda YO'Q va bo'lmaydi: u HAR RESTORAN BILAN
+     * ALOHIDA kelishuvdan (CommissionAgreement) olinadi va buyurtma yaratilganda
+     * snapshot'ga muzlatiladi. Ilgari bu yerda `defaultLokmaPercent = 10` (SPLIT_LOKMA_PERCENT)
+     * bor edi — kelishuvsiz/eski buyurtmaga jimgina 10% yozib yuborardi. Olib tashlandi.
+     */
 
     /** Paynet haqi 1%, UMUMIY summadan (Click bilan bir xil qoida). */
     paynetFeePercent: num(process.env.PAYNET_FEE_PERCENT, 1),

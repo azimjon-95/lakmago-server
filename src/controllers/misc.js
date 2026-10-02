@@ -26,6 +26,15 @@ import { computeOrderFinance, reconcile, somToTiyin, tiyinToSom } from '../servi
 import { activeAgreement } from '../models/CommissionAgreement.js';
 import { COMPLETABLE_STATUSES } from '../services/reminderRules.js';
 
+// Faol kelishuvi yo'q restoran: ogohlantirish soatiga BIR marta (har buyurtmada jurnal to'lib ketmasin)
+const noAgreementWarned = new Map();
+function warnNoAgreement(restaurantId, name = '') {
+  const key = String(restaurantId);
+  if (Date.now() - (noAgreementWarned.get(key) || 0) < 3_600_000) return;
+  noAgreementWarned.set(key, Date.now());
+  console.warn(`[moliya] «${name || key}» restoranida faol kelishuv YO'Q — buyurtma LokmaGo komissiyasi 0% bilan yaratildi. Admin panel → Moliya → Kelishuv.`);
+}
+
 export const bannerController = {
   // GET /api/banners — mijozга ko'rinadigan bannerlar
   list: asyncHandler(async (_req, res) => {
@@ -633,6 +642,8 @@ export const orderController = {
        * keyin o'zgarsa ham bu buyurtmaning hisobi o'zgarmaydi.
        */
       const agreement = await activeAgreement(o.restaurantId);
+      // Kelishuvsiz restoran: komissiya 0% (uydirma foiz YO'Q), lekin bu jim o'tib ketmasin
+      if (!agreement) warnNoAgreement(o.restaurantId, rest?.name);
       const feePercent = o.paymentMethod === 'cash'
         ? 0
         : (config.split.clickFeePercent || 0);

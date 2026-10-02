@@ -21,15 +21,31 @@ export async function recordSuccess({
   const key = buildIdempotencyKey(order._id, provider, providerTransactionId);
 
   /*
-   * Bo'linish foizi restoran bilan tuzilgan KELISHUVDAN olinadi:
-   * restoran komissiyasi + mijoz haqi = shlyuzga ketadigan yagona
-   * foiz. Kelishuv bo'lmasa standart qiymat ishlatiladi.
+   * ═══ LOKMAGO FOIZI — HAR RESTORAN O'Z KELISHUVIDAN ═══
+   * Restoran komissiyasi + mijoz haqi = LokmaGo ulushi. Manba (ustuvorlik tartibida):
+   *   1. Buyurtmaning o'z snapshot'i (`finance`) — buyurtma YARATILGAN paytdagi kelishuv.
+   *      Kelishuv keyin o'zgargan bo'lsa ham bu buyurtma o'z foizida qoladi.
+   *   2. Snapshot'siz ESKI buyurtma: buyurtma yaratilgan paytda amalda bo'lgan kelishuv.
+   *   3. Kelishuv umuman bo'lmasa — 0% (jim, uydirma foiz YO'Q) va jurnalga ogohlantirish.
+   * Ilgari 3-holatda standart 10% (config.split.defaultLokmaPercent) qo'llanardi — olib
+   * tashlangan: kelishuvsiz restoranga o'z-o'zidan 10% yozilmaydi.
+   * Qo'llangan foiz Payment.lokmaPercentApplied ga AYNAN shu qiymat bilan yoziladi.
    */
+  const fin = order.finance && order.finance.model === 'v2' ? order.finance : null;
   let percent = lokmaPercent;
   if (percent === undefined || percent === null) {
-    const { activeAgreement } = await import('../models/CommissionAgreement.js');
-    const agreement = await activeAgreement(order.restaurantId);
-    percent = agreement?.totalSplitPercent;
+    if (fin) {
+      percent = (Number(fin.restaurantCommissionPercent) || 0) + (Number(fin.customerFeePercent) || 0);
+    } else {
+      const { agreementAt } = await import('../models/CommissionAgreement.js');
+      const agreement = await agreementAt(order.restaurantId, order.createdAt || new Date());
+      if (agreement) {
+        percent = agreement.totalSplitPercent;
+      } else {
+        percent = 0;
+        console.warn(`[to'lov] Restoran ${order.restaurantId} uchun buyurtma ${order._id} paytida faol kelishuv topilmadi — LokmaGo foizi 0% deb yozildi`);
+      }
+    }
   }
 
   // Allaqachon qayd etilganmi
@@ -41,8 +57,7 @@ export async function recordSuccess({
    * komissiya faqat taom summasidan hisoblangan va yetkazish
    * unga kirmagan. Eski buyurtmalarda avvalgi hisob saqlanadi.
    */
-  const fin = order.finance && order.finance.model === 'v2' ? order.finance : null;
-  const split = fin
+    const split = fin
     ? splitFromFinance(fin, provider)
     : computeSplit(provider, amountTiyin, percent);
   const gateway = getProvider(provider);
@@ -70,7 +85,7 @@ export async function recordSuccess({
           restaurantAmount: split.restaurantAmount,
           lokmaGrossCommission: split.lokmaGrossCommission,
           lokmaNetCommission: split.lokmaNetCommission,
-          lokmaPercentApplied: percent ?? 0,
+          lokmaPercentApplied: percent,
           payoutStatus,
           idempotencyKey: key,
           paidAt: new Date(),

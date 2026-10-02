@@ -15,6 +15,19 @@ import { config } from '../config/index.js';
  * xavfsiz.
  */
 
+/**
+ * LokmaGo foizi — MAJBURIY va tekshiriladi. Standart qiymat YO'Q: foiz har restoran
+ * bilan alohida kelishuvdan keladi. Berilmagan/noto'g'ri bo'lsa jimgina biror foiz
+ * (ilgari 10%) qo'llanmaydi — aniq xato beriladi.
+ */
+export function assertLokmaPercent(p) {
+  const n = Number(p);
+  if (p === undefined || p === null || p === '' || !Number.isFinite(n) || n < 0 || n > 100) {
+    throw new Error(`LokmaGo foizi berilmagan yoki noto‘g‘ri: ${p}`);
+  }
+  return n;
+}
+
 /** Foizni tiyinga qo'llaydi. Butun son qaytaradi (pastga yaxlitlash). */
 function percentOf(amountTiyin, percent) {
   // Foizni 100 ga ko'paytirib butun songa aylantiramiz:
@@ -38,14 +51,14 @@ function percentOf(amountTiyin, percent) {
  * hisoblash mantig'i (foizlar, netto) o'zgarishsiz qoladi.
  *
  * @param totalTiyin  mijoz to'lagan summa (tiyin)
- * @param lokmaPercent  LokmaGo ulushi %, shartnomadan yoki standart
+ * @param lokmaPercent  LokmaGo ulushi % — shartnomadan (MAJBURIY, standart YO'Q)
  * @returns barcha summalar tiyinda
  */
-export function splitPaynet(totalTiyin, lokmaPercent = config.split.defaultLokmaPercent) {
+export function splitPaynet(totalTiyin, lokmaPercent) {
   const total = Math.round(Number(totalTiyin) || 0);
   if (total <= 0) throw new Error('Summa musbat bo‘lishi kerak');
 
-  const lokmaGross = percentOf(total, lokmaPercent);
+  const lokmaGross = percentOf(total, assertLokmaPercent(lokmaPercent));
   // Ayirma — tiyin yo'qolmasligi uchun
   const restaurantAmount = total - lokmaGross;
 
@@ -81,11 +94,11 @@ export function splitPaynet(totalTiyin, lokmaPercent = config.split.defaultLokma
  * summadan ushlab qoladi). Restoran ulushi keyinchalik bank
  * orqali o'tkaziladi — shuning uchun requiresBankPayout = true.
  */
-export function splitClick(totalTiyin, lokmaPercent = config.split.defaultLokmaPercent) {
+export function splitClick(totalTiyin, lokmaPercent) {
   const total = Math.round(Number(totalTiyin) || 0);
   if (total <= 0) throw new Error('Summa musbat bo‘lishi kerak');
 
-  const lokmaGross = percentOf(total, lokmaPercent);
+  const lokmaGross = percentOf(total, assertLokmaPercent(lokmaPercent));
   const restaurantAmount = total - lokmaGross;
 
   // Click haqi UMUMIY summadan olinadi (Paynetdan farqi shu)

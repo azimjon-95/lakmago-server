@@ -86,4 +86,18 @@ export async function activeAgreement(restaurantId, at = new Date()) {
   }).sort({ effectiveFrom: -1 }).lean();
 }
 
+/**
+ * Berilgan SANADA amalda bo'lgan shartnoma — ARXIVLANGANLAR HAM hisobga olinadi.
+ * `activeAgreement` faqat hozirgi (status ACTIVE) shartnomani topadi: shartnoma
+ * almashtirilganda eskisi ARCHIVED bo'ladi, shuning uchun o'tmishdagi sana bilan
+ * so'ralsa topilmasdi. Tarixiy buyurtma (snapshot'siz eski, audit) uchun shu ishlatiladi.
+ */
+export async function agreementAt(restaurantId, at) {
+  return CommissionAgreement.findOne({
+    restaurantId,
+    effectiveFrom: { $lte: at },
+    $or: [{ effectiveTo: null }, { effectiveTo: { $gt: at } }],
+  }).sort({ effectiveFrom: -1 }).lean();
+}
+
 export const CommissionAgreement = model('CommissionAgreement', agreementSchema);

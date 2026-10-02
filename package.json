@@ -40,7 +40,8 @@
     "test:support-thread": "node tests/support-group-thread.test.mjs",
     "test:db-backup": "node tests/db-backup.test.mjs",
     "test:pins": "node tests/restaurant-pins.test.mjs",
-    "test:cash": "node tests/cash-payment.test.mjs"
+    "test:cash": "node tests/cash-payment.test.mjs",
+    "test:commission": "node tests/commission-source.test.mjs"
   },
   "dependencies": {
     "@socket.io/redis-adapter": "^8.3.0",
