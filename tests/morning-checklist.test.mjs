@@ -78,7 +78,7 @@ const C = await mkRest('C Tungi', { openTime: '22:00', closeTime: '02:00' });
 const D = await mkRest('D Nofaol', { isActive: false });
 const E = await mkRest('E Bloklangan', { isBlocked: true });
 const F = await mkRest('F Tasdiqlanmagan', { isApproved: false });
-const G = await mkRest('G Bo‘sh kunlar', { workingDays: [] });
+const G = await mkRest('G Kunlar sozlanmagan', { workingDays: [] });   // bo'sh = HAR KUNI (platforma qoidasi)
 const H = await mkRest('H Vaqtsiz', { openTime: '', closeTime: '' });
 const I = await mkRest('I 24 soat', { openTime: '00:00', closeTime: '00:00' });
 const J = await mkRest('J Dushanba dam', { workingDays: ['tue', 'wed', 'thu', 'fri', 'sat', 'sun'] });
@@ -102,7 +102,8 @@ section('[2] VAQT QOIDALARI (sof funksiyalar)');
   ok(M.getTodayYmd(plain(A), OPEN_TASH) === '2026-10-05' && M.getTodayYmd(plain(A), Date.UTC(2026, 9, 5, 19, 30)) === '2026-10-06', 'sana restoran zonasida: 19:30 UTC = Toshkentda ERTASI KUN (06.10)');
   ok(M.getTodayYmd(plain(B), Date.UTC(2026, 9, 5, 2, 0)) === '2026-10-04', 'Nyu-York: 02:00 UTC = hali 04.10');
   ok(M.hasOpeningTime(plain(A)) && !M.hasOpeningTime(plain(H)) && !M.hasOpeningTime(plain(I)), 'ochilish vaqti bor / vaqtsiz / 24 soat (open=close) — oxirgi ikkisida "ochilish" yo‘q');
-  ok(M.isWorkday(plain(A), '2026-10-05') && !M.isWorkday(plain(G), '2026-10-05') && !M.isWorkday(plain(J), '2026-10-05') && M.isWorkday(plain(J), '2026-10-06'), 'ish kuni: bo‘sh workingDays = ish kuni EMAS; dushanba dam restoranda yo‘q, seshanba bor');
+  ok(M.isWorkday(plain(A), '2026-10-05') && !M.isWorkday(plain(J), '2026-10-05') && M.isWorkday(plain(J), '2026-10-06'), 'ish kunlari ko‘rsatilgan: dushanba dam restoranda dushanba YO‘Q, seshanba bor');
+  ok(M.isWorkday(plain(G), '2026-10-05') && M.isWorkday({ openTime: '10:00', closeTime: '23:00' }, '2026-10-05') && M.isWorkday({ workingDays: null }, '2026-10-05'), 'workingDays BO‘SH / YO‘Q / null — HAR KUNI ish kuni (sxema: "Bo‘sh bo‘lsa — har kuni"; .lean() maydonni qaytarmasa ham)');
   ok(M.openingInstant(plain(A), '2026-10-05').getTime() === OPEN_TASH && M.openingInstant(plain(B), '2026-10-05').getTime() === OPEN_NY, 'ochilish paytining haqiqiy vaqti (Toshkent UTC+5, Nyu-York yozgi vaqt UTC-4)');
 
   const first = (r, t, check = null) => M.shouldSendFirstMessage(plain(r), t, check);
@@ -112,7 +113,8 @@ section('[2] VAQT QOIDALARI (sof funksiyalar)');
   ok(!first(A, OPEN_TASH + 11 * MIN), '10:11:00 — oyna tugadi');
   ok(first(A, OPEN_TASH, { status: 'pending', firstSentAt: null }), 'yozuv bor, pending va birinchi xabar ketmagan — yuboriladi');
   ok(!first(A, OPEN_TASH, { status: 'pending', firstSentAt: new Date() }) && !first(A, OPEN_TASH, { status: 'checked_all_ok', firstSentAt: null }), 'birinchi xabar ketgan yoki javob berilgan — qayta yuborilmaydi');
-  ok(!first(G, OPEN_TASH) && !first(H, OPEN_TASH) && !first(I, OPEN_TASH) && !first(J, OPEN_TASH), 'workingDays bo‘sh / vaqtsiz / 24 soat / dam kuni — YUBORILMAYDI');
+  ok(!first(H, OPEN_TASH) && !first(I, OPEN_TASH) && !first(J, OPEN_TASH), 'vaqtsiz / 24 soat / dam kuni — YUBORILMAYDI');
+  ok(first(G, OPEN_TASH) && M.shouldSendFirstMessage({ openTime: '10:00', closeTime: '23:00', timezone: 'Asia/Tashkent' }, OPEN_TASH), 'ish kunlari sozlanmagan restoran (bo‘sh ro‘yxat yoki maydon yo‘q) — YUBORILADI');
   ok(!first(B, OPEN_TASH) && first(B, OPEN_NY) && !first(B, OPEN_NY - 1000) && first(B, OPEN_NY + 10 * MIN), 'VAQT ZONASI: Nyu-York restorani o‘z 09:00 sida (13:00 UTC); Toshkent soati 10:00 unga mos emas');
   ok(first(C, OPEN_NIGHT) && !first(C, OPEN_NIGHT - 1000) && !first(C, OPEN_NIGHT + 11 * MIN), 'tungi restoran (22:00–02:00): 22:00 da yuboriladi');
   const sess = (utc) => M.sessionYmd(plain(C), utc);
@@ -147,9 +149,11 @@ let check1;
   ok(toA.every((c) => c.body.reply_markup.inline_keyboard[0][0].callback_data === `mc:stop:${A._id}:2026-10-05` && c.body.reply_markup.inline_keyboard[0][1].callback_data === `mc:all:${A._id}:2026-10-05`), 'callback_data da restoran id va sana');
   check1 = await RestaurantDailyCheck.findOne({ restaurantId: A._id, date: '2026-10-05' }).lean();
   ok(check1 && check1.status === 'pending' && check1.firstSentAt && check1.reminderCount === 0 && check1.messages.length === 3, 'yozuv: pending, firstSentAt, reminderCount 0, 3 ta xabar id si saqlandi');
-  const others = s.filter((c) => ![...aStaff].some((x) => String(c.body.chat_id) === x.telegramUserId));
-  ok(others.length === 0, `boshqa restoranlarga (B-K: nofaol, bloklangan, tasdiqlanmagan, ish kuni emas, vaqtsiz, 24 soat, boshqa zona) HECH QANDAY xabar yo‘q (${others.length})`);
-  ok(r.first === 1 && r.errors === 0, `natija: ${JSON.stringify(r)}`);
+  const gIds = (await RestaurantTelegramStaff.find({ restaurantId: G._id }).lean()).map((x) => x.telegramUserId);
+  ok(s.filter((c) => gIds.includes(String(c.body.chat_id))).length === 1, 'G (ish kunlari sozlanmagan, workingDays = []) — xodimiga xabar KETDI');
+  const others = s.filter((c) => ![...aStaff].some((x) => String(c.body.chat_id) === x.telegramUserId) && !gIds.includes(String(c.body.chat_id)));
+  ok(others.length === 0, `boshqa restoranlarga (nofaol, bloklangan, tasdiqlanmagan, dushanba dam, vaqtsiz, 24 soat, boshqa zona) HECH QANDAY xabar yo‘q (${others.length})`);
+  ok(r.first === 2 && r.errors === 0, `natija (A va G): ${JSON.stringify(r)}`);
 }
 {
   reset();
@@ -482,12 +486,48 @@ section('[11] ADMIN JADVALI');
   ok(out.date === '2026-10-05' && !names.includes('D Nofaol') && !names.includes('E Bloklangan') && !names.includes('F Tasdiqlanmagan'), 'faqat faol, tasdiqlangan, bloklanmagan restoranlar');
   const rowA = out.rows.find((r) => r.name === 'A Toshkent');
   ok(rowA.status === 'checked_all_ok' && rowA.reminderCount === 2 && rowA.respondedVia === 'bot' && /^Xodim/.test(rowA.respondedBy), `A: ${rowA.status}, eslatma ${rowA.reminderCount}, javob bergan: ${rowA.respondedBy}`);
-  ok(out.rows.find((r) => r.name === 'G Bo‘sh kunlar').status === 'not_sent', 'xabar ketmagan restoran: "not_sent"');
+  ok(out.rows.find((r) => r.name === 'J Dushanba dam').status === 'not_sent' && out.rows.find((r) => r.name === 'G Kunlar sozlanmagan').status === 'pending', 'dam kunidagi restoran: "not_sent"; ish kunlari sozlanmagan restoran: xabar ketgan ("pending")');
   ok(out.rows.find((r) => r.name === 'Panel').respondedBy === 'Panel' && out.rows.find((r) => r.name === 'Panel').respondedVia === 'panel', 'panel orqali javob: "Panel"');
   ok(out.counts.checked_all_ok >= 3 && out.counts.checked_with_stop === 1 && out.counts.not_sent >= 1, `hisob: ${JSON.stringify(out.counts)}`);
   const bad = await call(morningCheckController.adminList, { query: { date: 'abc' } });
   ok(/^\d{4}-\d{2}-\d{2}$/.test(bad.date), 'noto‘g‘ri sana — bugunga qaytadi (xato yo‘q)');
   ok((await call(morningCheckController.adminList, { query: { date: '2020-01-01' } })).rows.every((r) => r.status === 'not_sent'), 'boshqa kun — hammasi "not_sent"');
+}
+
+section('[11b] DIAGNOSTIKA: "nega xabar ketmadi?" (faqat o‘qiydi)');
+{
+  const ex = (r, o = {}) => M.explainMorning(plain(r), { now: OPEN_TASH + 3 * MIN, staffCount: 1, botEnabled: true, ...o });
+  const codes = (e) => e.blockers.map((b) => b.code).sort().join(',');
+  ok(codes(ex(A)) === '' && ex(A).state === 'in-window', 'sog‘lom restoran: to‘siq yo‘q, "oyna ichida"');
+  ok(codes(ex(A, { botEnabled: false })) === 'BOT_OFF' && ex(A, { botEnabled: false }).state === 'blocked', 'RESTAURANT_BOT_TOKEN yo‘q → BOT_OFF');
+  ok(codes(ex(D)) === 'INACTIVE' && codes(ex(E)) === 'BLOCKED' && codes(ex(F)) === 'NOT_APPROVED', 'nofaol / bloklangan / tasdiqlanmagan → INACTIVE / BLOCKED / NOT_APPROVED');
+  ok(codes(ex(H)) === 'NO_HOURS' && codes(ex(I)) === 'NO_HOURS', 'vaqtsiz va 24 soatli → NO_HOURS');
+  ok(codes(ex(J)) === 'OFF_DAY' && /mon/.test(ex(J).blockers[0].text), 'dushanba dam → OFF_DAY (bugun = mon ko‘rsatiladi)');
+  ok(codes(ex(G)) === '', 'workingDays = [] → to‘siq YO‘Q (har kuni)');
+  ok(codes(ex(A, { staffCount: 0 })) === 'NO_STAFF', 'ulangan faol xodim yo‘q → NO_STAFF');
+  ok(codes(ex(A, { staffCount: 0, botEnabled: false })) === 'BOT_OFF,NO_STAFF', 'bir nechta to‘siq birga ko‘rsatiladi');
+
+  const st = (now, check) => M.explainMorning(plain(A), { now, staffCount: 1, check }).state;
+  ok(st(OPEN_TASH - 20 * MIN) === 'waiting' && /20 daqiqa qoldi/.test(M.explainMorning(plain(A), { now: OPEN_TASH - 20 * MIN, staffCount: 1 }).detail), 'ochilishdan oldin: "waiting", necha daqiqa qolgani aytiladi');
+  ok(st(OPEN_TASH + 10 * MIN) === 'in-window', 'oyna chegarasida (+10) — "in-window"');
+  const missed = M.explainMorning(plain(A), { now: OPEN_TASH + 4 * HOUR, staffCount: 1 });
+  ok(missed.state === 'missed' && /OYNA O‘TIB KETGAN/.test(missed.detail) && /240 daq/.test(missed.detail), 'oyna o‘tib ketgan va xabar ketmagan → "missed", necha daqiqa o‘tgani bilan');
+  ok(st(OPEN_TASH + 4 * HOUR, { status: 'pending', firstSentAt: new Date(OPEN_TASH), reminderCount: 2, messages: [1, 2] }) === 'sent', 'xabar ketgan → "sent"');
+  ok(st(OPEN_TASH + 4 * HOUR, { status: 'checked_all_ok', respondedVia: 'bot', respondedByName: 'Azim' }) === 'answered', 'javob berilgan → "answered"');
+
+  // bazadan: hech narsa yozmaydi / yubormaydi
+  const checksBefore = await RestaurantDailyCheck.countDocuments();
+  reset();
+  const diag = await M.diagnoseMorning({ now: OPEN_TASH + 4 * HOUR });
+  ok(calls.length === 0 && await RestaurantDailyCheck.countDocuments() === checksBefore, 'diagnoseMorning FAQAT O‘QIYDI: Telegram’ga murojaat yo‘q, bazaga yozuv yo‘q');
+  const rowA = diag.rows.find((r) => r.name === 'A Toshkent');
+  ok(rowA.staff === 3 && rowA.state === 'answered', `A: faol ulangan xodim 3 ta (nofaol va ulanmagani sanalmaydi), holat "${rowA.state}"`);
+  ok(diag.rows.every((r) => r.name !== 'D Nofaol' && r.name !== 'E Bloklangan'), 'standart: nofaol va bloklanganlar ko‘rsatilmaydi');
+  const all = await M.diagnoseMorning({ now: OPEN_TASH, all: true });
+  ok(all.rows.some((r) => r.name === 'D Nofaol' && r.blockers.some((b) => b.code === 'INACTIVE')), '--all: nofaol restoran ham, sababi bilan');
+  const one = await M.diagnoseMorning({ now: OPEN_TASH, name: 'toshkent' });
+  ok(one.rows.length === 1 && one.rows[0].name === 'A Toshkent', 'nom bo‘yicha qidirish (katta-kichik harfga bog‘liq emas)');
+  ok((await M.diagnoseMorning({ now: OPEN_TASH, name: 'a(b' })).rows.length === 0, 'qidiruvdagi maxsus belgilar (regex) xato bermaydi');
 }
 
 section('[12] TEZLIK: 500 restoran < 2 soniya');

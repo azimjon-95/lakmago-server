@@ -83,12 +83,17 @@ export function sessionYmd(restaurant, now = Date.now()) {
 }
 
 /**
- * Shu kun ish kunimi. workingDays BO'SH bo'lsa — ish kuni EMAS (TZ): xabar yuborilmaydi.
- * (isRestaurantOpen da bo'sh ro'yxat "har kuni" degani — bu yerda qasddan qat'iyroq.)
+ * Shu kun ish kunimi. workingDays BO'SH yoki YO'Q bo'lsa — HAR KUNI (platformaning qolgan qismi
+ * kabi: Restaurant sxemasi "Bo'sh bo'lsa — har kuni", isRestaurantOpen ham shunday).
+ *
+ * DIQQAT: avval TZ ni so'zma-so'z bajarib bo'sh ro'yxatni "ish kuni emas" deb o'qigan edik —
+ * ish kunlarini hech qachon sozlamagan restoranlar (ko'pchilik) xabar olmay qolgan. Ro'yxat
+ * ko'rsatilgan bo'lsa (masalan, dushanba dam) — faqat o'sha kunlarda yuboriladi.
  */
 export function isWorkday(restaurant, ymd) {
   const days = restaurant?.workingDays;
-  return Array.isArray(days) && days.length > 0 && days.includes(weekdayOf(ymd));
+  if (!Array.isArray(days) || days.length === 0) return true;
+  return days.includes(weekdayOf(ymd));
 }
 
 /** Shu sanadagi ochilish paytining haqiqiy (UTC) vaqti. */
@@ -529,4 +534,75 @@ export async function listMorningChecks(date) {
       respondedVia: c?.respondedVia || null,
     };
   });
+}
+
+/* ═══════════════════ DIAGNOSTIKA (faqat o'qiydi) ═══════════════════ */
+
+/**
+ * "Nega bu restoranga ertalabki xabar ketmadi / ketmaydi?" — sabablar ro'yxati.
+ * Sof funksiya: bazaga murojaat qilmaydi (ma'lumotni chaqiruvchi beradi).
+ *
+ * @returns {{ blockers: Array<{code,text}>, state: string, detail: string }}
+ *   state: blocked | waiting | in-window | missed | sent | answered
+ */
+export function explainMorning(r, { now = Date.now(), staffCount = 0, check = null, botEnabled = true } = {}) {
+  const blockers = [];
+  const add = (code, text) => blockers.push({ code, text });
+
+  if (!botEnabled) add('BOT_OFF', 'RESTAURANT_BOT_TOKEN .env da yo‘q — bot hech kimga yubormaydi');
+  if (r.isActive === false) add('INACTIVE', 'Restoran nofaol (isActive=false)');
+  if (r.isBlocked) add('BLOCKED', 'Restoran bloklangan');
+  if (r.isApproved === false) add('NOT_APPROVED', 'Restoran tasdiqlanmagan (isApproved=false)');
+  if (!hasOpeningTime(r)) add('NO_HOURS', `Ochilish/yopilish vaqti yo‘q yoki 24 soat (openTime=${JSON.stringify(r.openTime ?? null)}, closeTime=${JSON.stringify(r.closeTime ?? null)})`);
+
+  const ymd = sessionYmd(r, now);
+  if (hasOpeningTime(r) && !isWorkday(r, ymd)) add('OFF_DAY', `Bugun ish kuni emas (workingDays=${JSON.stringify(r.workingDays)}, bugun=${weekdayOf(ymd)})`);
+  if (!staffCount) add('NO_STAFF', 'Botga ulangan faol xodim yo‘q (RestaurantTelegramStaff: telegramUserId yo‘q yoki isActive=false) — faqat panel banner ishlaydi');
+
+  let state = 'blocked'; let detail = '';
+  if (check?.status && check.status !== 'pending') {
+    state = 'answered';
+    detail = `${check.status === 'checked_all_ok' ? 'Barchasi bor' : 'Stopga qo‘yildi'} (${check.respondedVia || '?'}, ${check.respondedByName || check.respondedBy || '?'})`;
+  } else if (check?.firstSentAt) {
+    state = 'sent';
+    detail = `birinchi xabar ${new Date(check.firstSentAt).toISOString()}, eslatma: ${check.reminderCount || 0}, yetkazilgan xabar: ${(check.messages || []).length}`;
+  } else if (hasOpeningTime(r)) {
+    const opening = openingInstant(r, ymd);
+    const diffMin = opening ? Math.floor((now - opening.getTime()) / 60_000) : null;
+    if (diffMin === null) { detail = 'ochilish vaqtini hisoblab bo‘lmadi'; }
+    else if (diffMin < -FIRST_WINDOW.beforeMin) { state = 'waiting'; detail = `ochilishiga ${-diffMin} daqiqa qoldi (${r.openTime})`; }
+    else if (diffMin <= FIRST_WINDOW.afterMin) { state = 'in-window'; detail = `oyna ichida (ochilganiga ${diffMin} daq) — keyingi tick'da yuboriladi`; }
+    else {
+      state = 'missed';
+      detail = `OYNA O‘TIB KETGAN: ${r.openTime} da ochilgan (${diffMin} daq oldin), birinchi xabar ketmagan — bugun bot YUBORMAYDI (eslatma ham faqat birinchi xabardan keyin). Sabab: server shu paytda ishlamagan/yangi kod hali yoqilmagan, yoki yuqoridagi to‘siqlardan biri`;
+    }
+  }
+  if (blockers.length && state !== 'answered' && state !== 'sent') state = 'blocked';
+  return { blockers, state, detail };
+}
+
+/** Bazadan o'qib, har restoran uchun diagnostika. `name` — nom bo'yicha qidirish, `all` — nofaollarni ham. */
+export async function diagnoseMorning({ now = Date.now(), name = null, all = false } = {}) {
+  const filter = all ? {} : { isActive: { $ne: false }, isBlocked: { $ne: true } };
+  if (name) filter.name = new RegExp(name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+  const restaurants = await Restaurant.find(filter).select('name openTime closeTime timezone workingDays isActive isApproved isBlocked').sort({ name: 1 }).lean();
+  const ids = restaurants.map((r) => r._id);
+  const utcToday = new Date(now).toISOString().slice(0, 10);
+  const dates = [addDaysYmd(utcToday, -1), utcToday, addDaysYmd(utcToday, 1)];
+  const [staff, checks] = await Promise.all([
+    RestaurantTelegramStaff.aggregate([{ $match: { restaurantId: { $in: ids }, isActive: true, telegramUserId: { $ne: null } } }, { $group: { _id: '$restaurantId', n: { $sum: 1 } } }]),
+    RestaurantDailyCheck.find({ restaurantId: { $in: ids }, date: { $in: dates } }).lean(),
+  ]);
+  const staffBy = new Map(staff.map((s) => [String(s._id), s.n]));
+  const checkBy = new Map(checks.map((c) => [`${c.restaurantId}|${c.date}`, c]));
+  const botEnabled = isRestaurantBotEnabled();
+  return {
+    now: new Date(now).toISOString(), botEnabled,
+    rows: restaurants.map((r) => {
+      const ymd = sessionYmd(r, now);
+      const check = checkBy.get(`${r._id}|${ymd}`) || null;
+      return { id: String(r._id), name: r.name, openTime: r.openTime, closeTime: r.closeTime, workingDays: r.workingDays || [], date: ymd,
+        staff: staffBy.get(String(r._id)) || 0, ...explainMorning(r, { now, staffCount: staffBy.get(String(r._id)) || 0, check, botEnabled }) };
+    }),
+  };
 }
