@@ -18,7 +18,7 @@ import { activeStaff } from './restaurantBotOrders.js';
  *
  * Har kuni restoran ochilish vaqtida barcha faol xodimlarga Telegram'da xabar:
  * "taomlaringizni tekshiring, stopdagilarni Stop-listga qo'shing". Ikki tugma:
- *   🛑 Stopga quyish — shu restoranning taomlari ro'yxati ochiladi (Stop / qaytarish)
+ *   🛑 Stopga qo‘yish — shu restoranning taomlari ro'yxati ochiladi (Stop / qaytarish)
  *   ✅ Barchasi bor  — "bugun tekshirildi", eslatmalar to'xtaydi
  * Hech qaysi tugma bosilmasa — har soatda eslatma (faqat ish vaqti ichida).
  * Panel (restoran paneli) ham xuddi shu holatni ko'rsatadi: banner.
@@ -32,10 +32,23 @@ import { activeStaff } from './restaurantBotOrders.js';
  * restoranda (22:00–02:00) tunda "sana" — ochilgan kun (sessionYmd).
  */
 
-/** Xabar matni — TZ dagi AYNAN shu matn (imlo o'zgartirilmagan). */
-export const MORNING_TEXT = 'Retoran ochilishi bilan taomlarizni rekshirib oling ish boshlashdan oldin '
-  + 'Stopdagi taomlarizni Stop listga qushib quying esizdan chiqmasin '
-  + 'mijizlarni hurmat qilaylik bugungi boshlagan ishizni olloh barokatli qilsin';
+/**
+ * Xabar matni — to'g'ri imloda, to'rt qatorda (egasi tasdiqlagan tahrir; TZ dagi dastlabki
+ * matnda imlo xatolari bor edi: "Retoran", "rekshirib", "taomlarizni", "mijizlarni", "olloh").
+ * Bot sarlavhasi "Eslatma". Panel banneri (lakmago-admin MorningCheckBanner) AYNAN shu matnni ishlatadi.
+ */
+export const MORNING_TITLE = 'Eslatma';
+export const MORNING_LINES = [
+  ['🍽', 'Restoran ochilishi bilan taomlaringizni tekshirib oling.'],
+  ['🛑', 'Ish boshlashdan oldin stopdagi taomlaringizni Stop-listga qo‘shib qo‘ying — esingizdan chiqmasin.'],
+  ['🤝', 'Mijozlarimizni hurmat qilaylik.'],
+  ['🤲', 'Bugungi boshlagan ishingizni Alloh barokatli qilsin.'],
+];
+/** Oddiy matn (belgilarsiz, bir abzats) — panel va testlar uchun. */
+export const MORNING_TEXT = MORNING_LINES.map(([, t]) => t).join(' ');
+/** Telegram (HTML) ko'rinishi: sarlavha + har qator o'z belgisi bilan, qatorlar orasida bo'sh joy. */
+export const MORNING_HTML = `🔔 <b>${MORNING_TITLE}</b>\n\n`
+  + MORNING_LINES.map(([icon, t]) => `${icon} ${t.replace('Stop-list', '<b>Stop-list</b>')}`).join('\n\n');
 
 /**
  * Birinchi xabar oynasi (ochilish paytiga nisbatan, daqiqada, ikkala chegara ham kiradi).
@@ -135,7 +148,7 @@ export function shouldSendReminder(restaurant, check, now = Date.now()) {
 export function morningKeyboard(restaurantId, date) {
   return {
     inline_keyboard: [[
-      btn('🛑 Stopga quyish', `mc:stop:${restaurantId}:${date}`, 'primary'),
+      btn('🛑 Stopga qo‘yish', `mc:stop:${restaurantId}:${date}`, 'primary'),
       btn('✅ Barchasi bor', `mc:all:${restaurantId}:${date}`, 'success'),
     ]],
   };
@@ -153,7 +166,7 @@ export async function sendMorningMessage(restaurant, check, isReminder = false) 
   const keyboard = morningKeyboard(String(restaurant._id), check.date);
   const results = await Promise.all(staff.map(async (s) => {
     try {
-      const res = await sendToStaff(s.telegramUserId, esc(MORNING_TEXT), keyboard);
+      const res = await sendToStaff(s.telegramUserId, MORNING_HTML, keyboard);
       const messageId = res?.result?.message_id;
       return messageId ? { chatId: String(s.telegramUserId), messageId, kind: isReminder ? 'reminder' : 'first', at: new Date() } : null;
     } catch (e) {
@@ -299,8 +312,8 @@ const hhmm = (d, tz) => new Intl.DateTimeFormat('ru-RU', { timeZone: tz, hour: '
 function resolvedText(status, name, at, tz) {
   const who = name ? `${esc(name)}, ` : '';
   return status === 'checked_all_ok'
-    ? `${esc(MORNING_TEXT)}\n\n✅ <b>Tekshirildi — hammasi bor</b> (${who}${hhmm(at, tz)})`
-    : `${esc(MORNING_TEXT)}\n\n🛑 <b>Stop-list yangilandi</b> (${who}${hhmm(at, tz)})`;
+    ? `${MORNING_HTML}\n\n✅ <b>Tekshirildi — hammasi bor</b> (${who}${hhmm(at, tz)})`
+    : `${MORNING_HTML}\n\n🛑 <b>Stop-list yangilandi</b> (${who}${hhmm(at, tz)})`;
 }
 
 /** Javob berilgach — hamma xodimdagi xabarlardan tugmalarni olib tashlaydi (xato — jim). */
@@ -319,7 +332,7 @@ const staffName = (s) => [s.firstName, s.lastName].filter(Boolean).join(' ') || 
 
 /**
  *   mc:all:{restaurantId}:{date}        — "Barchasi bor"
- *   mc:stop:{restaurantId}:{date}       — "Stopga quyish" → taomlar ro'yxati
+ *   mc:stop:{restaurantId}:{date}       — "Stopga qo‘yish" → taomlar ro'yxati
  *   mc:menu:{restaurantId}:{page}       — ro'yxat sahifasi
  *   mc:set:{dishId}:{0|1}:{page}        — taomni stopga (0) yoki qaytarish (1): ANIQ holat — idempotent
  *   mc:done:{restaurantId}              — ro'yxatni yopish
@@ -365,7 +378,7 @@ export async function handleMorningChecklistCallback(cq) {
       return;
     }
 
-    // "Stopga quyish": holat yozildi; taomlar ro'yxati shu xabarda ochiladi (allaqachon
+    // "Stopga qo‘yish": holat yozildi; taomlar ro'yxati shu xabarda ochiladi (allaqachon
     // tekshirilgan bo'lsa ham ro'yxat ochiladi — xodim stop qilmoqchi)
     await answerCallback(cq.id, already ? 'Allaqachon tekshirilgan — ro‘yxat ochildi' : '🛑 Taomlar ro‘yxati');
     if (!already) {

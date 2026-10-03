@@ -3,7 +3,7 @@
  * ERTALABKI OCHILISH TEKSHIRUVI (Morning Open Checklist)
  * ═══════════════════════════════════════════════════════════
  * Vaqt qoidalari (chegaralar, vaqt zonalari, tungi restoran), yuborish, eslatma, bot
- * callback'lari (Barchasi bor / Stopga quyish / taom stop), atomiklik (bir vaqtda ko'p xodim),
+ * callback'lari (Barchasi bor / Stopga qo‘yish / taom stop), atomiklik (bir vaqtda ko'p xodim),
  * xavfsizlik (begona restoran), xato izolyatsiyasi, panel/admin API, tezlik (500 restoran).
  * Telegram soxta (fetch ushlanadi), "hozir" — parametr bilan: kutish yo'q.
  * npm run test:morning
@@ -89,11 +89,15 @@ await mkStaff(A, { telegramUserId: null });          // ulanmagan xodim
 for (const r of [B, C, D, E, F, G, H, I, J]) await mkStaff(r);
 const plain = (r) => r.toObject();
 
-section('[1] MATN va TUGMALAR — TZ dagi AYNAN');
+section('[1] MATN va TUGMALAR');
 {
-  ok(M.MORNING_TEXT === 'Retoran ochilishi bilan taomlarizni rekshirib oling ish boshlashdan oldin Stopdagi taomlarizni Stop listga qushib quying esizdan chiqmasin mijizlarni hurmat qilaylik bugungi boshlagan ishizni olloh barokatli qilsin', 'xabar matni so‘zma-so‘z (imlo xatolari ham o‘zgarmagan)');
+  ok(M.MORNING_HTML.startsWith('🔔 <b>Eslatma</b>\n\n') && M.MORNING_LINES.length === 4, 'xabar sarlavhasi "🔔 Eslatma", to‘rt qator');
+  const BAD = ['Retoran', 'rekshirib', 'taomlarizni', 'qushib', 'quying', 'esizdan', 'mijizlarni', 'olloh', 'ishizni', 'boshlashdan oldin Stopdagi'];
+  const GOOD = ['Restoran ochilishi bilan', 'tekshirib oling', 'taomlaringizni', 'Stop-listga qo‘shib qo‘ying', 'esingizdan chiqmasin', 'Mijozlarimizni hurmat qilaylik', 'ishingizni Alloh barokatli qilsin'];
+  ok(BAD.every((w) => !M.MORNING_HTML.includes(w)) && GOOD.every((w) => M.MORNING_TEXT.includes(w)), 'IMLO: eski xatolar (Retoran, rekshirib, taomlarizni, qushib, esizdan, mijizlarni, olloh, ishizni) YO‘Q; to‘g‘ri shakllar bor');
+  ok(!/<(?!\/?b>)/.test(M.MORNING_HTML) && (M.MORNING_HTML.match(/<b>/g) || []).length === (M.MORNING_HTML.match(/<\/b>/g) || []).length, 'Telegram HTML to‘g‘ri: faqat <b>…</b>, teglar juft');
   const kb = M.morningKeyboard('RID', '2026-10-05').inline_keyboard;
-  ok(kb.length === 1 && kb[0].length === 2 && kb[0][0].text === '🛑 Stopga quyish' && kb[0][0].callback_data === 'mc:stop:RID:2026-10-05' && kb[0][1].text === '✅ Barchasi bor' && kb[0][1].callback_data === 'mc:all:RID:2026-10-05', 'ikki tugma: "🛑 Stopga quyish" va "✅ Barchasi bor", callback_data mc:stop/mc:all:{rid}:{date}');
+  ok(kb.length === 1 && kb[0].length === 2 && kb[0][0].text === '🛑 Stopga qo‘yish' && kb[0][0].callback_data === 'mc:stop:RID:2026-10-05' && kb[0][1].text === '✅ Barchasi bor' && kb[0][1].callback_data === 'mc:all:RID:2026-10-05', 'ikki tugma: "🛑 Stopga qo‘yish" va "✅ Barchasi bor", callback_data mc:stop/mc:all:{rid}:{date}');
   ok(`mc:stop:${'a'.repeat(24)}:2026-10-05`.length <= 64 && `mc:set:${'a'.repeat(24)}:1:99`.length <= 64, 'callback_data 64 baytdan oshmaydi (Telegram chegarasi)');
 }
 
@@ -145,7 +149,7 @@ let check1;
   const s = sent();
   const toA = s.filter((c) => aStaff.some((x) => String(c.body.chat_id) === x.telegramUserId));
   ok(toA.length === 3, `A restorani: 3 ta faol ulangan xodimga ${toA.length} xabar (nofaol va ulanmagan xodimga yo‘q)`);
-  ok(toA.every((c) => c.body.text === M.MORNING_TEXT && c.body.reply_markup.inline_keyboard[0].length === 2), 'har birida aynan TZ matni va 2 tugma');
+  ok(toA.every((c) => c.body.text === M.MORNING_HTML && c.body.reply_markup.inline_keyboard[0].length === 2), 'har birida bir xil chiroyli matn ("🔔 Eslatma") va 2 tugma');
   ok(toA.every((c) => c.body.reply_markup.inline_keyboard[0][0].callback_data === `mc:stop:${A._id}:2026-10-05` && c.body.reply_markup.inline_keyboard[0][1].callback_data === `mc:all:${A._id}:2026-10-05`), 'callback_data da restoran id va sana');
   check1 = await RestaurantDailyCheck.findOne({ restaurantId: A._id, date: '2026-10-05' }).lean();
   ok(check1 && check1.status === 'pending' && check1.firstSentAt && check1.reminderCount === 0 && check1.messages.length === 3, 'yozuv: pending, firstSentAt, reminderCount 0, 3 ta xabar id si saqlandi');
@@ -171,7 +175,7 @@ section('[4] ESLATMA: har soatda, javob bo‘lmasa; yopilgach to‘xtaydi');
   ok(sent().filter((c) => aStaff.some((x) => String(c.body.chat_id) === x.telegramUserId)).length === 0, '59 daqiqa — eslatma yo‘q');
   await M.checkMorningChecklists(OPEN_TASH + 60 * MIN);
   const rem1 = sent().filter((c) => aStaff.some((x) => String(c.body.chat_id) === x.telegramUserId));
-  ok(rem1.length === 3 && rem1.every((c) => c.body.text === M.MORNING_TEXT), '60 daqiqada: 3 xodimga eslatma (matn o‘sha)');
+  ok(rem1.length === 3 && rem1.every((c) => c.body.text === M.MORNING_HTML), '60 daqiqada: 3 xodimga eslatma (matn va sarlavha o‘sha)');
   const c1 = await RestaurantDailyCheck.findOne({ restaurantId: A._id, date: '2026-10-05' }).lean();
   ok(c1.reminderCount === 1 && c1.messages.length === 6 && c1.messages.filter((m) => m.kind === 'reminder').length === 3, 'reminderCount 1, xabarlar 6 ta (3 birinchi + 3 eslatma)');
   reset();
@@ -305,10 +309,10 @@ let stopStaff; let stopRest;
   await press(stopStaff[0], `mc:done:${stopRest._id}`, mine.messageId);
   ok(/Stop-list yangilandi/.test(edits().at(-1).body.text) && /stopda: <b>1<\/b> ta/.test(edits().at(-1).body.text) && !edits().at(-1).body.reply_markup, '"✅ Tayyor": ro‘yxat yopildi, "Hozir stopda: 1 ta"');
 
-  // allaqachon tekshirilgan, keyin yana "Stopga quyish" — ro'yxat baribir ochiladi
+  // allaqachon tekshirilgan, keyin yana "Stopga qo‘yish" — ro'yxat baribir ochiladi
   reset();
   await press(stopStaff[1], `mc:stop:${stopRest._id}:2026-10-05`, theirs.messageId);
-  ok(/Allaqachon tekshirilgan/.test(lastAnswer()) && edits().some((e) => e.body.message_id === theirs.messageId && /Stop-list/.test(e.body.text) && e.body.reply_markup), 'allaqachon tekshirilgan bo‘lsa ham "Stopga quyish" ro‘yxatni ochadi (xodim stop qilmoqchi)');
+  ok(/Allaqachon tekshirilgan/.test(lastAnswer()) && edits().some((e) => e.body.message_id === theirs.messageId && /Stop-list/.test(e.body.text) && e.body.reply_markup), 'allaqachon tekshirilgan bo‘lsa ham "Stopga qo‘yish" ro‘yxatni ochadi (xodim stop qilmoqchi)');
   ok((await RestaurantDailyCheck.findOne({ restaurantId: stopRest._id, date: '2026-10-05' }).lean()).respondedBy === stopStaff[0].telegramUserId, 'lekin birinchi javobning yozuvi o‘zgarmadi');
 }
 
