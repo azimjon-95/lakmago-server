@@ -1,4 +1,5 @@
 import { asyncHandler } from '../middleware/error.js';
+import { RESTAURANT_HIDDEN } from '../services/restaurantVisibility.js';
 import { Order } from '../models/Order.js';
 import { confirmOrderDelivered } from '../services/deliveryCheck.js';
 import { toPanelOrder } from '../services/panelOrderView.js';
@@ -28,7 +29,7 @@ const rid = (req) => req.restaurantId;
 // Restoran ko'radigan buyurtmalar (panel `orders()` bilan bir xil)
 const visible = (req) => ({
   restaurantId: rid(req),
-  status: { $ne: 'awaiting_payment' },
+  ...RESTAURANT_HIDDEN,   // awaiting_payment + to'lanmay bekor bo'lgan
   fulfillment: { $ne: 'dinein' },
 });
 

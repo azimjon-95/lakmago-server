@@ -1,3 +1,4 @@
+import { RESTAURANT_HIDDEN } from './restaurantVisibility.js';
 import { Order } from '../models/Order.js';
 import { Reservation } from '../models/Reservation.js';
 import { Restaurant } from '../models/Restaurant.js';
@@ -254,7 +255,7 @@ export async function showTodayOrders(staff, restaurant, { editMessageId } = {})
   const orders = await Order.find({
     restaurantId: staff.restaurantId,
     fulfillment: { $in: ['delivery', 'pickup'] },
-    status: { $ne: 'awaiting_payment' },
+    ...RESTAURANT_HIDDEN,   // awaiting_payment + to'lanmay bekor bo'lgan
     $or: [
       { createdAt: { $gte: start, $lt: end } },
       { scheduledFor: { $gte: start, $lt: end } },

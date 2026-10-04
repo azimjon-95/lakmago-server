@@ -646,7 +646,15 @@ export const orderController = {
       const agreement = await activeAgreement(o.restaurantId);
       // Kelishuvsiz restoran: komissiya 0% (uydirma foiz YO'Q), lekin bu jim o'tib ketmasin
       if (!agreement) warnNoAgreement(o.restaurantId, rest?.name);
-      const feePercent = o.paymentMethod === 'cash'
+      /*
+       * XATO TUZATILDI (2026-10): ilgari `o.paymentMethod` o'qilardi —
+       * u har bir restoran bo'lagida YO'Q (singleOrderSchema'da bunday
+       * maydon yo'q), ya'ni har doim undefined edi va NAQD buyurtmaga
+       * ham Click haqi (1.5%) yozilardi. To'lov turi butun so'rov
+       * uchun bitta — yuqoridagi `paymentMethod`.
+       * Karta buyurtmalari uchun natija O'ZGARMAYDI.
+       */
+      const feePercent = paymentMethod === 'cash'
         ? 0
         : (config.split.clickFeePercent || 0);
 
@@ -972,6 +980,10 @@ export const orderController = {
       });
     }
 
+    // Restoran bu buyurtmani umuman ko'rmagan (to'lov kutilayotgan edi) —
+    // unga hech qanday bekor xabari yuborilmaydi (CLAUDE.md 1-qoida)
+    const restaurantNeverSaw = order.status === 'awaiting_payment';
+
     order.status = 'cancelled';
     order.cancelledAt = new Date();
     order.cancelReason = 'Mijoz bekor qildi';
@@ -985,9 +997,11 @@ export const orderController = {
     }
 
     const io = getIO();
-    io?.to(`restaurant:${order.restaurantId}`).emit('order:status', {
-      orderId: String(order._id), status: 'cancelled',
-    });
+    if (!restaurantNeverSaw) {
+      io?.to(`restaurant:${order.restaurantId}`).emit('order:status', {
+        orderId: String(order._id), status: 'cancelled',
+      });
+    }
     io?.to('admin').emit('order:update', order);
 
     // Panel bildirishnomasi yopiladi (ovoz to'xtaydi), bot kartasi yangilanadi

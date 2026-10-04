@@ -1,3 +1,4 @@
+import { RESTAURANT_HIDDEN } from '../services/restaurantVisibility.js';
 import { z } from 'zod';
 import bcrypt from 'bcryptjs';
 import { cached, KEYS, TTL } from '../services/cache.js';
@@ -270,9 +271,10 @@ export const restaurantPanelController = {
   orders: asyncHandler(async (req, res) => {
     const filter = {
       restaurantId: rid(req),
-      // To'lov kutilayotgan buyurtmalar restoranga KO'RINMAYDI —
-      // pul kelgach avtomatik 'pending' bo'ladi va chiqadi
-      status: { $ne: 'awaiting_payment' },
+      // To'lov kutilayotgan (va to'lanmay bekor bo'lgan) buyurtmalar
+      // restoranga KO'RINMAYDI — pul kelgach avtomatik 'pending'
+      // bo'ladi va chiqadi. Qoida: services/restaurantVisibility.js
+      ...RESTAURANT_HIDDEN,
 
       /*
        * ZAL BUYURTMALARI BU YERGA TUSHMAYDI.
