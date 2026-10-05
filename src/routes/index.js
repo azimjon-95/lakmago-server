@@ -43,7 +43,7 @@ import {
 } from '../middleware/auth.js';
 import { loginLimiter, writeLimiter } from '../middleware/rateLimit.js';
 import { botBroadcastController } from '../controllers/botBroadcast.js';
-import { adAttachment } from '../middleware/adUpload.js';
+import { adAttachment, adChunkBody, adUploadController } from '../middleware/adUpload.js';
 import { restaurantPinsController } from '../controllers/restaurantPins.js';
 import { morningCheckController } from '../controllers/morningCheck.js';
 
@@ -614,6 +614,9 @@ router.get('/admin/groups', auth, requireRole('admin'), adminController.groups);
 router.post('/admin/groups/add', auth, requireRole('admin'), adminController.addGroup);
 router.post('/admin/groups/:chatId/resend', auth, requireRole('admin'), adminController.resendPromo);
 // `adAttachment` — multipart video (xotirada, bazaga yozilmaydi); JSON so'rovga tegmaydi
+// Video bo'laklab yuklanadi (nginx 1 MB chegarasi va uzilishlarga chidamli) — middleware/adUpload.js
+router.post('/admin/ad-uploads', auth, requireRole('admin'), adUploadController.init);
+router.put('/admin/ad-uploads/:uploadId/chunks/:index', auth, requireRole('admin'), adChunkBody, adUploadController.chunk);
 router.post('/admin/groups/:chatId/broadcast', auth, requireRole('admin'), adAttachment, adminController.broadcast);
 router.post('/admin/groups/broadcast-all', auth, requireRole('admin'), adAttachment, adminController.broadcastAll);
 router.post('/admin/groups/refresh-promo-buttons', auth, requireRole('admin'), adminController.refreshPromoButtons);
