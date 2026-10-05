@@ -57,8 +57,23 @@ export function isSupportGroupEnabled() {
   return Boolean(config.telegramBotToken && config.supportGroupChatId);
 }
 
-const keyboard = () => ({
-  inline_keyboard: [[{ text: '💬 Xabarlar bo‘limiga o‘tish', url: `${config.adminPanelUrl}/support` }]],
+/*
+ * Tugma AYNAN SHU mijozning suhbatini ochadi: /support?chat=<SupportChat._id>.
+ * Admin panel (SupportPage) `chat` parametrini o'qib suhbatni darhol ochadi;
+ * kirmagan bo'lsa — login'dan keyin ham URL saqlanadi (LoginPage yo'naltirmaydi).
+ * Query parametr (yo'l emas) — eski admin build ham /support ni ochaveradi.
+ * Id noma'lum bo'lsa (customer._id yo'q) — umumiy /support.
+ * Post har tahrirda tugmani qayta yuboradi, shuning uchun eski postlar ham
+ * keyingi tahrirda to'g'ri havolaga o'tadi.
+ */
+export function supportChatUrl(supportChatId) {
+  const base = `${config.adminPanelUrl}/support`;
+  const id = supportChatId ? String(supportChatId) : '';
+  return /^[a-f\d]{24}$/i.test(id) ? `${base}?chat=${id}` : base;
+}
+
+const keyboard = (supportChatId) => ({
+  inline_keyboard: [[{ text: '💬 Xabarlar bo‘limiga o‘tish', url: supportChatUrl(supportChatId) }]],
 });
 
 function whoLine(customer) {
@@ -127,7 +142,7 @@ async function sendNew(chatId, customer, post) {
     text: buildPostText(customer, post),
     parse_mode: 'HTML',
     link_preview_options: { is_disabled: true },
-    reply_markup: keyboard(),
+    reply_markup: keyboard(customer?._id),
   });
   return res.message_id;
 }
@@ -159,7 +174,7 @@ async function threaded(customer, rawText) {
           text: buildPostText(customer, next),
           parse_mode: 'HTML',
           link_preview_options: { is_disabled: true },
-          reply_markup: keyboard(),
+          reply_markup: keyboard(customer._id),
         });
       } catch (e) {
         /*
@@ -217,7 +232,7 @@ async function editPost(doc, post) {
       text: buildPostText(doc, post),
       parse_mode: 'HTML',
       link_preview_options: { is_disabled: true },
-      reply_markup: keyboard(),
+      reply_markup: keyboard(doc?._id),
     });
     return true;
   } catch (e) {

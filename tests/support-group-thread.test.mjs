@@ -86,7 +86,7 @@ console.log('\n[1] 1-xabar: yangi post (sarlavha, mijoz, satr, holat, tugma)');
   ok(t.includes('🆘 <b>Yangi mijoz xabari</b>') && t.includes('👤 <b>Murodbek Amanov</b> · @muq') && t.includes('«Hop»'), 'sarlavha, mijoz va xabar');
   ok(/«Hop» · <i>\d\d:\d\d<\/i>/.test(t), 'xabar vaqti (HH:MM) ko‘rsatilgan');
   ok(t.includes('⏳ <i>Javob kutilmoqda</i>'), 'holat: ⏳ Javob kutilmoqda');
-  ok(sends()[0].body.reply_markup.inline_keyboard[0][0].url === 'https://admin.lokma.uz/support', 'tugma: admin /support');
+  ok(sends()[0].body.reply_markup.inline_keyboard[0][0].url === `https://admin.lokma.uz/support?chat=${cA._id}`, 'tugma: aynan shu mijoz suhbati (/support?chat=id)');
   ok(cA.groupPost?.messageId === 501 && cA.groupPost.lines.length === 1 && String(cA.groupPost.chatId) === '-100777', 'post bazada saqlandi (messageId, satrlar, guruh)');
 }
 
@@ -101,7 +101,7 @@ console.log('\n[2] Qayta-qayta yozsa — YANGI xabar YO‘Q, o‘sha post tahrir
   const i1 = t.indexOf('«Hop»'); const i2 = t.indexOf('«Qanday krtsma buladi»'); const i3 = t.indexOf('«Yana bir savol»');
   ok(i1 > 0 && i2 > i1 && i3 > i2, 'uchala satr tartib bilan (yangisi pastda)');
   ok(t.startsWith('🆘 <b>Yangi mijoz xabari</b>') && t.includes('⏳') && (t.match(/🆘/g) || []).length === 1, 'sarlavha bitta, holat ⏳');
-  ok(edits()[1].body.reply_markup.inline_keyboard[0][0].url === 'https://admin.lokma.uz/support', 'tahrirda tugma saqlanib qoldi');
+  ok(edits()[1].body.reply_markup.inline_keyboard[0][0].url === `https://admin.lokma.uz/support?chat=${A._chatId}`, 'tahrirda tugma (shu suhbat havolasi) saqlanib qoldi');
   ok(edits()[0].body.parse_mode === 'HTML', 'parse_mode HTML');
 }
 
