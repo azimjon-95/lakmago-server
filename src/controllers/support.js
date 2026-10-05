@@ -4,12 +4,33 @@ import { SupportChat } from '../models/SupportChat.js';
 import { User } from '../models/User.js';
 import { getIO, getSupportPresence } from '../sockets/io.js';
 import { notify } from '../services/notifications.js';
-import { notifyUser } from '../services/telegram.js';
+import { tgCall } from '../services/telegramApi.js';
+import { config } from '../config/index.js';
 import { notifySupportGroup, markSupportGroupReplied, markSupportGroupClosed } from '../services/supportGroupNotify.js';
 
 const messageSchema = z.object({
   text: z.string().min(1).max(2000),
 });
+
+const isObjectId = (v) => /^[a-f\d]{24}$/i.test(String(v || ''));
+
+const escHtml = (s = '') => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+/*
+ * Mijozga bot orqali yuboriladigan javob matni. Admin yozgan matn
+ * ESCAPE qilinadi — avval xom holda HTML rejimida ketardi va "<", "&"
+ * belgilari bo'lgan javobni Telegram rad etib, mijozga yetmay qolardi.
+ */
+const botReplyText = (text) =>
+  `💬 <b>Yordam xizmati</b>\n\n${escHtml(text)}\n\n<i>Javob berish uchun ilovani oching</i>`;
+
+/** Suhbatning oxirgi xabari bo'yicha ro'yxat maydonlari (tahrir/o'chirishdan keyin). */
+function lastFields(messages) {
+  const last = messages[messages.length - 1];
+  return last
+    ? { lastMessageAt: last.createdAt, lastMessageText: String(last.text || '').slice(0, 120) }
+    : { lastMessageText: '' };
+}
 
 // Mijoz ma'lumotlarini suhbatga nusxalaymiz (admin ko'rishi uchun).
 // FAQAT xabar yozilganda chaqiriladi (sendMessage) — mijoz panelni
@@ -221,18 +242,123 @@ export const supportController = {
     // Telegram guruhdagi shu mijozning posti: ✅✅ Javob berildi (tahrirlanadi)
     markSupportGroupReplied(chat._id, adminName).catch((e) => console.error('[supportGroup:reply]', e.message));
 
-    // Mijozga real-time (ilova ochiq bo'lsa)
+    const saved = chat.messages[chat.messages.length - 1];
+
+    // Mijozga real-time (ilova ochiq bo'lsa). `id` — tahrir/o'chirish shu bilan topiladi
     getIO()?.to(`user:${chat.userId}`).emit('support:reply', {
-      text, adminName, at: new Date(),
+      id: String(saved._id), text, adminName, at: saved.createdAt,
     });
 
-    // Ilova yopiq bo'lsa ham xabar yetib borsin — bot orqali
-    if (chat.telegramId) {
-      notifyUser(chat.telegramId,
-        `💬 <b>Yordam xizmati</b>\n\n${text}\n\n<i>Javob berish uchun ilovani oching</i>`);
+    /*
+     * Ilova yopiq bo'lsa ham xabar yetib borsin — bot orqali. Javobni
+     * KUTMAYMIZ (admin tez javob oladi); Telegram xabar id'si keyin
+     * saqlanadi, shunda tahrir/o'chirish bot xabarini ham yangilaydi.
+     */
+    if (chat.telegramId && config.telegramBotToken) {
+      tgCall('sendMessage', { chat_id: chat.telegramId, text: botReplyText(text), parse_mode: 'HTML' })
+        .then((r) => r?.message_id && SupportChat.updateOne(
+          { _id: chat._id, 'messages._id': saved._id },
+          { $set: { 'messages.$.tgMessageId': r.message_id } },
+        ))
+        .catch((e) => console.warn('[support:reply] botga yuborilmadi:', e.message));
     }
 
-    res.status(201).json({ ok: true, message: chat.messages[chat.messages.length - 1] });
+    res.status(201).json({ ok: true, message: saved });
+  }),
+
+  /*
+   * PATCH /api/admin/support/:id/messages/:msgId — admin O'Z javobini tahrirlaydi.
+   * Faqat `from: 'admin'` xabar. Mijozga jonli (support:edit) va bot xabari
+   * ham tahrirlanadi (bo'lsa). Bot xabarini tahrirlab bo'lmasa — ilovada baribir
+   * yangilanadi, javobda `telegram: 'failed'` qaytadi.
+   */
+  editMessage: asyncHandler(async (req, res) => {
+    const parsed = messageSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: 'Xabar bo‘sh' });
+    const { id, msgId } = req.params;
+    if (!isObjectId(id) || !isObjectId(msgId)) return res.status(404).json({ error: 'Xabar topilmadi' });
+
+    const text = parsed.data.text.trim();
+    if (!text) return res.status(400).json({ error: 'Xabar bo‘sh' });
+
+    const chat = await SupportChat.findOne({ _id: id, 'messages._id': msgId }).select('userId telegramId messages');
+    if (!chat) return res.status(404).json({ error: 'Xabar topilmadi' });
+    const msg = chat.messages.id(msgId);
+    if (msg.from !== 'admin') return res.status(403).json({ error: 'Faqat administrator javobini tahrirlash mumkin' });
+    if (msg.text === text) return res.json({ ok: true, message: msg, telegram: 'unchanged' });
+
+    const editedAt = new Date();
+    // Atomik pozitsion yangilash — parallel javob/xabar bilan to'qnashmaydi
+    await SupportChat.updateOne(
+      { _id: id, 'messages._id': msgId },
+      { $set: { 'messages.$.text': text, 'messages.$.editedAt': editedAt } },
+    );
+    msg.text = text; msg.editedAt = editedAt;
+    const isLast = String(chat.messages[chat.messages.length - 1]._id) === String(msgId);
+    if (isLast) await SupportChat.updateOne({ _id: id }, { $set: { lastMessageText: text.slice(0, 120) } });
+
+    getIO()?.to(`user:${chat.userId}`).emit('support:edit', { id: String(msgId), text, editedAt });
+    getIO()?.to('admin').emit('support:changed', { chatId: String(id) });
+
+    let telegram = 'none';
+    if (msg.tgMessageId && chat.telegramId && config.telegramBotToken) {
+      try {
+        await tgCall('editMessageText', {
+          chat_id: chat.telegramId, message_id: msg.tgMessageId,
+          text: botReplyText(text), parse_mode: 'HTML',
+        });
+        telegram = 'edited';
+      } catch (e) {
+        telegram = /not modified/i.test(e.message) ? 'edited' : 'failed';
+        if (telegram === 'failed') console.warn('[support:edit] bot xabari tahrirlanmadi:', e.message);
+      }
+    }
+
+    res.json({ ok: true, message: msg, telegram });
+  }),
+
+  /*
+   * DELETE /api/admin/support/:id/messages/:msgId — admin O'Z javobini o'chiradi.
+   * Bazadan olib tashlanadi, mijozdan jonli (support:delete) va bot xabari ham
+   * o'chiriladi. Telegram bot xabarini faqat 48 soat ichida o'chira oladi —
+   * undan eskisi ilovadan o'chadi, botda qoladi (`telegram: 'failed'`).
+   */
+  deleteMessage: asyncHandler(async (req, res) => {
+    const { id, msgId } = req.params;
+    if (!isObjectId(id) || !isObjectId(msgId)) return res.status(404).json({ error: 'Xabar topilmadi' });
+
+    const chat = await SupportChat.findOne({ _id: id, 'messages._id': msgId }).select('userId telegramId messages');
+    if (!chat) return res.status(404).json({ error: 'Xabar topilmadi' });
+    const msg = chat.messages.id(msgId);
+    if (msg.from !== 'admin') return res.status(403).json({ error: 'Faqat administrator javobini o‘chirish mumkin' });
+
+    const unread = !msg.readAt;
+    const updated = await SupportChat.findOneAndUpdate(
+      { _id: id },
+      { $pull: { messages: { _id: msg._id } } },
+      { new: true },
+    ).select('messages userUnreadCount');
+
+    // Ro'yxatdagi oxirgi xabar va mijozning o'qilmaganlar soni
+    const $set = lastFields(updated.messages);
+    if (unread && updated.userUnreadCount > 0) $set.userUnreadCount = updated.userUnreadCount - 1;
+    await SupportChat.updateOne({ _id: id }, { $set });
+
+    getIO()?.to(`user:${chat.userId}`).emit('support:delete', { id: String(msgId) });
+    getIO()?.to('admin').emit('support:changed', { chatId: String(id) });
+
+    let telegram = 'none';
+    if (msg.tgMessageId && chat.telegramId && config.telegramBotToken) {
+      try {
+        await tgCall('deleteMessage', { chat_id: chat.telegramId, message_id: msg.tgMessageId });
+        telegram = 'deleted';
+      } catch (e) {
+        telegram = 'failed';
+        console.warn('[support:delete] bot xabari o‘chirilmadi:', e.message);
+      }
+    }
+
+    res.json({ ok: true, id: String(msgId), telegram });
   }),
 
   // PATCH /api/admin/support/:id/resolve — suhbatni yopish

@@ -10,6 +10,14 @@ const messageSchema = new Schema({
   adminName: { type: String, default: '' },
   readAt: { type: Date, default: null },
   createdAt: { type: Date, default: Date.now },
+  // Admin xabarni tahrirlagan vaqt (mijozda "tahrirlangan" belgisi)
+  editedAt: { type: Date, default: null },
+  /*
+   * Admin javobi mijozga bot orqali ham yuboriladi — o'sha Telegram
+   * xabarining id'si. Tahrir/o'chirishda bot xabari ham yangilanadi.
+   * 0 — yuborilmagan / eski xabar.
+   */
+  tgMessageId: { type: Number, default: 0 },
 }, { _id: true });
 
 /*

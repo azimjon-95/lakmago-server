@@ -559,6 +559,8 @@ router.get('/admin/support', auth, requireRole('admin'), supportController.list)
 router.get('/admin/support/:id', auth, requireRole('admin'), supportController.getOne);
 router.post('/admin/support/:id/reply', auth, requireRole('admin'), supportController.reply);
 router.patch('/admin/support/:id/resolve', auth, requireRole('admin'), supportController.resolve);
+router.patch('/admin/support/:id/messages/:msgId', auth, requireRole('admin'), supportController.editMessage);
+router.delete('/admin/support/:id/messages/:msgId', auth, requireRole('admin'), supportController.deleteMessage);
 
 // ===== Admin paneli (role: admin) — dastur egasi =====
 /*
