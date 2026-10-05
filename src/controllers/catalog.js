@@ -391,7 +391,7 @@ export const dishController = {
     // Faqat ko'rinadigan restoranlar taomlari
     const visible = await Restaurant.find({
       isApproved: true, isActive: true, isBlocked: { $ne: true },
-    }).select('_id name tint icon openTime closeTime').lean();
+    }).select('_id name tint icon openTime closeTime workingDays timezone').lean();
     const restMap = new Map(visible.map((r) => [String(r._id), r]));
 
     const dishes = await Dish.find({
@@ -408,6 +408,8 @@ export const dishController = {
         restaurantName: r?.name || '',
         restaurantOpenTime: r?.openTime || '',
         restaurantCloseTime: r?.closeTime || '',
+        // Ish kunlari — dam olish kunida mijoz taomni savatga ololmaydi
+        restaurantWorkingDays: r?.workingDays || [],
       };
     }));
   }),
@@ -417,7 +419,7 @@ export const dishController = {
     // Faqat ko'rinadigan restoranlar taomlari
     const visible = await Restaurant.find({
       isApproved: true, isActive: true, isBlocked: { $ne: true },
-    }).select('_id name tint icon openTime closeTime').lean();
+    }).select('_id name tint icon openTime closeTime workingDays timezone').lean();
     const restMap = new Map(visible.map((r) => [String(r._id), r]));
 
     // Chegirma = oldPrice > price (isDiscounted bayrog'iga emas —
@@ -436,6 +438,8 @@ export const dishController = {
         restaurantName: r?.name || '',
         restaurantOpenTime: r?.openTime || '',
         restaurantCloseTime: r?.closeTime || '',
+        // Ish kunlari — dam olish kunida mijoz taomni savatga ololmaydi
+        restaurantWorkingDays: r?.workingDays || [],
       };
     }));
   }),
@@ -446,7 +450,7 @@ export const dishController = {
     // Faqat ko'rinadigan (faol, bloklanмаган, tasdiqlangan) restoranlar
     const visibleRestaurants = await Restaurant.find({
       isApproved: true, isActive: true, isBlocked: { $ne: true },
-    }).select('_id name tint icon imageUrl deliveryMin deliveryMax deliveryFee freeDeliveryThreshold minOrderAmount prepMinutes openTime closeTime').lean();
+    }).select('_id name tint icon imageUrl deliveryMin deliveryMax deliveryFee freeDeliveryThreshold minOrderAmount prepMinutes openTime closeTime workingDays timezone').lean();
 
     const restMap = new Map(visibleRestaurants.map((r) => [String(r._id), r]));
     const restIds = visibleRestaurants.map((r) => r._id);
@@ -541,6 +545,7 @@ export const dishController = {
         // Ish vaqti — yopiq restoran taomlari ro'yxatdan chiqadi
         restaurantOpenTime: r?.openTime || '',
         restaurantCloseTime: r?.closeTime || '',
+        restaurantWorkingDays: r?.workingDays || [],
       };
     };
 

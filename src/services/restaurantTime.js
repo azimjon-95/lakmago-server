@@ -70,25 +70,32 @@ function toMinutes(hhmm) {
 export function isRestaurantOpen(restaurant, date = new Date()) {
   const open = toMinutes(restaurant?.openTime);
   const close = toMinutes(restaurant?.closeTime);
-
-  // Vaqt belgilanmagan — doim ochiq
-  if (open === null || close === null) return true;
-  if (open === close) return true;
+  const hasHours = open !== null && close !== null;
 
   const tz = restaurant?.timezone || 'Asia/Tashkent';
   const { minutes, day } = zoneNow(tz, date);
 
-  // Ish kunlari tekshiruvi
+  /*
+   * Ish kunlari tekshiruvi — VAQTDAN OLDIN.
+   * Avval vaqt belgilanmagan (yoki 24 soat) restoran dam olish
+   * kunida ham "ochiq" chiqardi, chunki pastdagi `return true`
+   * ish kunlarigacha yetib bormasdi. Mijoz ilovasi
+   * (lib/workHours.js) bilan bir xil qoida.
+   */
   const days = restaurant?.workingDays;
   if (Array.isArray(days) && days.length > 0) {
     // Yarim tundan oshgan vaqtda kecha ochilgan bo'lishi mumkin
-    if (open > close && minutes < close) {
+    if (hasHours && open > close && minutes < close) {
       const yesterday = DAYS[(DAYS.indexOf(day) + 6) % 7];
       if (!days.includes(yesterday)) return false;
     } else if (!days.includes(day)) {
       return false;
     }
   }
+
+  // Vaqt belgilanmagan — vaqt bo'yicha cheklov yo'q
+  if (!hasHours) return true;
+  if (open === close) return true;
 
   if (open < close) return minutes >= open && minutes < close;
   return minutes >= open || minutes < close;

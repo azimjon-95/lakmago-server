@@ -453,9 +453,28 @@ export const orderController = {
       // Ish vaqti — yopiq bo'lsa buyurtma qabul qilinmaydi.
       // Belgilangan vaqtga buyurtma bundan mustasno: mijoz
       // ochilish vaqtiga rejalashtirishi mumkin.
-      if (timingMode !== 'scheduled' && !isOpenTz(rest)) {
+      /*
+       * Belgilangan vaqtga buyurtma — o'sha KUN restoranning dam olish
+       * kuni bo'lmasligi kerak. Faqat ish kuni tekshiriladi (soat
+       * tekshiruvi avvalgidek yo'q). Yarim tundan oshadigan ish vaqti
+       * (masalan juma 10:00–02:00, shanba 01:00 ga) to'liq hisob bilan
+       * ochiq chiqsa — ruxsat.
+       */
+      if (timingMode === 'scheduled' && scheduledDate
+          && !isOpenTz({ workingDays: rest.workingDays, timezone: rest.timezone }, scheduledDate)
+          && !isOpenTz(rest, scheduledDate)) {
         return res.status(400).json({
-          error: `${rest.name} hozir yopiq`
+          error: `${rest.name} tanlangan kunda ishlamaydi (dam olish kuni)`,
+          code: 'RESTAURANT_DAY_OFF',
+          restaurantId: String(o.restaurantId),
+          workingDays: rest.workingDays || [],
+        });
+      }
+
+      if (timingMode !== 'scheduled' && !isOpenTz(rest)) {
+        const dayOff = !isOpenTz({ workingDays: rest.workingDays, timezone: rest.timezone });
+        return res.status(400).json({
+          error: (dayOff ? `${rest.name} bugun ishlamaydi (dam olish kuni)` : `${rest.name} hozir yopiq`)
             + (rest.openTime ? ` · Ish vaqti ${rest.openTime}–${rest.closeTime}` : ''),
           code: 'RESTAURANT_CLOSED',
           restaurantId: String(o.restaurantId),
