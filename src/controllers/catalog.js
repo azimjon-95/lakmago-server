@@ -481,6 +481,16 @@ export const dishController = {
       if (category && category !== 'all') {
         filter.marketCategory = MARKET_CATEGORY_VALUES.includes(category) ? category : '__none__';
       }
+      /*
+       * Market qidiruvi: ?q= — nom yoki brend (harf katta-kichikligi farqsiz),
+       * shtrix-kod — aniq moslik. Regex maxsus belgilari ekranlanadi
+       * (foydalanuvchi matni so'rovga aylanmaydi), 60 belgi bilan cheklangan.
+       */
+      const q = typeof req.query.q === 'string' ? req.query.q.trim().slice(0, 60) : '';
+      if (q) {
+        const rx = { $regex: q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), $options: 'i' };
+        andClauses.push({ $or: [{ name: rx }, { brand: rx }, { barcode: q }] });
+      }
     } else if (category && category !== 'all') {
       const values = dishCategoryValues(category);
       filter.category = values.length === 1 ? values[0] : { $in: values };
