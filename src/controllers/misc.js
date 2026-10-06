@@ -39,9 +39,16 @@ function warnNoAgreement(restaurantId, name = '') {
 
 export const bannerController = {
   // GET /api/banners — mijozга ko'rinadigan bannerlar
-  list: asyncHandler(async (_req, res) => {
-    // Faqat platforma bannerlari — restoran bannerlari o'z sahifasida ko'rinadi
-    const banners = await Banner.find({ active: true, kind: 'platform' }).sort({ order: 1 }).lean();
+  list: asyncHandler(async (req, res) => {
+    /*
+     * Faqat platforma bannerlari — restoran bannerlari o'z sahifasida ko'rinadi.
+     * ?placement=market — Lokma Market sahifasi bannerlari; parametrsiz —
+     * bosh sahifa (placement yo'q eski bannerlar ham shu yerda, avvalgidek).
+     */
+    const placementFilter = req.query.placement === 'market'
+      ? { placement: 'market' }
+      : { placement: { $ne: 'market' } };
+    const banners = await Banner.find({ active: true, kind: 'platform', ...placementFilter }).sort({ order: 1 }).lean();
 
     // Restoran bannerlari orasidan bloklangan/nofaol muassasalarникini olib tashlaymiz
     const restaurantBanners = banners.filter((b) => b.kind === 'restaurant' && b.restaurantId);

@@ -644,6 +644,7 @@ export const adminController = {
       bg: z.string().optional(),
       icon: z.string().optional(),
       order: z.number().optional(),
+      placement: z.enum(['home', 'market']).optional().default('home'),
     });
     const parsed = schema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: 'Banner rasmi majburiy' });
@@ -656,6 +657,10 @@ export const adminController = {
     const allowed = ['title', 'eyebrow', 'cta', 'bg', 'imageUrl', 'icon', 'order', 'active', 'hasButton', 'linkUrl'];
     const update = {};
     for (const k of allowed) if (k in req.body) update[k] = req.body[k];
+    if ('placement' in req.body) {
+      if (!['home', 'market'].includes(req.body.placement)) return res.status(400).json({ error: 'Joylashuv noto‘g‘ri' });
+      update.placement = req.body.placement;
+    }
     const banner = await Banner.findByIdAndUpdate(req.params.id, update, { new: true });
     if (!banner) return res.status(404).json({ error: 'Banner topilmadi' });
     res.json(banner);

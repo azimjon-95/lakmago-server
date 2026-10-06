@@ -191,6 +191,8 @@ const bannerSchema = new Schema(
     //   platform  → sayt egasi (admin) qo'shган umumiy reklama
     //   restaurant→ restoran o'zi qo'shган banner (restaurantId to'ldiriladi)
     kind: { type: String, enum: ['platform', 'restaurant'], default: 'platform' },
+    // Qaysi sahifada: home — bosh sahifa (eski bannerlar ham), market — Lokma Market
+    placement: { type: String, enum: ['home', 'market'], default: 'home' },
     restaurantId: { type: Schema.Types.ObjectId, ref: 'Restaurant' },
 
     order: { type: Number, default: 0 },
