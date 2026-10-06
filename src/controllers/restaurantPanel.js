@@ -1,3 +1,5 @@
+import { isStore } from '../services/storeRules.js';
+import { MARKET_CATEGORY_VALUES, MARKET_UNIT_VALUES } from '../constants/marketCategories.js';
 import { RESTAURANT_HIDDEN } from '../services/restaurantVisibility.js';
 import { z } from 'zod';
 import bcrypt from 'bcryptjs';
@@ -87,7 +89,8 @@ export const restaurantPanelController = {
       .select('-ownerId -__v -commissionPercent -commissionMode -balance -totalPaidOut -contractNumber -contractDate -androidGateway');
 
     if (!restaurant) return res.status(404).json({ error: 'Restoran topilmadi' });
-    res.json(restaurant);
+    // isStore — panel menyu sahifasi do'kon mahsulotlari shakliga o'tadi (services/storeRules.js)
+    res.json({ ...restaurant.toJSON(), isStore: isStore(restaurant) });
   }),
 
   // PATCH /api/panel/me/active  { isActive } — butun restoranni ochish/yopish
@@ -152,12 +155,28 @@ export const restaurantPanelController = {
       images: z.array(z.string()).optional(),
       // Hajm/razmer va qo'shimchalar (ixtiyoriy)
       optionGroups: optionGroupsSchema.optional(),
+      // Do'kon mahsuloti (Lokma Market) — faqat do'konlarda
+      marketCategory: z.enum(MARKET_CATEGORY_VALUES).nullable().optional(),
+      unit: z.enum([...MARKET_UNIT_VALUES, '']).optional(),
+      packSize: z.string().max(40).optional(),
+      brand: z.string().max(80).optional(),
+      barcode: z.string().max(32).optional(),
     });
     const parsed = schema.safeParse(req.body);
     if (!parsed.success) {
       return res.status(400).json({ error: 'Ma‘lumot noto‘g‘ri', details: parsed.error.issues });
     }
-    const dish = await Dish.create({ ...parsed.data, restaurantId: rid(req) });
+    // Do'kon: mahsulot kategoriyasi majburiy, taom kategoriyasi — 'boshqa' (restoran filtrlariga aralashmasin)
+    const shop = await Restaurant.findById(rid(req)).select('kind category').lean();
+    const data = { ...parsed.data };
+    if (isStore(shop)) {
+      if (!data.marketCategory) return res.status(400).json({ error: 'Mahsulot kategoriyasini tanlang' });
+      data.category = 'boshqa';
+    } else {
+      // Restoranga do'kon maydonlari yozilmaydi
+      delete data.marketCategory; delete data.unit; delete data.packSize; delete data.brand; delete data.barcode;
+    }
+    const dish = await Dish.create({ ...data, restaurantId: rid(req) });
 
     // Yuborilgan, lekin saqlanmagan maydonlarni aniqlaymiz.
     // Mongoose strict rejimda modelda yo'q maydonni jim tashlaydi —
@@ -182,6 +201,24 @@ export const restaurantPanelController = {
     const allowed = ['name', 'description', 'price', 'oldPrice', 'section', 'category', 'prepMinutes', 'icon', 'tint', 'isAvailable', 'isHit', 'isTrending', 'isDiscounted', 'calories', 'weight', 'weightGram', 'protein', 'fat', 'carbs', 'volume', 'drinkType', 'priceMode', 'dineInPrice', 'imageUrl', 'images'];
     const update = {};
     for (const k of allowed) if (k in req.body) update[k] = req.body[k];
+
+    // Do'kon mahsuloti maydonlari — tekshirib, faqat do'konda
+    const MARKET_KEYS = ['marketCategory', 'unit', 'packSize', 'brand', 'barcode'];
+    if (MARKET_KEYS.some((k) => k in req.body)) {
+      const shop = await Restaurant.findById(rid(req)).select('kind category').lean();
+      if (isStore(shop)) {
+        const m = z.object({
+          marketCategory: z.enum(MARKET_CATEGORY_VALUES).optional(),
+          unit: z.enum([...MARKET_UNIT_VALUES, '']).optional(),
+          packSize: z.string().max(40).optional(),
+          brand: z.string().max(80).optional(),
+          barcode: z.string().max(32).optional(),
+        }).safeParse(Object.fromEntries(MARKET_KEYS.filter((k) => k in req.body).map((k) => [k, req.body[k]])));
+        if (!m.success) return res.status(400).json({ error: 'Mahsulot ma‘lumoti noto‘g‘ri', details: m.error.issues });
+        Object.assign(update, m.data);
+        update.category = 'boshqa';
+      }
+    }
 
     /*
      * Guruhlar boshqa maydonlardan farqli — ular narxga ta'sir

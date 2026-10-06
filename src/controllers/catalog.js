@@ -8,6 +8,17 @@ import { isRestaurantOpen } from '../services/restaurantTime.js';
 import { activePins } from '../services/restaurantPins.js';
 import { Types } from 'mongoose';
 import { dishCategoryValues, discountExpr } from '../constants/dishCategories.js';
+import { NOT_STORE, ONLY_STORE, andWith } from '../services/storeRules.js';
+import { MARKET_CATEGORY_VALUES } from '../constants/marketCategories.js';
+
+/*
+ * Lokma Market rejimi: routes'da `req.marketMode = true` qo'yiladi
+ * (/api/market/stores, /api/market/products — controllers/market.js).
+ * Shunda bitta kod ikki xil ro'yxat beradi:
+ *   oddiy  → faqat restoranlar (do'konlar UMUMAN aralashmaydi)
+ *   market → faqat do'konlar va ularning mahsulotlari
+ */
+const segmentClause = (req) => (req.marketMode ? ONLY_STORE : NOT_STORE);
 
 // MongoDB ObjectId formatини tekshirish — noto'g'ri ID kelса server yiqilmasин,
 // aniq 404 qaytarsin (masalan eski mock ID 'r1' kelганда).
@@ -81,8 +92,9 @@ export const restaurantController = {
   // GET /api/restaurants?category=milliy&cursor=<createdAt>&limit=20
   // Cursor-based pagination — katta ro'yxatlar tez yuklanadi
   list: asyncHandler(async (req, res) => {
-    const filter = { isApproved: true, isActive: true, isBlocked: { $ne: true } };
-    if (req.query.category && req.query.category !== 'all') {
+    const filter = andWith({ isApproved: true, isActive: true, isBlocked: { $ne: true } }, segmentClause(req));
+    // Market rejimida `category` — mahsulot kategoriyasi (pastda productCategories bo'yicha), muassasa turi emas
+    if (!req.marketMode && req.query.category && req.query.category !== 'all') {
       filter.category = req.query.category;
     }
     // Cursor: oldingi sahifaning oxirgi createdAt qiymati
@@ -118,7 +130,7 @@ export const restaurantController = {
      * kategoriya/sahifa alohida keshlanadi.
      */
     const cacheKey = KEYS.catalogList(
-      `${req.query.category || 'all'}:${req.query.cursor || '0'}:${limit}`,
+      `${req.marketMode ? 'market' : 'food'}:${req.marketMode ? 'all' : (req.query.category || 'all')}:${req.query.cursor || '0'}:${limit}`,
     );
 
     const restaurants = await cached(cacheKey, TTL.catalog, () => Restaurant.find(filter)
@@ -149,14 +161,15 @@ export const restaurantController = {
      * bo'lsa, unga mos kelmaydigan restoran qo'shilmaydi. cursor'li (keyingi)
      * sahifalarga qo'shilmaydi: nextCursor o'zgarmaydi, takror bo'lmaydi.
      */
-    const pinned = await activePins();
+    // Pin (Top joylar) — faqat restoranlar ro'yxatida
+    const pinned = req.marketMode ? [] : await activePins();
     const pinMap = new Map(pinned.map((p) => [String(p.restaurantId), { position: p.position, endsAt: p.endsAt }]));
     let extraRows = [];
     if (pinned.length && !req.query.cursor) {
       const have = new Set(pageRows.map((r) => String(r._id)));
       const missingIds = pinned.map((p) => p.restaurantId).filter((id) => !have.has(String(id)));
       if (missingIds.length) {
-        const extraFilter = { _id: { $in: missingIds }, isApproved: true, isActive: true, isBlocked: { $ne: true } };
+        const extraFilter = andWith({ _id: { $in: missingIds }, isApproved: true, isActive: true, isBlocked: { $ne: true } }, NOT_STORE);
         if (req.query.category && req.query.category !== 'all') extraFilter.category = req.query.category;
         extraRows = await Restaurant.find(extraFilter).select(LIST_SELECT).lean();
       }
@@ -187,13 +200,16 @@ export const restaurantController = {
     const catRows = pageIds.length
       ? await Dish.aggregate([
         { $match: { restaurantId: { $in: pageIds }, isAvailable: true } },
-        { $group: { _id: '$restaurantId', categories: { $addToSet: '$category' } } },
+        { $group: { _id: '$restaurantId', categories: { $addToSet: req.marketMode ? '$marketCategory' : '$category' } } },
       ])
       : [];
     const catMap = new Map(catRows.map((r) => [String(r._id), r.categories.filter(Boolean)]));
 
     let items = [...pageRows, ...extraRows]
-      .map((r) => ({ ...r, dishCategories: catMap.get(String(r._id)) || [] }))
+      .map((r) => (req.marketMode
+        // Do'kon: qaysi mahsulot kategoriyalari bor (mijoz kategoriya bo'yicha filtrlaydi)
+        ? { ...r, productCategories: catMap.get(String(r._id)) || [] }
+        : { ...r, dishCategories: catMap.get(String(r._id)) || [] }))
       // isOpen — DOIM Toshkent (yoki restoranning o'z) vaqt
       // mintaqasidan hisoblanadi, mijoz qurilmasi qaysi davlatda
       // bo'lishidan qat'i nazar bir xil natija. Mijoz o'zi
@@ -388,10 +404,10 @@ export const dishManageController = {
 export const dishController = {
   // GET /api/dishes/trending
   trending: asyncHandler(async (_req, res) => {
-    // Faqat ko'rinadigan restoranlar taomlari
-    const visible = await Restaurant.find({
+    // Faqat ko'rinadigan restoranlar taomlari (do'kon mahsulotlari emas)
+    const visible = await Restaurant.find(andWith({
       isApproved: true, isActive: true, isBlocked: { $ne: true },
-    }).select('_id name tint icon openTime closeTime workingDays timezone').lean();
+    }, NOT_STORE)).select('_id name tint icon openTime closeTime workingDays timezone').lean();
     const restMap = new Map(visible.map((r) => [String(r._id), r]));
 
     const dishes = await Dish.find({
@@ -416,10 +432,10 @@ export const dishController = {
 
   // GET /api/dishes/discounted
   discounted: asyncHandler(async (_req, res) => {
-    // Faqat ko'rinadigan restoranlar taomlari
-    const visible = await Restaurant.find({
+    // Faqat ko'rinadigan restoranlar taomlari (do'kon mahsulotlari emas)
+    const visible = await Restaurant.find(andWith({
       isApproved: true, isActive: true, isBlocked: { $ne: true },
-    }).select('_id name tint icon openTime closeTime workingDays timezone').lean();
+    }, NOT_STORE)).select('_id name tint icon openTime closeTime workingDays timezone').lean();
     const restMap = new Map(visible.map((r) => [String(r._id), r]));
 
     // Chegirma = oldPrice > price (isDiscounted bayrog'iga emas —
@@ -448,9 +464,9 @@ export const dishController = {
   // Bosh sahifада ko'rsatiladi (faqat faol, bloklanмаgan restoranlar).
   all: asyncHandler(async (req, res) => {
     // Faqat ko'rinadigan (faol, bloklanмаган, tasdiqlangan) restoranlar
-    const visibleRestaurants = await Restaurant.find({
+    const visibleRestaurants = await Restaurant.find(andWith({
       isApproved: true, isActive: true, isBlocked: { $ne: true },
-    }).select('_id name tint icon imageUrl deliveryMin deliveryMax deliveryFee freeDeliveryThreshold minOrderAmount prepMinutes openTime closeTime workingDays timezone').lean();
+    }, segmentClause(req))).select('_id name tint icon imageUrl deliveryMin deliveryMax deliveryFee freeDeliveryThreshold minOrderAmount prepMinutes openTime closeTime workingDays timezone').lean();
 
     const restMap = new Map(visibleRestaurants.map((r) => [String(r._id), r]));
     const restIds = visibleRestaurants.map((r) => r._id);
@@ -460,7 +476,12 @@ export const dishController = {
 
     // Kategoriya — eski (legacy) nomlari bilan birga
     const category = typeof req.query.category === 'string' ? req.query.category.trim() : '';
-    if (category && category !== 'all') {
+    if (req.marketMode) {
+      // Do'kon mahsuloti — o'z kategoriyalari (constants/marketCategories.js)
+      if (category && category !== 'all') {
+        filter.marketCategory = MARKET_CATEGORY_VALUES.includes(category) ? category : '__none__';
+      }
+    } else if (category && category !== 'all') {
       const values = dishCategoryValues(category);
       filter.category = values.length === 1 ? values[0] : { $in: values };
     }
@@ -525,7 +546,7 @@ export const dishController = {
     if (req.query.discounted === '1') filter.$expr = discountExpr();
     else if (req.query.discounted === '0') filter.$expr = { $not: [discountExpr()] };
 
-    const DISH_SELECT = 'name description section category price oldPrice imageUrl images tint icon restaurantId isHit isDiscounted createdAt weight weightGram calories protein fat carbs prepMinutes ingredients optionGroups';
+    const DISH_SELECT = 'name description section category price oldPrice imageUrl images tint icon restaurantId isHit isDiscounted createdAt weight weightGram calories protein fat carbs prepMinutes ingredients optionGroups volume marketCategory unit packSize brand';
 
     // Restoran ma'lumoti (ikkala rejimda bir xil)
     const attachRest = (d) => {

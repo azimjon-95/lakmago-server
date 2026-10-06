@@ -1,5 +1,7 @@
 import { Router } from 'express';
 import { restaurantController, dishController } from '../controllers/catalog.js';
+import { marketController } from '../controllers/market.js';
+import { requireFeature } from '../services/featureAccess.js';
 import { restaurantBillingController } from '../controllers/restaurantBilling.js';
 import { bannerController, authController, orderController } from '../controllers/misc.js';
 import { reservationController, paymentController } from '../controllers/services.js';
@@ -82,6 +84,13 @@ router.get('/dishes/trending', dishController.trending);
 router.get('/dishes/discounted', dishController.discounted);
 router.get('/dishes/all', dishController.all);
 router.get('/dishes/:id', restaurantController.getDishById);
+
+// ===== Lokma Market (do'konlar) va bo'lim ruxsatlari =====
+// Ruxsat: .env LOKMA_MARKET_ACCESS / LOKMA_WEDDING_ACCESS (services/featureAccess.js)
+router.get('/features', marketController.features);
+router.get('/market/categories', marketController.categories);
+router.get('/market/stores', requireFeature('market'), marketController.marketMode, restaurantController.list);
+router.get('/market/products', requireFeature('market'), marketController.marketMode, dishController.all);
 
 // ===== Mijoz buyurtmalari (JWT) =====
 router.post('/orders', auth, orderController.create);

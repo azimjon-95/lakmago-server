@@ -1,3 +1,4 @@
+import { isStore } from '../services/storeRules.js';
 import { z } from 'zod';
 import { asyncHandler } from '../middleware/error.js';
 import { Ad } from '../models/Ad.js';
@@ -178,12 +179,14 @@ export const publicAdsController = {
     })
       .sort({ createdAt: -1 })
       .limit(20)
-      .populate('restaurantId', 'name imageUrl isActive isBlocked')
+      .populate('restaurantId', 'name imageUrl isActive isBlocked kind category')
       .populate('dishId', 'name price imageUrl')
       .lean();
 
     // Bloklangan/o'chirilgan restoranlarning reklamasi ko'rinmasin
-    const visible = ads.filter((a) => a.restaurantId && a.restaurantId.isActive && !a.restaurantId.isBlocked);
+    // Do'kon reklamasi bosh sahifa banneriga chiqmaydi (do'konlar faqat Lokma Market'da)
+    const visible = ads.filter((a) => a.restaurantId && a.restaurantId.isActive && !a.restaurantId.isBlocked
+      && !isStore(a.restaurantId));
 
     res.json(visible.map((a) => ({
       id: String(a._id),

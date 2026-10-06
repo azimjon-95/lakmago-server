@@ -1,5 +1,6 @@
 import { Schema, model } from 'mongoose';
 import { cacheInvalidationPlugin } from './cacheInvalidation.js';
+import { MARKET_CATEGORY_VALUES, MARKET_UNIT_VALUES } from '../constants/marketCategories.js';
 
 const optionSchema = new Schema(
   {
@@ -116,6 +117,21 @@ const dishSchema = new Schema(
     carbs: { type: Number },     // uglevod, g
     ingredients: [{ type: String }],
     optionGroups: [optionGroupSchema],
+
+    /*
+     * ═══ DO'KON MAHSULOTI (Lokma Market) — faqat do'konlarda ═══
+     * Restoran taomlarida bo'sh qoladi. Do'kon mahsulotining `category`
+     * maydoni 'boshqa' bo'ladi — restoran taom filtrlariga aralashmaydi.
+     *   marketCategory — constants/marketCategories.js (meva, sut, ...)
+     *   unit           — narx nima uchun: dona / kg / l / qadoq ...
+     *   packSize       — qadoq hajmi matn: "1 kg", "0.5 l", "10 dona"
+     *   brand, barcode — ixtiyoriy (qidiruv va kassa bilan moslash uchun)
+     */
+    marketCategory: { type: String, enum: [...MARKET_CATEGORY_VALUES, null], default: null, index: true },
+    unit: { type: String, enum: [...MARKET_UNIT_VALUES, ''], default: '' },
+    packSize: { type: String, default: '', maxlength: 40 },
+    brand: { type: String, default: '', maxlength: 80 },
+    barcode: { type: String, default: '', maxlength: 32 },
     isHit: { type: Boolean, default: false },
     isTrending: { type: Boolean, default: false },
     isDiscounted: { type: Boolean, default: false },

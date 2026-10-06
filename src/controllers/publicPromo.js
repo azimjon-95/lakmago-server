@@ -1,3 +1,4 @@
+import { NOT_STORE, andWith } from '../services/storeRules.js';
 import { asyncHandler } from '../middleware/error.js';
 import { Promotion } from '../models/Promotion.js';
 import { AdCampaign } from '../models/AdCampaign.js';
@@ -62,10 +63,11 @@ export const publicPromoController = {
 
     // Restoran nomlarini qo'shamiz
     const restIds = [...new Set(promos.map((p) => String(p.restaurantId)))];
-    const rests = await Restaurant.find({
+    // Do'konlar aksiyasi bosh sahifada ko'rinmaydi (faqat Lokma Market)
+    const rests = await Restaurant.find(andWith({
       _id: { $in: restIds },
       isActive: true, isBlocked: { $ne: true }, isApproved: true,
-    }).select('name imageUrl tint').lean();
+    }, NOT_STORE)).select('name imageUrl tint').lean();
 
     const restMap = new Map(rests.map((r) => [String(r._id), r]));
 
@@ -126,10 +128,10 @@ export const publicPromoController = {
     const dishIds = ads.filter((a) => a.dishId).map((a) => a.dishId);
 
     const [rests, dishes] = await Promise.all([
-      Restaurant.find({
+      Restaurant.find(andWith({
         _id: { $in: restIds },
         isActive: true, isBlocked: { $ne: true }, isApproved: true,
-      }).select('name imageUrl tint icon cuisine rating deliveryMin deliveryMax').lean(),
+      }, NOT_STORE)).select('name imageUrl tint icon cuisine rating deliveryMin deliveryMax').lean(),
       dishIds.length
         ? Dish.find({ _id: { $in: dishIds }, isAvailable: true })
             .select('name price oldPrice imageUrl category restaurantId').lean()
