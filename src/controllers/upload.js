@@ -16,7 +16,9 @@ export const uploadController = {
     }
 
     // Papka — taom yoki banner uchun ajratamiz (tartib uchun)
-    const folder = req.query.folder === 'banners' ? 'lokmago/banners' : 'lokmago/dishes';
+    // To'yxonalar rasmlari alohida papkada (LokmaGo taom rasmlari bilan aralashmasin)
+    const FOLDERS = { banners: 'lokmago/banners', weddings: 'lokmago/weddings' };
+    const folder = FOLDERS[req.query.folder] || 'lokmago/dishes';
     const timestamp = Math.round(Date.now() / 1000);
 
     /*
