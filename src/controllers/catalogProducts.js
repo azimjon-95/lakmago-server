@@ -4,6 +4,11 @@ import { CatalogProduct } from '../models/CatalogProduct.js';
 import { Dish } from '../models/Dish.js';
 import { Restaurant } from '../models/Restaurant.js';
 import { CATALOG_CATEGORY_VALUES, DRINKS_CATEGORY, RESTAURANT_VISIBLE_CATEGORIES } from '../constants/catalogCategories.js';
+import { isStore } from '../services/storeRules.js';
+import { MARKET_CATEGORIES, MARKET_CATEGORY_VALUES, MARKET_UNIT_VALUES, marketSuggestion } from '../constants/marketCategories.js';
+
+// Qidiruv matni regex'ga xavfsiz (maxsus belgilar ekranlanadi, uzunlik cheklangan)
+const safeRx = (q) => String(q).trim().slice(0, 60).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 const productSchema = z.object({
   name: z.string().min(2).max(120),
@@ -56,10 +61,11 @@ export const catalogProductController = {
   list: asyncHandler(async (req, res) => {
     const filter = {};
     if (req.query.category) filter.category = req.query.category;
-    if (req.query.q) {
+    if (req.query.q && String(req.query.q).trim()) {
+      const rx = safeRx(req.query.q);
       filter.$or = [
-        { name: { $regex: req.query.q, $options: 'i' } },
-        { brand: { $regex: req.query.q, $options: 'i' } },
+        { name: { $regex: rx, $options: 'i' } },
+        { brand: { $regex: rx, $options: 'i' } },
       ];
     }
 
@@ -136,8 +142,9 @@ export const catalogProductController = {
   // OLINMAYDI, chunki bu biznes qoidasi. Faqat do'kon (kind === 'shop')
   // barcha 70 kategoriyani ko'radi va filtrlashi mumkin.
   forRestaurant: asyncHandler(async (req, res) => {
-    const restaurant = await Restaurant.findById(req.restaurantId).select('kind').lean();
-    const isShop = restaurant?.kind === 'shop';
+    // Do'kon qoidasi umumiy (services/storeRules.js): Magazin YOKI oziq-ovqat/meva-sabzavot do'koni
+    const restaurant = await Restaurant.findById(req.restaurantId).select('kind category').lean();
+    const isShop = isStore(restaurant);
 
     const filter = { isActive: true };
     if (isShop) {
@@ -165,10 +172,11 @@ export const catalogProductController = {
         ? requested
         : { $in: RESTAURANT_VISIBLE_CATEGORIES };
     }
-    if (req.query.q) {
+    if (req.query.q && String(req.query.q).trim()) {
+      const rx = safeRx(req.query.q);
       filter.$or = [
-        { name: { $regex: req.query.q, $options: 'i' } },
-        { brand: { $regex: req.query.q, $options: 'i' } },
+        { name: { $regex: rx, $options: 'i' } },
+        { brand: { $regex: rx, $options: 'i' } },
       ];
     }
 
@@ -188,6 +196,8 @@ export const catalogProductController = {
     res.json(items.map((p) => ({
       ...p,
       alreadyAdded: addedIds.has(String(p._id)),
+      // Do'kon uchun: Market kategoriyasi va birlik taklifi (qo'shish oynasida oldindan tanlanadi)
+      ...(isShop ? { market: marketSuggestion(p.category) } : {}),
     })));
   }),
 
@@ -210,6 +220,52 @@ export const catalogProductController = {
     });
     if (exists) {
       return res.status(400).json({ error: 'Bu mahsulot menyuda bor' });
+    }
+
+    /*
+     * DO'KON: mahsulot Market maydonlari bilan yaratiladi — kategoriya,
+     * birlik, qadoq hajmi, brend, shtrix-kod. Do'kon egasi oynada
+     * o'zgartirganini olamiz, aks holda katalogdan taklif.
+     * Restoran yo'li (pastda) O'ZGARMAGAN.
+     */
+    const restaurant = await Restaurant.findById(req.restaurantId).select('kind category').lean();
+    if (isStore(restaurant)) {
+      const sug = marketSuggestion(product.category);
+      const marketCategory = MARKET_CATEGORY_VALUES.includes(req.body.marketCategory) ? req.body.marketCategory : sug.marketCategory;
+      const unit = MARKET_UNIT_VALUES.includes(req.body.unit) ? req.body.unit : sug.unit;
+      const str = (v, max, def = '') => (typeof v === 'string' ? v.trim().slice(0, max) : def);
+      const oldPrice = Number(req.body.oldPrice);
+      if (oldPrice && oldPrice <= price) {
+        return res.status(400).json({ error: 'Eski narx hozirgi narxdan katta bo‘lishi kerak' });
+      }
+      const label = MARKET_CATEGORIES.find((c) => c.value === marketCategory);
+      const dish = await Dish.create({
+        restaurantId: req.restaurantId,
+        catalogProductId: product._id,
+        name: str(req.body.name, 120) || product.name,
+        description: product.description,
+        category: 'boshqa',              // restoran taom filtrlariga aralashmasin
+        section: label?.label || 'Mahsulotlar',
+        icon: label?.icon || 'ti-shopping-cart',
+        marketCategory,
+        unit,
+        packSize: str(req.body.packSize, 40, product.volume || ''),
+        brand: str(req.body.brand, 80, product.brand || ''),
+        barcode: str(req.body.barcode, 32).replace(/[^0-9A-Za-z-]/g, ''),
+        volume: product.volume,
+        imageUrl: product.imageUrl,
+        images: product.imageUrl ? [product.imageUrl] : [],
+        price,
+        oldPrice: oldPrice > price ? oldPrice : undefined,
+        calories: product.calories,
+        protein: product.protein,
+        fat: product.fat,
+        carbs: product.carbs,
+        prepMinutes: 5,
+        isAvailable: true,
+      });
+      await CatalogProduct.findByIdAndUpdate(product._id, { $inc: { usageCount: 1 } });
+      return res.status(201).json(dish);
     }
 
     const dish = await Dish.create({

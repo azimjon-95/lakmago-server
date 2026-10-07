@@ -118,3 +118,44 @@ export const MARKET_UNITS = [
   { value: 'blok', label: 'blok', ru: 'блок' },
 ];
 export const MARKET_UNIT_VALUES = MARKET_UNITS.map((u) => u.value);
+
+/*
+ * ═══ UMUMIY KATALOG → MARKET KATEGORIYASI ═══
+ * Do'kon umumiy katalogdan (admin to'ldiradigan CatalogProduct, 70 ta
+ * kategoriya — constants/catalogCategories.js) mahsulot qo'shganda,
+ * Market kategoriyasi va sotish birligi shu jadvaldan TAKLIF qilinadi
+ * (do'kon egasi qo'shish oynasida o'zgartirishi mumkin).
+ */
+export const CATALOG_TO_MARKET = {
+  guruch_don: 'guruch', un_mahsulotlari: 'un', makaron_mahsulotlari: 'makaron',
+  dukkakli_mahsulotlar: 'guruch', shakar_shirinlashtiruvchi: 'shakar', tuz: 'shakar',
+  osimlik_yoglari: 'yog', sariyog_margarin: 'saryog', sut_mahsulotlari: 'sut',
+  pishloq_mahsulotlari: 'pishloq', gosht_mahsulotlari: 'gosht', parranda_goshti: 'parranda',
+  kolbasa_sosiska: 'kolbasa', baliq_dengiz_mahsulotlari: 'baliq', tuxum: 'tuxum',
+  yangi_meva: 'meva', yangi_sabzavot: 'sabzavot', kokatlar: 'kokat',
+  muzlatilgan_mahsulotlar: 'muzlatilgan', yarim_tayyor_mahsulotlar: 'qiyma',
+  konserva_mahsulotlari: 'konserva', tuzlama_marinad: 'tuzlama', ziravorlar: 'ziravor',
+  souslar: 'sous', ketchup_mayonez: 'sous', sirka: 'sous', tomat_mahsulotlari: 'sous',
+  choy: 'choy', qahva: 'qahva', kakao: 'qahva', mineral_suv: 'suv', sharbatlar: 'sharbat',
+  gazli_ichimliklar: 'gazli', energetik_ichimliklar: 'energetik', ichimliklar: 'gazli',
+  shirinliklar: 'shokolad', konfetlar: 'shokolad', shokolad: 'shokolad',
+  pechenye: 'pechenye', vafli: 'pechenye', keks_pishiriqlar: 'pishiriq',
+  muzqaymoq: 'muzqaymoq', chips_snacklar: 'gazak', yongoqlar: 'quruq_meva',
+  quruq_mevalar: 'quruq_meva', asal: 'murabbo', murabbo_jem: 'murabbo',
+  non_mahsulotlari: 'non', bolalar_oziq_ovqatlari: 'bolalar', nonushta_mahsulotlari: 'nonushta',
+  pishirish_mahsulotlari: 'un', qandolat_mahsulotlari: 'shokolad',
+  fastfood_mahsulotlari: 'tez_tayyor', parhezbop_mahsulotlar: 'sogom',
+  maishiy_kimyo: 'uy_kimyo', tozalash_vositalari: 'uy_kimyo', shaxsiy_gigiyena: 'gigiyena',
+  bolalar_gigiyena: 'gigiyena', qogoz_salfetka: 'qogoz', bir_martalik_idishlar: 'bir_martalik',
+  qadoqlash_materiallari: 'bir_martalik', uy_hayvonlari_ozuqasi: 'uy_hayvon',
+};
+
+// Odatda vazn bo'yicha sotiladigan kategoriyalar
+const BY_WEIGHT = new Set(['meva', 'sabzavot', 'rezavor', 'gosht', 'parranda', 'baliq', 'qiyma']);
+
+/** Katalog kategoriyasi → { marketCategory, unit } taklifi. */
+export function marketSuggestion(catalogCategory) {
+  const marketCategory = CATALOG_TO_MARKET[catalogCategory] || 'boshqa';
+  const unit = BY_WEIGHT.has(marketCategory) ? 'kg' : marketCategory === 'kokat' ? 'bog' : 'dona';
+  return { marketCategory, unit };
+}
