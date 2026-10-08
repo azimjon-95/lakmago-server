@@ -1,3 +1,4 @@
+import { barcodeTakenInStore, cleanBarcode, BARCODE_RE } from '../services/barcode.js';
 import { z } from 'zod';
 import { asyncHandler } from '../middleware/error.js';
 import { CatalogProduct } from '../models/CatalogProduct.js';
@@ -238,6 +239,11 @@ export const catalogProductController = {
       if (oldPrice && oldPrice <= price) {
         return res.status(400).json({ error: 'Eski narx hozirgi narxdan katta bo‘lishi kerak' });
       }
+      const barcode = cleanBarcode(req.body.barcode);
+      if (barcode && !BARCODE_RE.test(barcode)) return res.status(400).json({ error: 'Shtrix-kod noto‘g‘ri (4–32 belgi: harf, raqam, -)' });
+      if (await barcodeTakenInStore(req.restaurantId, barcode)) {
+        return res.status(409).json({ error: 'Bu shtrix-kod shu do‘konda boshqa mahsulotda bor', code: 'BARCODE_TAKEN' });
+      }
       const label = MARKET_CATEGORIES.find((c) => c.value === marketCategory);
       const dish = await Dish.create({
         restaurantId: req.restaurantId,
@@ -250,8 +256,7 @@ export const catalogProductController = {
         marketCategory,
         unit,
         packSize: str(req.body.packSize, 40, product.volume || ''),
-        brand: str(req.body.brand, 80, product.brand || ''),
-        barcode: str(req.body.barcode, 32).replace(/[^0-9A-Za-z-]/g, ''),
+        barcode,
         volume: product.volume,
         imageUrl: product.imageUrl,
         images: product.imageUrl ? [product.imageUrl] : [],

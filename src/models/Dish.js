@@ -125,12 +125,11 @@ const dishSchema = new Schema(
      *   marketCategory — constants/marketCategories.js (meva, sut, ...)
      *   unit           — narx nima uchun: dona / kg / l / qadoq ...
      *   packSize       — qadoq hajmi matn: "1 kg", "0.5 l", "10 dona"
-     *   brand, barcode — ixtiyoriy (qidiruv va kassa bilan moslash uchun)
+     *   barcode        — ixtiyoriy; bo'sh qolsa panel "Yaratish" tugmasi bilan unikal kod beradi
      */
     marketCategory: { type: String, enum: [...MARKET_CATEGORY_VALUES, null], default: null, index: true },
     unit: { type: String, enum: [...MARKET_UNIT_VALUES, ''], default: '' },
     packSize: { type: String, default: '', maxlength: 40 },
-    brand: { type: String, default: '', maxlength: 80 },
     barcode: { type: String, default: '', maxlength: 32 },
     isHit: { type: Boolean, default: false },
     isTrending: { type: Boolean, default: false },

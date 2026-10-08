@@ -8,7 +8,7 @@ import { isRestaurantOpen } from '../services/restaurantTime.js';
 import { activePins } from '../services/restaurantPins.js';
 import { Types } from 'mongoose';
 import { dishCategoryValues, discountExpr } from '../constants/dishCategories.js';
-import { NOT_STORE, ONLY_STORE, andWith } from '../services/storeRules.js';
+import { NOT_STORE, ONLY_STORE, andWith, isStore } from '../services/storeRules.js';
 import { MARKET_CATEGORY_VALUES } from '../constants/marketCategories.js';
 
 /*
@@ -293,6 +293,10 @@ export const restaurantController = {
     // bo'lishidan qat'i nazar bir xil natija.
     restaurant.isOpen = isRestaurantOpen(restaurant);
 
+    // Do'kon (Market): stol bron yo'q — eski yozuvda yoqilgan bo'lsa ham mijozga ko'rsatilmaydi
+    restaurant.isStore = isStore(restaurant);
+    if (restaurant.isStore) restaurant.reservationEnabled = false;
+
     // Mijozlar sharhlari — baholangan buyurtmalardan yig'iladi.
     // Xato bo'lsa restoran baribir ochiladi, faqat sharhlar
     // bo'sh qoladi. Avval bu yerda xato butun so'rovni qulatardi.
@@ -482,14 +486,14 @@ export const dishController = {
         filter.marketCategory = MARKET_CATEGORY_VALUES.includes(category) ? category : '__none__';
       }
       /*
-       * Market qidiruvi: ?q= — nom yoki brend (harf katta-kichikligi farqsiz),
+       * Market qidiruvi: ?q= — nom (harf katta-kichikligi farqsiz),
        * shtrix-kod — aniq moslik. Regex maxsus belgilari ekranlanadi
        * (foydalanuvchi matni so'rovga aylanmaydi), 60 belgi bilan cheklangan.
        */
       const q = typeof req.query.q === 'string' ? req.query.q.trim().slice(0, 60) : '';
       if (q) {
         const rx = { $regex: q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), $options: 'i' };
-        andClauses.push({ $or: [{ name: rx }, { brand: rx }, { barcode: q }] });
+        andClauses.push({ $or: [{ name: rx }, { barcode: q }] });
       }
     } else if (category && category !== 'all') {
       const values = dishCategoryValues(category);
@@ -556,7 +560,7 @@ export const dishController = {
     if (req.query.discounted === '1') filter.$expr = discountExpr();
     else if (req.query.discounted === '0') filter.$expr = { $not: [discountExpr()] };
 
-    const DISH_SELECT = 'name description section category price oldPrice imageUrl images tint icon restaurantId isHit isDiscounted createdAt weight weightGram calories protein fat carbs prepMinutes ingredients optionGroups volume marketCategory unit packSize brand';
+    const DISH_SELECT = 'name description section category price oldPrice imageUrl images tint icon restaurantId isHit isDiscounted createdAt weight weightGram calories protein fat carbs prepMinutes ingredients optionGroups volume marketCategory unit packSize';
 
     // Restoran ma'lumoti (ikkala rejimda bir xil)
     const attachRest = (d) => {

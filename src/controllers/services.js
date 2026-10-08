@@ -7,6 +7,7 @@ import { notify } from '../services/notifications.js';
 import { getDineInMenu } from '../services/dineInPricing.js';
 import { Restaurant } from '../models/Restaurant.js';
 import { zonedToUtc } from '../services/restaurantTime.js';
+import { isStore } from '../services/storeRules.js';
 
 const reservationSchema = z.object({
   restaurantId: z.string(),
@@ -63,7 +64,11 @@ export const reservationController = {
      * talqin qilinardi: UTC serverda Toshkentning 10:00 i 15:00
      * bo'lib yozilar va mijozga eslatmalar 5 soat kech ketardi.
      */
-    const rest = await Restaurant.findById(parsed.data.restaurantId).select('timezone').lean().catch(() => null);
+    const rest = await Restaurant.findById(parsed.data.restaurantId).select('timezone kind category').lean().catch(() => null);
+    // Do'konda stol bron qilinmaydi
+    if (rest && isStore(rest)) {
+      return res.status(400).json({ error: 'Do‘konda stol bron qilib bo‘lmaydi', code: 'RESERVATION_NOT_AVAILABLE' });
+    }
     const scheduledAt = zonedToUtc(parsed.data.date, parsed.data.time, rest?.timezone || 'Asia/Tashkent');
 
     const reservation = await Reservation.create({

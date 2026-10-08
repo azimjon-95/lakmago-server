@@ -89,6 +89,8 @@ router.get('/dishes/:id', restaurantController.getDishById);
 // ===== Lokma Market (do'konlar) va bo'lim ruxsatlari =====
 // Ruxsat: .env LOKMA_MARKET_ACCESS / LOKMA_WEDDING_ACCESS (services/featureAccess.js)
 router.get('/features', marketController.features);
+// Do'kon uchun unikal shtrix-kod (panel formasidagi "Yaratish" tugmasi)
+router.post('/panel/barcode', auth, requireRole('restaurant'), restaurantPanelController.generateBarcode);
 router.get('/market/categories', marketController.categories);
 router.get('/market/stores', requireFeature('market'), marketController.marketMode, restaurantController.list);
 router.get('/market/products', requireFeature('market'), marketController.marketMode, dishController.all);
