@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { restaurantController, dishController } from '../controllers/catalog.js';
 import { marketController } from '../controllers/market.js';
 import { weddingProxy, weddingOwnerProxy } from '../controllers/weddingProxy.js';
+import { weddingUserController } from '../controllers/weddingUser.js';
 import { requireFeature } from '../services/featureAccess.js';
 import { restaurantBillingController } from '../controllers/restaurantBilling.js';
 import { bannerController, authController, orderController } from '../controllers/misc.js';
@@ -89,6 +90,9 @@ router.get('/dishes/:id', restaurantController.getDishById);
 // ===== Lokma Market (do'konlar) va bo'lim ruxsatlari =====
 // Ruxsat: .env LOKMA_MARKET_ACCESS / LOKMA_WEDDING_ACCESS (services/featureAccess.js)
 router.get('/features', marketController.features);
+// Mijozning o'z to'yxona bronlari (Lokma profilidagi telefon bo'yicha)
+router.get('/weddings/my-bookings', auth, requireFeature('wedding'), weddingUserController.myBookings);
+router.post('/weddings/my-bookings/:id/cancel', auth, requireFeature('wedding'), weddingUserController.cancel);
 // Do'kon uchun unikal shtrix-kod (panel formasidagi "Yaratish" tugmasi)
 router.post('/panel/barcode', auth, requireRole('restaurant'), restaurantPanelController.generateBarcode);
 router.get('/market/categories', marketController.categories);
