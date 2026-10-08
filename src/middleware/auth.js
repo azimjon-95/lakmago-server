@@ -19,6 +19,8 @@ export function auth(req, res, next) {
     req.role = payload.role;
     req.restaurantId = payload.restaurantId ?? null;
     req.department = payload.department ?? null;
+    // To'yxona egasi (role 'venue_owner') — to'yxona ID faqat tokendan
+    req.venueId = payload.role === 'venue_owner' ? (payload.venueId ?? null) : null;
     next();
   } catch {
     return res.status(401).json({ error: 'Token yaroqsiz' });
@@ -373,3 +375,11 @@ export const waiterOrRestaurantAuth = async (req, res, next) => {
     return res.status(401).json({ error: 'Sessiya tugagan' });
   }
 };
+
+/**
+ * To'yxona egasi tokeni. 7 kun — admin akkauntni o'chirsa yoki to'yxonani
+ * bloklasa, to'yxona serveri HAR so'rovda rad etadi (token kutilmaydi).
+ */
+export function signVenueOwnerToken(venueId) {
+  return jwt.sign({ userId: `venue:${venueId}`, role: 'venue_owner', venueId }, config.jwtSecret, { expiresIn: '7d' });
+}

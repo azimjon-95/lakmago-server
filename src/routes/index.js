@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { restaurantController, dishController } from '../controllers/catalog.js';
 import { marketController } from '../controllers/market.js';
-import { weddingProxy } from '../controllers/weddingProxy.js';
+import { weddingProxy, weddingOwnerProxy } from '../controllers/weddingProxy.js';
 import { requireFeature } from '../services/featureAccess.js';
 import { restaurantBillingController } from '../controllers/restaurantBilling.js';
 import { bannerController, authController, orderController } from '../controllers/misc.js';
@@ -468,6 +468,8 @@ router.patch('/panel/menu-transfers/:id/respond', auth, requireRole('restaurant'
 // Admin yaratadi, restoranlar tanlab narxini qo'yadi
 // ===== Lokma To'yxonalari — alohida server, faqat proksi (controllers/weddingProxy.js) =====
 router.all(/^\/admin\/wedding\/(.+)$/, auth, requireRole('admin'), weddingProxy);
+// To'yxona egasi CRM — faqat 'venue_owner' token, faqat o'z to'yxonasi
+router.all(/^\/owner\/wedding\/(.+)$/, auth, requireRole('venue_owner'), weddingOwnerProxy);
 
 router.get('/admin/catalog', auth, requireRole('admin'), catalogProductController.list);
 router.post('/admin/catalog', auth, requireRole('admin'), catalogProductController.create);
