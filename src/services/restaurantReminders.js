@@ -79,8 +79,10 @@ export function reminderText(o, n) {
 }
 
 function reminderKeyboard(o) {
+  // callback_data o'zgarmagan (o:remyes / o:remno) — faqat tugma yozuvi aniqroq
+  const yes = o.fulfillment === 'pickup' ? '✅ Ha, olib ketildi' : '✅ Ha, yetkazildi';
   return { inline_keyboard: [[
-    btn('✅ Yakunlandi', `o:remyes:${o._id}`, 'success'),
+    btn(yes, `o:remyes:${o._id}`, 'success'),
     btn('⏳ Jarayonda', `o:remno:${o._id}`),
   ]] };
 }
@@ -91,8 +93,21 @@ async function ask(o, n) {
 
   const text = reminderText(o, n);
   const keyboard = reminderKeyboard(o);
+
+  /*
+   * Eslatma — shu buyurtmaning O'ZI kartasiga JAVOB (reply) sifatida yuboriladi:
+   * xodim chatda aynan qaysi buyurtma haqida so'ralayotganini ko'radi (xabar
+   * tanlangan holda chiqadi). Karta xabari id'si RestaurantBotMessage'da (24 soat).
+   * Karta topilmasa yoki o'chirilgan bo'lsa — oddiy xabar (allow_sending_without_reply).
+   */
+  const cards = await RestaurantBotMessage.find({ orderId: o._id, kind: 'order' }).sort({ createdAt: -1 }).lean();
+  const cardOf = new Map();
+  for (const c of cards) if (!cardOf.has(String(c.telegramUserId))) cardOf.set(String(c.telegramUserId), c.messageId);
+
   const results = await Promise.all(staff.map(async (s) => {
-    const res = await sendToStaff(s.telegramUserId, text, keyboard);
+    const cardId = cardOf.get(String(s.telegramUserId));
+    const extra = cardId ? { reply_parameters: { message_id: cardId, allow_sending_without_reply: true } } : {};
+    const res = await sendToStaff(s.telegramUserId, text, keyboard, extra);
     const messageId = res?.result?.message_id;
     if (messageId) {
       await RestaurantBotMessage.create({

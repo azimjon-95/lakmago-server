@@ -91,3 +91,53 @@ export function confirmEligibility(o, now = Date.now()) {
   const asked = rr.forStatus === o.status && (rr.askedCount || 0) >= 1;
   return { eligible: asked || now >= eligibleAt.getTime(), eligibleAt };
 }
+
+
+/*
+ * ═══ MIJOZGA "QABUL QILDINGIZMI?" SO'ROVI — SOF QOIDA ═══
+ *
+ * MUAMMO: buyurtma qabul qilinadi, lekin oxirigacha yetkazilgani belgilanmaydi
+ * (restoran "Kuryerga topshirildi"ni, kuryer "Topshirdim"ni bosmaydi) — buyurtma
+ * ochiq qoladi va komissiya/pul hisobi tushmaydi.
+ *
+ * QOIDA (services/deliveryCheck.js checkDeliveries ishlatadi):
+ *   • accepted / preparing / ready (yetkazib berish): QABUL QILINGANIDAN
+ *     `firstAfterAcceptMin` (60) daqiqa o'tib hali yakunlanmagan bo'lsa — mijozga
+ *     bot orqali [✅ Ha, qabul qildim] [⏳ Kutyapman] yuboriladi;
+ *   • delivering: avvalgidek — kuryer olib ketganidan +20 daq (kuryerga vaqt beriladi);
+ *   • keyingi so'rovlar: avvalgisidan +10, +30 daq (jami 3 ta — hisoblagich umumiy);
+ *   • rejalashtirilgan buyurtma (scheduledFor) — vaqti kelmaguncha so'ralmaydi.
+ */
+export const CUSTOMER_ASK = {
+  firstAfterAcceptMin: 60,
+  deliveringFirstMin: 20,
+  gapsMin: [20, 10, 30], // [n]-so'rovdan oldingi kutish (n=0 — birinchi)
+  maxAsks: 3,
+};
+
+/** Sof qaror: mijozdan hozir so'rash kerakmi. @returns {{ ask: boolean, n?: number, dueAt?: number }} */
+export function planCustomerAsk(o, now = Date.now()) {
+  const R = CUSTOMER_ASK;
+  if (!COMPLETABLE_STATUSES.includes(o.status)) return { ask: false };
+  if (!o.userId) return { ask: false }; // zal buyurtmasida mijoz hisobi yo'q
+  // Yetkazib berishdan tashqari faqat eski 'delivering' yo'li (avvalgi xatti-harakat)
+  if (o.status !== 'delivering' && o.fulfillment !== 'delivery') return { ask: false };
+
+  const dc = o.deliveryCheck || {};
+  if (dc.confirmed) return { ask: false };
+  const count = dc.askedCount || 0;
+  if (count >= R.maxAsks) return { ask: false };
+
+  const T = (d) => new Date(d).getTime();
+  let due;
+  if (count > 0) {
+    due = T(dc.lastAskedAt || o.updatedAt || o.createdAt) + R.gapsMin[count] * MIN;
+  } else if (o.status === 'delivering') {
+    due = T(o.deliveringAt || o.updatedAt || o.createdAt) + R.deliveringFirstMin * MIN;
+  } else {
+    const accepted = T(o.acceptedAt || o.createdAt);
+    const stage = o.scheduledFor ? Math.max(accepted, T(o.scheduledFor)) : accepted;
+    due = stage + R.firstAfterAcceptMin * MIN;
+  }
+  return { ask: now >= due, n: count, dueAt: due };
+}

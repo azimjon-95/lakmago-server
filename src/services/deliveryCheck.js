@@ -1,4 +1,5 @@
-import { COMPLETABLE_STATUSES } from './reminderRules.js';
+import { COMPLETABLE_STATUSES, CUSTOMER_ASK, planCustomerAsk } from './reminderRules.js';
+import { orderLabel } from './orderNumber.js';
 import { config } from '../config/index.js';
 import { Order } from '../models/Order.js';
 import { Restaurant } from '../models/Restaurant.js';
@@ -25,18 +26,40 @@ async function tg(method, body) {
   }
 }
 
-// So'rov oralig'i: 1-marta 20 daq, 2-marta +10 daq, 3-marta +30 daq
-const INTERVALS = [20, 10, 30];
+// So'rov oralig'i (qoidalar — reminderRules.js CUSTOMER_ASK): 1-marta (delivering: +20 daq,
+// qabul qilingan buyurtma: qabuldan +60 daq), 2-marta +10 daq, 3-marta +30 daq
+const INTERVALS = CUSTOMER_ASK.gapsMin;
+
+const escHtml = (s = '') => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
 // ===== 1. SO'ROV YUBORISH =====
 async function askUser(order) {
   const user = await User.findById(order.userId).select('telegramId').lean();
   if (!user?.telegramId) return false;
 
-  const n = order.deliveryCheck.askedCount;
+  const n = order.deliveryCheck?.askedCount || 0;
+  const prevAskedAt = order.deliveryCheck?.lastAskedAt || null;
+
+  /*
+   * Avval hisoblagich ATOMIK band qilinadi, keyin xabar yuboriladi: ikki jarayon
+   * (yoki bir-biriga tegib ketgan ikki tekshiruv) bir vaqtda ishlasa ham mijozga
+   * bitta so'rov boradi. Faol bo'lmagan yoki allaqachon tasdiqlangan buyurtmaga
+   * umuman yuborilmaydi.
+   */
+  const claimed = await Order.findOneAndUpdate({
+    _id: order._id,
+    status: { $in: COMPLETABLE_STATUSES },
+    'deliveryCheck.confirmed': { $ne: true },
+    'deliveryCheck.askedCount': n === 0 ? { $not: { $gte: 1 } } : n,
+  }, {
+    $set: { 'deliveryCheck.askedCount': n + 1, 'deliveryCheck.lastAskedAt': new Date() },
+  });
+  if (!claimed) return false;
+
+  const ref = `<b>${escHtml(order.restaurantName)}</b> · ${orderLabel(order)}`;
   const text = n === 0
-    ? `🚴 <b>${order.restaurantName}</b>\n\nBuyurtmangizni oldingizmi?`
-    : `🔔 Eslatma\n\n<b>${order.restaurantName}</b> buyurtmangizni oldingizmi?`;
+    ? `🍽 ${ref}\n\nBuyurtmangizni qabul qildingizmi?`
+    : `🔔 Eslatma\n\n${ref}\n\nBuyurtmangizni qabul qildingizmi?`;
 
   const res = await tg('sendMessage', {
     chat_id: user.telegramId,
@@ -44,27 +67,27 @@ async function askUser(order) {
     parse_mode: 'HTML',
     reply_markup: {
       inline_keyboard: [[
-        { text: '✅ Oldim', callback_data: `dlv_got_${order._id}` },
-        { text: '⏳ Hali olmadim', callback_data: `dlv_not_${order._id}` },
+        { text: '✅ Ha, qabul qildim', callback_data: `dlv_got_${order._id}` },
+        { text: '⏳ Kutyapman', callback_data: `dlv_not_${order._id}` },
       ]],
     },
   });
 
-  if (res?.ok) {
-    order.deliveryCheck.askedCount = n + 1;
-    order.deliveryCheck.lastAskedAt = new Date();
-    await order.save();
-    return true;
-  }
+  if (res?.ok) return true;
+
+  // Yuborilmadi (Telegram xatosi) — hisoblagich qaytariladi, keyingi tekshiruvda qayta uriniladi
+  await Order.updateOne(
+    { _id: order._id, 'deliveryCheck.askedCount': n + 1 },
+    { $set: { 'deliveryCheck.askedCount': n, 'deliveryCheck.lastAskedAt': prevAskedAt } },
+  ).catch(() => {});
   return false;
 }
 
 // ===== 2. VAQTI KELGANLARNI TEKSHIRISH =====
 // Har 2 daqiqada ishlaydi.
-export async function checkDeliveries() {
+export async function checkDeliveries(now = Date.now()) {
   if (!config.telegramBotToken) return { sent: 0 };
 
-  const now = Date.now();
   let sent = 0;
 
   // Kuryer olib ketgan, hali tasdiqlanmagan, 3 martadan kam so'ralgan.
@@ -95,22 +118,31 @@ export async function checkDeliveries() {
     }
   }
 
-  for (const o of orders) {
-    const dc = o.deliveryCheck;
-    // Birinchi so'rov — kuryer olib ketgan vaqtdan hisoblanadi
-    const base = dc.lastAskedAt || o.updatedAt || o.createdAt;
-    const waitMin = INTERVALS[dc.askedCount];
-    const dueAt = new Date(base).getTime() + waitMin * 60_000;
+  /*
+   * QABUL QILINGAN, lekin yetkazilgani belgilanmagan buyurtmalar (restoran
+   * "Kuryerga topshirildi"ni bosmagan): qabuldan 1 soat o'tgach mijozdan so'raladi
+   * (qoida — reminderRules.planCustomerAsk). `$ne: true` / `$not` — eski buyurtmalarda
+   * deliveryCheck maydoni umuman bo'lmasligi mumkin (oddiy `false`/`$lt` ularni topmaydi).
+   * Rejalashtirilgan buyurtma (ertangi tort) uchun scheduledFor ham hisobga olinadi.
+   */
+  const stuckSince = new Date(now - 24 * 60 * 60_000);
+  const stuck = await Order.find({
+    status: { $in: ['accepted', 'preparing', 'ready'] },
+    fulfillment: 'delivery',
+    userId: { $ne: null },
+    $or: [{ createdAt: { $gte: stuckSince } }, { scheduledFor: { $gte: stuckSince } }],
+    'deliveryCheck.confirmed': { $ne: true },
+    'deliveryCheck.askedCount': { $not: { $gte: INTERVALS.length } },
+  }).limit(200);
 
-    if (now >= dueAt) {
-      try {
-        if (await askUser(o)) sent++;
-      } catch (e) {
-        console.error(`[delivery] so'rov xatosi (${o._id}):`, e.message);
-      }
+  for (const o of [...orders, ...stuck]) {
+    try {
+      if (planCustomerAsk(o, now).ask && await askUser(o)) sent++;
+    } catch (e) {
+      console.error(`[delivery] so'rov xatosi (${o._id}):`, e.message);
     }
   }
-  return { sent, checked: orders.length };
+  return { sent, checked: orders.length + stuck.length };
 }
 
 // ===== 3. YAKUNLASH — MIJOZ, RESTORAN VA AVTOMATIK =====
@@ -170,6 +202,19 @@ export async function confirmOrderDelivered(orderId, confirmedBy = 'customer', {
   // Baho — bir marta (askRatingForOrder o'zi tekshiradi)
   await askRatingForOrder(order).catch(() => {});
   return order;
+}
+
+/** Mijoz yakunlagach restoran botidagi eslatma tugmalarini olib tashlaydi va kartani yangilaydi (xatosi jim) */
+async function syncRestaurantBot(orderId) {
+  try {
+    // Dinamik import — restaurantReminders.js bu faylni import qiladi (aylanma bog'liqlik bo'lmasin)
+    const { clearReminderButtons } = await import('./restaurantReminders.js');
+    const { refreshOrderMessages } = await import('./restaurantBotOrders.js');
+    await clearReminderButtons(orderId);
+    await refreshOrderMessages(orderId);
+  } catch (e) {
+    console.error('[delivery] restoran boti yangilanmadi:', e.message);
+  }
 }
 
 // ===== 4. MIJOZ JAVOBI =====
@@ -235,13 +280,15 @@ export async function handleDeliveryResponse(cq) {
     return true;
   }
 
-  // === Oldim ===
+  // === Ha, qabul qildim ===
   const done = await confirmOrderDelivered(order._id, 'customer');
   await tg('answerCallbackQuery', {
     callback_query_id: cq.id,
     text: done ? 'Rahmat!' : 'Bu buyurtma yakunlangan yoki bekor qilingan',
     show_alert: !done,
   });
+  // Restoran botidagi "Yetkazdingizmi?" tugmalari va buyurtma kartasi yangilanadi (xodim ikki marta bosmasin)
+  if (done) await syncRestaurantBot(done._id);
   return true;
 }
 
