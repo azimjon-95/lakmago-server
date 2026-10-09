@@ -9,7 +9,8 @@ import { activePins } from '../services/restaurantPins.js';
 import { Types } from 'mongoose';
 import { dishCategoryValues, discountExpr } from '../constants/dishCategories.js';
 import { NOT_STORE, ONLY_STORE, andWith, isStore } from '../services/storeRules.js';
-import { MARKET_CATEGORY_VALUES } from '../constants/marketCategories.js';
+import { MARKET_CATEGORY_VALUES, marketSuggestion } from '../constants/marketCategories.js';
+import { CatalogProduct } from '../models/CatalogProduct.js';
 
 /*
  * Lokma Market rejimi: routes'da `req.marketMode = true` qo'yiladi
@@ -360,7 +361,7 @@ export const restaurantController = {
   // GET /api/restaurants/:id/dishes
   getDishes: asyncHandler(async (req, res) => {
     if (!isValidId(req.params.id)) return res.json([]);
-    const restaurant = await Restaurant.findById(req.params.id).select('isBlocked isActive').lean();
+    const restaurant = await Restaurant.findById(req.params.id).select('isBlocked isActive kind category').lean();
     if (!restaurant || restaurant.isBlocked || !restaurant.isActive) {
       return res.json([]);
     }
@@ -368,8 +369,31 @@ export const restaurantController = {
       restaurantId: req.params.id,
       isAvailable: true
     })
-      .select('restaurantId name description section category prepMinutes price oldPrice weight weightGram volume drinkType calories protein fat carbs ingredients optionGroups isHit isTrending isDiscounted tint icon images imageUrl isAvailable')
+      // marketCategory/unit/packSize/catalogProductId — do'kon (Lokma Market) mahsulotlari uchun
+      .select('restaurantId name description section category prepMinutes price oldPrice weight weightGram volume drinkType calories protein fat carbs ingredients optionGroups isHit isTrending isDiscounted tint icon images imageUrl isAvailable marketCategory unit packSize catalogProductId')
       .lean();
+
+    /*
+     * DO'KON: eski mahsulotlarda marketCategory bo'lmasligi mumkin (Market'dan oldin
+     * qo'shilgan) — u holda umumiy katalogdagi kategoriyasidan aniqlanadi
+     * (CATALOG_TO_MARKET). Bazaga YOZILMAYDI (faqat javobda); doimiy tuzatish uchun
+     * scripts/backfill-market-categories.js.
+     */
+    if (isStore(restaurant)) {
+      const missing = dishes.filter((d) => !d.marketCategory && d.catalogProductId);
+      if (missing.length) {
+        const cats = await CatalogProduct.find({ _id: { $in: missing.map((d) => d.catalogProductId) } }).select('category').lean();
+        const byId = new Map(cats.map((c) => [String(c._id), c.category]));
+        for (const d of missing) {
+          const cat = byId.get(String(d.catalogProductId));
+          if (cat) {
+            const sug = marketSuggestion(cat);
+            d.marketCategory = sug.marketCategory;
+            if (!d.unit) d.unit = sug.unit;
+          }
+        }
+      }
+    }
 
     // Mijozga yetkazish narxi ko'rsatiladi: baza + ustama + xizmat haqi.
     // Zal menyusi alohida endpointda (dineInPricing) va u tegilmaydi.
