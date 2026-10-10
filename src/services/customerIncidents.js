@@ -6,6 +6,7 @@ import { changeOrderStatus, OrderFlowError } from './orderFlow.js';
 import { orderLabel } from './orderNumber.js';
 import { notifyUser } from './telegram.js';
 import { getIO } from '../sockets/io.js';
+import { emitOrderToRestaurant } from './orderSocket.js';
 
 /*
  * ═══ "MIJOZ RAD ETDI" — admin tasdig'i bilan bekor qilish ═══
@@ -135,7 +136,7 @@ export async function createCancelRequest({ orderId, restaurantId, reasonCode, n
 
   await postToGroup(incident).catch((e) => console.error('[incident] guruh:', e.message));
   getIO()?.to('admin').emit('incident:new', { _id: incident._id });
-  getIO()?.to('admin').emit('order:update', claimed);
+  await pushOrderUpdate(claimed._id);
   return { incident, order: claimed };
 }
 
@@ -281,7 +282,21 @@ async function notifyRestaurant(inc, text) {
   } catch (e) {
     console.error('[incident] restoranga xabar:', e.message);
   }
-  getIO()?.to(`restaurant:${inc.restaurantId}`).emit('order:update', { _id: inc.orderId });
+  await pushOrderUpdate(inc.orderId);
+}
+
+/** Restoran paneli va admin uchun buyurtmaning yangi holati (xavfsiz ko'rinish — orderSocket) */
+async function pushOrderUpdate(orderId) {
+  const io = getIO();
+  if (!io) return;
+  try {
+    const order = await Order.findById(orderId).populate('userId', 'firstName lastName username telegramId phone photoUrl');
+    if (!order) return;
+    emitOrderToRestaurant(io, 'order:update', order);
+    io.to('admin').emit('order:update', order);
+  } catch (e) {
+    console.error('[incident] socket:', e.message);
+  }
 }
 
 /** Admin panel: hodisa uchun mijozning Telegram rasmi (file_id orqali) */
