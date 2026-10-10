@@ -1,3 +1,4 @@
+import { config } from '../config/index.js';
 import { REJECT_REASONS } from '../constants/rejectReasons.js';
 import { Order } from '../models/Order.js';
 import { Dish } from '../models/Dish.js';
@@ -613,7 +614,9 @@ export async function handleOrderCallback(cq) {
     await editStaffMessage(
       staff.telegramUserId,
       cq.message?.message_id,
-      buildOrderText(order, { tz, images, note: '🚫 <b>Mijoz nima uchun voz kechdi?</b>\nSo‘rov LokmaGo adminiga boradi — u tasdiqlasa buyurtma bekor qilinadi.' }),
+      buildOrderText(order, { tz, images, note: config.cancelApprovalRequired
+        ? '🚫 <b>Mijoz nima uchun voz kechdi?</b>\nSo‘rov LokmaGo adminiga boradi — u tasdiqlasa buyurtma bekor qilinadi.'
+        : '🚫 <b>Mijoz nima uchun voz kechdi?</b>\nSababni tanlang — buyurtma bekor qilinadi, holat LokmaGo adminiga yuboriladi.' }),
       kb([
         // "Boshqa" sabab izoh talab qiladi — u panel orqali
         ...Object.entries(REFUSAL_REASONS).filter(([k]) => k !== 'other').map(([key, label]) => [btn(`🚫 ${label}`, `o:refuse:${orderId}:${key}`, 'danger')]),
@@ -625,11 +628,11 @@ export async function handleOrderCallback(cq) {
   if (action === 'refuse') {
     const { createCancelRequest, IncidentError } = await import('./customerIncidents.js');
     try {
-      await createCancelRequest({
+      const r = await createCancelRequest({
         orderId, restaurantId: staff.restaurantId, reasonCode: extra,
         requestedBy: [staff.firstName, staff.username ? `@${staff.username}` : ''].filter(Boolean).join(' ') || 'Xodim (bot)',
       });
-      await answerCallback(cq.id, '✅ So‘rov LokmaGo adminiga yuborildi');
+      await answerCallback(cq.id, r.mode === 'post' ? '🚫 Buyurtma bekor qilindi, holat adminga yuborildi' : '✅ So‘rov LokmaGo adminiga yuborildi');
     } catch (e) {
       await answerCallback(cq.id, e instanceof IncidentError ? e.message : 'Xatolik, qayta urinib ko‘ring', { alert: true });
     }

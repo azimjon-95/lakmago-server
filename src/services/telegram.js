@@ -231,6 +231,18 @@ export async function handleBotUpdate(update) {
 
   // 3) Oddiy xabarlar (/start yoki /start ref_<id>)
   const message = update.message;
+
+  // Mijoz ilovadan "raqamni ulashish"ga rozilik berdi — telefonni hisobga bog'lash (services/phoneVerify.js)
+  if (message?.contact) {
+    try {
+      const { handleSharedContact } = await import('./phoneVerify.js');
+      await handleSharedContact(message);
+    } catch (e) {
+      console.error('[bot] kontakt xatosi:', e.message);
+    }
+    return;
+  }
+
   if (!message?.text) return;
 
   // Oddiy matn — baho izohi bo'lishi mumkin

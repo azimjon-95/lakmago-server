@@ -183,6 +183,18 @@ export const config = {
   supportGroupChatId: process.env.SUPPORT_GROUP_CHAT_ID?.trim() || '',
   // Admin ogohlantirishlari (mijoz rad etdi va h.k.) — alohida guruh; bo'sh bo'lsa SUPPORT_GROUP_CHAT_ID
   adminAlertsChatId: process.env.ADMIN_ALERTS_CHAT_ID?.trim() || process.env.SUPPORT_GROUP_CHAT_ID?.trim() || '',
+  /*
+   * "Mijoz rad etdi" rejimi (TZ: restoran ish jarayoni saqlanadi):
+   *   CANCEL_APPROVAL_REQUIRED=false (standart) — restoran qabul qilingan buyurtmani
+   *     sababi bilan DARHOL bekor qiladi; holat qayd etiladi, admin keyin ko'rib chiqadi;
+   *   CANCEL_APPROVAL_REQUIRED=true — bekor qilish LokmaGo admini tasdiqlagandan keyin.
+   */
+  cancelApprovalRequired: String(process.env.CANCEL_APPROVAL_REQUIRED || '').toLowerCase() === 'true',
+  /*
+   * Mijoz cheklovlari (naqdni o'chirish / bloklash) — faqat admin qo'lda, avtomatika yo'q.
+   * CUSTOMER_RESTRICTIONS_ENABLED=false — butunlay o'chiq (tugmalar ko'rinmaydi, naqd cheklovi tekshirilmaydi).
+   */
+  customerRestrictionsEnabled: String(process.env.CUSTOMER_RESTRICTIONS_ENABLED ?? 'true').toLowerCase() !== 'false',
 
   // Frontend manzillari (aniq ajratilган)
   webappOrigin,            // mijoz webapp'и (WEBAPP_URL)

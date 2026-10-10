@@ -656,6 +656,7 @@ router.get('/admin/incidents/:id', ...AS('orders'), adminIncidentController.get)
 router.post('/admin/incidents/:id/decide', ...AS('orders'), adminIncidentController.decide);
 router.get('/admin/incidents/:id/photo', ...AS('orders'), adminIncidentController.photo);
 router.get('/admin/restricted-customers', ...AS('orders'), adminIncidentController.restricted);
+router.get('/admin/cancellation-stats', ...AS('orders'), adminIncidentController.cancellationStats);
 router.patch('/admin/customers/:id/restrictions', ...AS('orders'), adminIncidentController.setRestrictions);
 router.get('/admin/orders', ...AS('orders'), adminController.allOrders);
 router.get('/admin/users', auth, requireRole('admin'), adminController.users);

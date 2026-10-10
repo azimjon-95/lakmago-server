@@ -102,7 +102,9 @@ export async function createCancelRequest({ orderId, restaurantId, reasonCode, n
   const restaurantName = order.restaurantId?.name || order.restaurantName || '';
   const reason = REFUSAL_REASONS[reasonCode];
 
+  const postMode = !config.cancelApprovalRequired;
   const incident = await CustomerIncident.create({
+    mode: postMode ? 'post' : 'approval',
     orderId: order._id,
     orderLabel: orderLabel(order),
     orderStatusAtRequest: order.status,
@@ -134,18 +136,47 @@ export async function createCancelRequest({ orderId, restaurantId, reasonCode, n
     throw new IncidentError('ALREADY_PENDING', 'So‘rov allaqachon yuborilgan — admin ko‘rib chiqmoqda', 409);
   }
 
+  /*
+   * STANDART (TZ): restoran ish jarayoni saqlanadi — buyurtma DARHOL bekor qilinadi
+   * (sabab va kod bilan), holat esa admin ko'rib chiqishi uchun qayd etiladi.
+   */
+  let finalOrder = claimed;
+  if (postMode) {
+    try {
+      const r = await changeOrderStatus({
+        orderId: order._id, restaurantId, status: 'cancelled',
+        actorName: requestedBy || 'Restoran', cancelReason: `Mijoz voz kechdi: ${reason}`,
+        cancelReasonCode: `refused_${reasonCode}`, approvedByAdmin: true,
+      });
+      finalOrder = r.order || claimed;
+      await Order.updateOne({ _id: order._id }, { $set: { 'cancelRequest.status': 'approved', 'cancelRequest.decidedAt': new Date() } });
+    } catch (e) {
+      // Bekor qilinmadi (orada holat o'zgardi) — hammasi ortga qaytariladi
+      await Order.updateOne({ _id: order._id }, { $unset: { cancelRequest: 1 } }).catch(() => {});
+      await CustomerIncident.deleteOne({ _id: incident._id }).catch(() => {});
+      if (e instanceof OrderFlowError) throw new IncidentError('ORDER_STATE', `Bekor qilib bo‘lmadi: ${e.message}`, 409);
+      throw e;
+    }
+  }
+
   await postToGroup(incident).catch((e) => console.error('[incident] guruh:', e.message));
   getIO()?.to('admin').emit('incident:new', { _id: incident._id });
   await pushOrderUpdate(claimed._id);
-  return { incident, order: claimed };
+  return { incident, order: finalOrder, mode: incident.mode };
 }
 
 function groupText(inc) {
   const s = inc.snapshot || {};
   const name = [s.firstName, s.lastName].filter(Boolean).join(' ') || 'Mijoz';
   const items = (inc.order?.items || []).map((i) => `  • ${esc(i.name)} × ${i.qty}`).join('\n');
-  const decided = inc.status === 'pending' ? '⏳ <b>Admin qarori kutilmoqda</b>'
-    : inc.status === 'approved'
+  const post = inc.mode === 'post';
+  const decided = inc.status === 'pending'
+    ? (post ? '⏳ <b>Buyurtma bekor qilindi — admin ko‘rib chiqishi kutilmoqda</b>' : '⏳ <b>Admin qarori kutilmoqda</b>')
+    : post
+      ? (inc.status === 'approved'
+        ? `🧾 <b>Ko‘rib chiqildi: mijoz voz kechgan</b>${inc.decision?.cashDisabled ? ' · 💵 naqd o‘chirildi' : ''}${inc.decision?.blocked ? ' · ⛔ bloklandi' : ''}${inc.decision?.by ? ` · ${esc(inc.decision.by)}` : ''}`
+        : `ℹ️ <b>Ko‘rib chiqildi: asossiz</b> — mijozga chora ko‘rilmadi${inc.decision?.by ? ` · ${esc(inc.decision.by)}` : ''}`)
+      : inc.status === 'approved'
       ? `✅ <b>Bekor qilish tasdiqlandi</b>${inc.decision?.cashDisabled ? ' · 💵 naqd o‘chirildi' : ''}${inc.decision?.blocked ? ' · ⛔ bloklandi' : ''}${inc.decision?.by ? ` · ${esc(inc.decision.by)}` : ''}`
       : `❌ <b>Rad etildi</b> — buyurtma davom etadi${inc.decision?.by ? ` · ${esc(inc.decision.by)}` : ''}`;
   return [
@@ -203,6 +234,24 @@ export async function decideIncident(id, { approve, disableCash = false, block =
   );
   if (!claimed) throw new IncidentError('ALREADY_DECIDED', 'Bu so‘rov allaqachon hal qilingan', 409);
 
+  // Cheklovlar o'chiq bo'lsa (CUSTOMER_RESTRICTIONS_ENABLED=false) — faqat qayd etiladi
+  if (!config.customerRestrictionsEnabled) { disableCash = false; block = false; }
+
+  // POST rejimi: buyurtma allaqachon bekor qilingan — faqat baho va (ixtiyoriy) cheklov
+  if (claimed.mode === 'post') {
+    const msg = String(customerMessage || '').trim().slice(0, 600) || defaultCustomerMessage(claimed);
+    if (approve && claimed.userId && (disableCash || block)) {
+      await applyRestrictions(claimed.userId, { disableCash, block, reason: msg, by: adminName, incidentId: claimed._id });
+    }
+    claimed.decision.cashDisabled = Boolean(approve && disableCash);
+    claimed.decision.blocked = Boolean(approve && block);
+    claimed.decision.customerMessage = approve && (disableCash || block) ? msg : '';
+    await claimed.save();
+    await refreshGroupPost(claimed).catch(() => {});
+    getIO()?.to('admin').emit('incident:update', { _id: claimed._id });
+    return claimed;
+  }
+
   if (!approve) {
     await Order.updateOne({ _id: inc.orderId }, { $set: { 'cancelRequest.status': 'rejected', 'cancelRequest.decidedAt': new Date() } });
     await notifyRestaurant(claimed, '❌ <b>LokmaGo admini bekor qilishni rad etdi</b> — buyurtmani davom ettiring.');
@@ -242,6 +291,7 @@ export async function decideIncident(id, { approve, disableCash = false, block =
 
 /** Naqd o'chirish / bloklash (admin qarori yoki keyinchalik qo'lda) — mijozga sababi bilan xabar */
 export async function applyRestrictions(userId, { disableCash, block, reason, by = 'Admin', incidentId }) {
+  if (!config.customerRestrictionsEnabled) return null; // cheklovlar o'chiq
   const set = {};
   if (disableCash) Object.assign(set, { 'cashDisabled.active': true, 'cashDisabled.reason': reason, 'cashDisabled.at': new Date(), 'cashDisabled.by': by, ...(incidentId ? { 'cashDisabled.incidentId': incidentId } : {}) });
   if (block) Object.assign(set, { status: 'BLOCKED', isActive: false, 'blockInfo.reason': reason, 'blockInfo.at': new Date(), 'blockInfo.by': by, ...(incidentId ? { 'blockInfo.incidentId': incidentId } : {}) });

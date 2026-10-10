@@ -10,6 +10,10 @@ const { changeOrderStatus, OrderFlowError } = await import('../src/services/orde
 const { buildOrderKeyboard } = await import('../src/services/restaurantBotOrders.js');
 const { createCancelRequest, IncidentError, REFUSAL_REASONS, REFUSABLE_STATUSES, defaultCustomerMessage } = await import('../src/services/customerIncidents.js');
 const { blockedPayload } = await import('../src/services/customerBlock.js');
+const { config } = await import('../src/config/index.js');
+const { CustomerIncident } = await import('../src/models/CustomerIncident.js');
+const { User } = await import('../src/models/User.js');
+const { handleSharedContact, normalizePhone } = await import('../src/services/phoneVerify.js');
 
 let fails = 0;
 const ok = (c, m) => { console.log(c ? '  ✓' : '  ✗ FAIL:', m); if (!c) fails++; };
@@ -33,7 +37,19 @@ console.log('\n[1] Restoran boti tugmalari');
   ok(Buffer.byteLength(longest) <= 64, `eng uzun sabab tugmasi ≤ 64 bayt (${Buffer.byteLength(longest)})`);
 }
 
-console.log('\n[2] Restoran qabul qilingan buyurtmani O‘ZI bekor qila olmaydi');
+console.log('\n[2a] STANDART (TZ): restoran qabul qilingan buyurtmani avvalgidek o‘zi bekor qila oladi');
+{
+  config.cancelApprovalRequired = false;
+  const lean = (v) => ({ select: () => ({ lean: async () => v }) });
+  Order.findOne = () => lean({ status: 'accepted', fulfillment: 'delivery' });
+  Order.findOneAndUpdate = () => ({ populate: async () => null });
+  let err = null;
+  try { await changeOrderStatus({ orderId: id, restaurantId: id, status: 'cancelled' }); } catch (e) { err = e; }
+  ok(err?.code === 'RACE_LOST', 'admin tasdig‘i talab qilinmaydi (eski ish jarayoni saqlangan)');
+}
+
+console.log('\n[2] CANCEL_APPROVAL_REQUIRED=true rejimi: restoran qabul qilingan buyurtmani o‘zi bekor qila olmaydi');
+config.cancelApprovalRequired = true;
 {
   const lean = (v) => ({ select: () => ({ lean: async () => v }) });
   Order.findOne = () => lean({ status: 'accepted', fulfillment: 'delivery' });
@@ -61,6 +77,7 @@ console.log('\n[2] Restoran qabul qilingan buyurtmani O‘ZI bekor qila olmaydi'
   ok(err?.code === 'RACE_LOST' && filter.status.$in.includes('delivering') && !filter.status.$in.includes('delivered'), 'admin tasdig‘i: yo‘ldagi buyurtma ham bekor qilinadi, yakunlangan — yo‘q');
 }
 
+config.cancelApprovalRequired = false;
 console.log('\n[3] So‘rov tekshiruvlari');
 {
   let e = null;
@@ -111,6 +128,49 @@ console.log('\n[5] Rad etish sabablari (qabul qilinmagan buyurtma) — "javob be
   upd = null;
   try { await changeOrderStatus({ orderId: id, restaurantId: id, status: 'cancelled', cancelReasonCode: 'DROP TABLE' }); } catch { /* */ }
   ok(!(upd?.$set || upd)?.cancelReasonCode, 'noto‘g‘ri kod yozilmaydi');
+}
+
+console.log('\n[6] "Mijoz rad etdi" (standart): buyurtma DARHOL bekor qilinadi, holat adminga qayd etiladi');
+{
+  config.cancelApprovalRequired = false;
+  const order = { _id: id, status: 'ready', restaurantId: { _id: id, name: 'Osiyo kafe' }, items: [{ name: 'Osh', qty: 1, price: 30000 }], total: 30000, paymentMethod: 'cash', phone: '+998901112233', userId: null, dailyNumber: 7, createdAt: new Date() };
+  // createCancelRequest .populate().populate(); changeOrderStatus .select().lean()
+  Order.findOne = () => ({ populate() { return { populate: async () => order }; }, select: () => ({ lean: async () => ({ status: 'ready', fulfillment: 'delivery' }) }) });
+  Order.countDocuments = async () => 0;
+  CustomerIncident.countDocuments = async () => 0;
+  let created = null;
+  CustomerIncident.create = async (d) => { created = { ...d, _id: 'b'.repeat(24), createdAt: new Date() }; return created; };
+  CustomerIncident.updateOne = async () => ({});
+  const updates = [];
+  Order.findOneAndUpdate = (f, u) => {
+    updates.push({ f, u });
+    if (u.$set?.cancelRequest) return Promise.resolve({ _id: id, cancelRequest: u.$set.cancelRequest });
+    return { populate: async () => ({ _id: id, status: 'cancelled', restaurantId: id, userId: null, items: [] }) };
+  };
+  Order.updateOne = async () => ({});
+  Order.findById = () => ({ populate: async () => null });
+  const r = await createCancelRequest({ orderId: id, restaurantId: id, reasonCode: 'not_needed', requestedBy: 'Ali' });
+  ok(created?.mode === 'post', 'hodisa "post" rejimida qayd etildi (admin keyin ko‘radi)');
+  const cancelUpd = updates.find((x) => x.u.$set?.status === 'cancelled' || x.u.status === 'cancelled');
+  const cset = cancelUpd?.u.$set || cancelUpd?.u;
+  ok(Boolean(cancelUpd), 'buyurtma darhol bekor qilindi (adminni kutmasdan)');
+  ok(cset?.cancelReasonCode === 'refused_not_needed' && /Mijoz voz kechdi/.test(cset?.cancelReason || ''), 'sabab va kod yozildi (tahlil uchun)');
+  ok(r.mode === 'post', 'javobda rejim: post');
+}
+
+console.log('\n[7] Telefon ↔ Telegram: faqat O‘Z kontakti tasdiqlanadi');
+{
+  ok(normalizePhone('90 123 45 67') === '+998901234567' && normalizePhone('+998 90 123-45-67') === '+998901234567', 'raqam normallashtiriladi');
+  ok(normalizePhone('123') === '', 'yaroqsiz raqam rad etiladi');
+  let upd = null;
+  User.findOneAndUpdate = (f, u) => { upd = { f, u }; return { select: async () => ({ _id: 'u1' }) }; };
+  await handleSharedContact({ from: { id: 555 }, contact: { user_id: 777, phone_number: '998901234567' } });
+  ok(upd === null, 'BOSHQA odamning kontakti — tasdiqlanmaydi');
+  await handleSharedContact({ from: { id: 555 }, contact: { user_id: 555, phone_number: '998901234567' } });
+  ok(upd?.f.telegramId === '555' && upd.u.$set.phoneVerified === true && upd.u.$set.phone === '+998901234567', 'o‘z kontakti — hisobga bog‘landi (phoneVerified)');
+  upd = null;
+  await handleSharedContact({ from: { id: 555 }, contact: { phone_number: '998901234567' } });
+  ok(upd === null, 'user_id yo‘q kontakt (qo‘lda kiritilgan) — tasdiqlanmaydi');
 }
 
 console.log(fails ? `\n✗ ${fails} ta xato` : '\n✓ Hammasi o‘tdi');

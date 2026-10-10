@@ -387,7 +387,7 @@ export const orderController = {
     {
       const me = await User.findById(req.userId).select('status blockInfo cashDisabled').lean();
       if (me?.status === 'BLOCKED') return res.status(403).json(blockedPayload(me));
-      if (paymentMethod === 'cash' && me?.cashDisabled?.active) {
+      if (paymentMethod === 'cash' && me?.cashDisabled?.active && config.customerRestrictionsEnabled) {
         return res.status(403).json({
           error: me.cashDisabled.reason
             ? `${me.cashDisabled.reason} Shu sababli faqat karta orqali to‘lab buyurtma bera olasiz.`

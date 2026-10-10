@@ -1,3 +1,4 @@
+import { config } from '../config/index.js';
 import { Order } from '../models/Order.js';
 import { User } from '../models/User.js';
 import { getIO } from '../sockets/io.js';
@@ -147,7 +148,7 @@ export async function changeOrderStatus({ orderId, restaurantId, status, actorNa
     return { order, changed: false };
   }
 
-  if (status === 'cancelled' && !approvedByAdmin && before.status !== 'pending') {
+  if (status === 'cancelled' && !approvedByAdmin && before.status !== 'pending' && config.cancelApprovalRequired) {
     throw new OrderFlowError(
       'NEEDS_ADMIN_APPROVAL',
       'Qabul qilingan buyurtmani faqat LokmaGo admini tasdig‘i bilan bekor qilish mumkin — “Mijoz rad etdi” tugmasini bosing',
