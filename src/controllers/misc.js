@@ -1,3 +1,4 @@
+import { blockedPayload } from '../services/customerBlock.js';
 import { z } from 'zod';
 import { asyncHandler } from '../middleware/error.js';
 import {
@@ -125,8 +126,10 @@ async function completeTelegramAuth(tgUser, { platform, deviceId, startParam } =
   }
 
   if (user.status === 'BLOCKED') {
-    const err = new Error('Akkauntingiz bloklangan');
+    const payload = blockedPayload(user);
+    const err = new Error(payload.error);
     err.status = 403;
+    err.payload = payload; // login javobida kod va sabab ham qaytadi
     throw err;
   }
 
@@ -189,7 +192,7 @@ export const authController = {
         startParam: req.body.startParam || req.body.start_param,
       });
     } catch (e) {
-      if (e.status) return res.status(e.status).json({ error: e.message });
+      if (e.status) return res.status(e.status).json(e.payload || { error: e.message });
       throw e;
     }
 
@@ -213,7 +216,7 @@ export const authController = {
     try {
       result = await completeTelegramAuth(data, { platform: platform || 'web', deviceId });
     } catch (e) {
-      if (e.status) return res.status(e.status).json({ error: e.message });
+      if (e.status) return res.status(e.status).json(e.payload || { error: e.message });
       throw e;
     }
 
@@ -239,7 +242,7 @@ export const authController = {
     if (!user || user.status === 'BLOCKED') {
       session.revokedAt = new Date();
       await session.save();
-      return res.status(403).json({ error: 'Akkauntingiz bloklangan' });
+      return res.status(403).json(blockedPayload(user));
     }
 
     // Rotatsiya: eski sessiya bekor qilinadi, yangisi yaratiladi
@@ -374,6 +377,27 @@ export const orderController = {
     const { orders, address, phone, paymentMethod, paymentLabel, useBonus,
             fulfillment, timingMode, scheduledFor, cardLast4, cardBrand,
             addressLat, addressLng, addressNote } = parsed.data;
+
+    /*
+     * Mijoz cheklovlari (admin qarori — services/customerIncidents.js):
+     *   bloklangan — buyurtma umuman yo'q;
+     *   naqd o'chirilgan — faqat karta bilan oldindan to'lov (barcha restoranlarda).
+     * Ilova naqd tugmasini o'chirib ko'rsatadi, lekin server ham tekshiradi.
+     */
+    {
+      const me = await User.findById(req.userId).select('status blockInfo cashDisabled').lean();
+      if (me?.status === 'BLOCKED') return res.status(403).json(blockedPayload(me));
+      if (paymentMethod === 'cash' && me?.cashDisabled?.active) {
+        return res.status(403).json({
+          error: me.cashDisabled.reason
+            ? `${me.cashDisabled.reason} Shu sababli faqat karta orqali to‘lab buyurtma bera olasiz.`
+            : 'Siz uchun naqd to‘lov o‘chirilgan — karta orqali to‘lang',
+          code: 'CUSTOMER_CASH_DISABLED',
+          reason: me.cashDisabled.reason || '',
+          at: me.cashDisabled.at || null,
+        });
+      }
+    }
 
     // Yetkazishda manzil majburiy, olib ketishda shart emas
     if (fulfillment === 'delivery' && !address.trim()) {

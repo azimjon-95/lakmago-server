@@ -265,6 +265,18 @@ const orderSchema = new Schema(
     // Bekor qilish
     cancelledAt: { type: Date, default: null },
     cancelReason: { type: String, default: '' },
+    /*
+     * Qabul qilingandan keyin bekor qilish — FAQAT LokmaGo admin tasdig'i bilan
+     * (restoran "Mijoz rad etdi" so'rovini yuboradi → admin hal qiladi).
+     * Batafsil ma'lumot CustomerIncident'da; bu yerda — panel/bot uchun qisqa holat.
+     */
+    cancelRequest: {
+      status: { type: String, enum: ['pending', 'approved', 'rejected'] },
+      incidentId: { type: Schema.Types.ObjectId, ref: 'CustomerIncident' },
+      reason: { type: String, default: '' },
+      requestedAt: { type: Date },
+      decidedAt: { type: Date },
+    },
 
     // Qaysi karta bilan to'landi (oxirgi 4 raqam va turi)
     cardLast4: { type: String, default: '' },

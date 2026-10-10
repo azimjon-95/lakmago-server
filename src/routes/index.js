@@ -3,6 +3,7 @@ import { restaurantController, dishController } from '../controllers/catalog.js'
 import { marketController } from '../controllers/market.js';
 import { weddingProxy, weddingOwnerProxy } from '../controllers/weddingProxy.js';
 import { weddingUserController } from '../controllers/weddingUser.js';
+import { panelIncidentController, adminIncidentController } from '../controllers/incidents.js';
 import { requireFeature } from '../services/featureAccess.js';
 import { restaurantBillingController } from '../controllers/restaurantBilling.js';
 import { bannerController, authController, orderController } from '../controllers/misc.js';
@@ -171,6 +172,9 @@ router.delete('/panel/telegram-staff/:id', auth, requireRole('restaurant'), rest
 router.get('/panel/reservations', auth, requireRole('restaurant'), reservationController.forRestaurantSelf);
 router.patch('/panel/reservations/:id/status', auth, requireRole('restaurant'), reservationController.updateStatus);
 router.patch('/panel/orders/:id/paid', auth, requireRole('restaurant'), restaurantPanelController.markPaid);
+// "Mijoz rad etdi" — qabul qilingan buyurtmani bekor qilish so'rovi (LokmaGo admini hal qiladi)
+router.get('/panel/refusal-reasons', auth, requireRole('restaurant'), panelIncidentController.reasons);
+router.post('/panel/orders/:id/cancel-request', auth, requireRole('restaurant'), panelIncidentController.request);
 router.get('/panel/banner', auth, requireRole('restaurant'), restaurantPanelController.getBanner);
 router.put('/panel/banner', auth, requireRole('restaurant'), restaurantPanelController.setBanner);
 router.delete('/panel/banner', auth, requireRole('restaurant'), restaurantPanelController.deleteBanner);
@@ -645,5 +649,12 @@ router.post('/admin/groups/check', auth, requireRole('admin'), adminController.r
 // Buyurtmalar nazorati
 router.get('/admin/orders', ...AS('orders'), adminController.orders);
 router.get('/admin/orders/live', ...AS('orders'), adminController.liveOrders);
+// Muammoli mijozlar: restoran so'rovlari, qaror, naqd o'chirish / bloklash
+router.get('/admin/incidents', ...AS('orders'), adminIncidentController.list);
+router.get('/admin/incidents/:id', ...AS('orders'), adminIncidentController.get);
+router.post('/admin/incidents/:id/decide', ...AS('orders'), adminIncidentController.decide);
+router.get('/admin/incidents/:id/photo', ...AS('orders'), adminIncidentController.photo);
+router.get('/admin/restricted-customers', ...AS('orders'), adminIncidentController.restricted);
+router.patch('/admin/customers/:id/restrictions', ...AS('orders'), adminIncidentController.setRestrictions);
 router.get('/admin/orders', ...AS('orders'), adminController.allOrders);
 router.get('/admin/users', auth, requireRole('admin'), adminController.users);

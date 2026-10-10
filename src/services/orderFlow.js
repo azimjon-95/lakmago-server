@@ -114,7 +114,16 @@ const STATUS_TEXT = {
  *   xodimi ismi). Xabarlarda ko'rsatiladi.
  * @returns {Promise<{order: object, changed: boolean}>}
  */
-export async function changeOrderStatus({ orderId, restaurantId, status, actorName = '', cancelReason }) {
+/*
+ * QABUL QILINGANDAN KEYIN BEKOR QILISH — faqat LokmaGo admin tasdig'i bilan.
+ * Restoran (panel/bot) uchun 'cancelled' faqat 'pending' (rad etish) dan.
+ * Qabul qilingan buyurtmani restoran "Mijoz rad etdi" so'rovi bilan yuboradi
+ * (services/customerIncidents.js), admin tasdiqlaganda shu funksiya
+ * `approvedByAdmin: true` bilan chaqiriladi (yo'lda — 'delivering' ham mumkin).
+ */
+const ADMIN_CANCEL_FROM = ['accepted', 'preparing', 'ready', 'delivering'];
+
+export async function changeOrderStatus({ orderId, restaurantId, status, actorName = '', cancelReason, approvedByAdmin = false }) {
   if (!RESTAURANT_STATUSES.includes(status)) {
     throw new OrderFlowError('INVALID_STATUS', 'Noto‘g‘ri status');
   }
@@ -138,7 +147,13 @@ export async function changeOrderStatus({ orderId, restaurantId, status, actorNa
     return { order, changed: false };
   }
 
-  const allowedFrom = REQUIRED_PREVIOUS[status] || [];
+  if (status === 'cancelled' && !approvedByAdmin && before.status !== 'pending') {
+    throw new OrderFlowError(
+      'NEEDS_ADMIN_APPROVAL',
+      'Qabul qilingan buyurtmani faqat LokmaGo admini tasdig‘i bilan bekor qilish mumkin — “Mijoz rad etdi” tugmasini bosing',
+    );
+  }
+  const allowedFrom = status === 'cancelled' && approvedByAdmin ? ADMIN_CANCEL_FROM : (REQUIRED_PREVIOUS[status] || []);
   if (!allowedFrom.includes(before.status)) {
     throw new OrderFlowError(
       'WRONG_STATE',

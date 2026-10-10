@@ -281,6 +281,14 @@ export function buildOrderKeyboard(order, assignment = null) {
     ? [btn(assignment ? '🔁 Kuryerga qayta ulashish' : '🚴 Kuryerga ulashish', `o:share:${id}`, 'primary')]
     : null;
 
+  /*
+   * Qabul qilingandan keyin mijoz voz kechsa — "Mijoz rad etdi" (LokmaGo admini
+   * tasdiqlaydi, services/customerIncidents.js). So'rov yuborilgan bo'lsa — kutish belgisi.
+   */
+  const refuseRow = order.cancelRequest?.status === 'pending'
+    ? [btn('⏳ Bekor qilish: admin qarori kutilmoqda', `o:refusewait:${id}`)]
+    : [btn('🚫 Mijoz rad etdi', `o:refusemenu:${id}`, 'danger')];
+
   switch (order.status) {
     case 'pending':
       return kb([
@@ -289,18 +297,18 @@ export function buildOrderKeyboard(order, assignment = null) {
       ]);
     case 'accepted':
     case 'preparing':
-      return kb([shareBtn, [btn('✅ Tayyor', `o:ready:${id}`, 'success')]]);
+      return kb([shareBtn, [btn('✅ Tayyor', `o:ready:${id}`, 'success')], refuseRow]);
     case 'ready':
-      if (!isDelivery) return kb([[btn('🤝 Mijozga topshirildi', `o:handover:${id}`, 'success')]]);
-      return kb([shareBtn, [btn('🛵 Kuryerga topshirildi', `o:delivering:${id}`, 'success')]]);
+      if (!isDelivery) return kb([[btn('🤝 Mijozga topshirildi', `o:handover:${id}`, 'success')], refuseRow]);
+      return kb([shareBtn, [btn('🛵 Kuryerga topshirildi', `o:delivering:${id}`, 'success')], refuseRow]);
     case 'delivering':
       /*
        * Olib ketish bu holatga faqat eski yo'l bilan tushadi (panel
        * yoki yangilanishdan oldingi buyurtma) — yakunlash imkoni
        * beriladi. Yetkazishda avvalgidek tugmasiz.
        */
-      if (!isDelivery) return kb([[btn('✅ Yakunlash', `o:handover:${id}`, 'success')]]);
-      return null;
+      if (!isDelivery) return kb([[btn('✅ Yakunlash', `o:handover:${id}`, 'success')], refuseRow]);
+      return kb([refuseRow]);
     case 'delivered':
       return null;
     default:
@@ -588,6 +596,48 @@ export async function handleOrderCallback(cq) {
 
   if (action === 'back') {
     await answerCallback(cq.id);
+    await refreshOrderMessages(orderId);
+    return;
+  }
+
+  /* ═══ "Mijoz rad etdi" — sabab tanlash → LokmaGo adminiga so'rov ═══ */
+  if (action === 'refusewait') {
+    await answerCallback(cq.id, '⏳ LokmaGo admini ko‘rib chiqmoqda', { alert: true });
+    return;
+  }
+  if (action === 'refusemenu') {
+    const order = await Order.findOne({ _id: orderId, restaurantId: staff.restaurantId }).lean();
+    const { REFUSAL_REASONS, REFUSABLE_STATUSES } = await import('./customerIncidents.js');
+    if (!order || !REFUSABLE_STATUSES.includes(order.status) || order.cancelRequest?.status === 'pending') {
+      await answerCallback(cq.id, 'Bu buyurtma uchun so‘rov yuborib bo‘lmaydi', { alert: true });
+      await refreshOrderMessages(orderId);
+      return;
+    }
+    await answerCallback(cq.id, 'Sababni tanlang');
+    const [tz, images] = await Promise.all([restaurantTz(order.restaurantId), dishImageMap(order.items)]);
+    await editStaffMessage(
+      staff.telegramUserId,
+      cq.message?.message_id,
+      buildOrderText(order, { tz, images, note: '🚫 <b>Mijoz nima uchun voz kechdi?</b>\nSo‘rov LokmaGo adminiga boradi — u tasdiqlasa buyurtma bekor qilinadi.' }),
+      kb([
+        // "Boshqa" sabab izoh talab qiladi — u panel orqali
+        ...Object.entries(REFUSAL_REASONS).filter(([k]) => k !== 'other').map(([key, label]) => [btn(`🚫 ${label}`, `o:refuse:${orderId}:${key}`, 'danger')]),
+        [btn('‹ Ortga', `o:back:${orderId}`)],
+      ]),
+    );
+    return;
+  }
+  if (action === 'refuse') {
+    const { createCancelRequest, IncidentError } = await import('./customerIncidents.js');
+    try {
+      await createCancelRequest({
+        orderId, restaurantId: staff.restaurantId, reasonCode: extra,
+        requestedBy: [staff.firstName, staff.username ? `@${staff.username}` : ''].filter(Boolean).join(' ') || 'Xodim (bot)',
+      });
+      await answerCallback(cq.id, '✅ So‘rov LokmaGo adminiga yuborildi');
+    } catch (e) {
+      await answerCallback(cq.id, e instanceof IncidentError ? e.message : 'Xatolik, qayta urinib ko‘ring', { alert: true });
+    }
     await refreshOrderMessages(orderId);
     return;
   }

@@ -61,6 +61,27 @@ const userSchema = new Schema(
     }],
     defaultAddressId: { type: Schema.Types.ObjectId },
 
+    /*
+     * ═══ MIJOZ CHEKLOVLARI (admin qarori) ═══
+     * cashDisabled — naqd to'lov o'chirilgan: mijoz faqat karta bilan oldindan
+     *   to'lab buyurtma beradi (barcha restoranlarda). Sababi mijozga ko'rsatiladi.
+     * blockInfo — bloklash sababi (bloklashning o'zi: status='BLOCKED').
+     * Qaror manbai — CustomerIncident (models/CustomerIncident.js).
+     */
+    cashDisabled: {
+      active: { type: Boolean, default: false, index: true },
+      reason: { type: String, default: '' },
+      at: { type: Date },
+      by: { type: String, default: '' },
+      incidentId: { type: Schema.Types.ObjectId, ref: 'CustomerIncident' },
+    },
+    blockInfo: {
+      reason: { type: String, default: '' },
+      at: { type: Date },
+      by: { type: String, default: '' },
+      incidentId: { type: Schema.Types.ObjectId, ref: 'CustomerIncident' },
+    },
+
     // ===== TO'LOV KARTALARI =====
     // Xavfsizlik: to'liq raqam SAQLANMAYDI — faqat oxirgi 4 raqam
     // va turi. Haqiqiy to'lov Payme/Click orqali amalga oshiriladi.

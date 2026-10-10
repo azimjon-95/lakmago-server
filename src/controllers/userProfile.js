@@ -1,3 +1,4 @@
+import { blockedPayload } from '../services/customerBlock.js';
 import { z } from 'zod';
 import { asyncHandler } from '../middleware/error.js';
 import { User } from '../models/User.js';
@@ -34,7 +35,7 @@ export const userProfileController = {
   me: asyncHandler(async (req, res) => {
     const user = await User.findById(req.userId);
     if (!user) return res.status(404).json({ error: 'Foydalanuvchi topilmadi' });
-    if (user.status === 'BLOCKED') return res.status(403).json({ error: 'Akkauntingiz bloklangan' });
+    if (user.status === 'BLOCKED') return res.status(403).json(blockedPayload(user));
     res.json({ user });
   }),
 
@@ -50,7 +51,7 @@ export const userProfileController = {
 
     const user = await User.findById(req.userId);
     if (!user) return res.status(404).json({ error: 'Foydalanuvchi topilmadi' });
-    if (user.status === 'BLOCKED') return res.status(403).json({ error: 'Akkauntingiz bloklangan' });
+    if (user.status === 'BLOCKED') return res.status(403).json(blockedPayload(user));
 
     /*
      * Telefon o'zgarsa phoneVerified qayta false bo'ladi — eski

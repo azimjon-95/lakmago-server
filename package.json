@@ -44,7 +44,8 @@
     "test:commission": "node tests/commission-source.test.mjs",
     "test:morning": "node tests/morning-checklist.test.mjs",
     "test:order-socket": "node tests/order-socket.test.mjs",
-    "test:customer-ask": "node tests/customer-ask.test.mjs"
+    "test:customer-ask": "node tests/customer-ask.test.mjs",
+    "test:incidents": "node tests/customer-incidents.test.mjs"
   },
   "dependencies": {
     "@socket.io/redis-adapter": "^8.3.0",

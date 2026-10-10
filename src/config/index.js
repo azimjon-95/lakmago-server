@@ -181,6 +181,8 @@ export const config = {
    * funksiyalar uchun admin qilib qo'yish tavsiya etiladi.
    */
   supportGroupChatId: process.env.SUPPORT_GROUP_CHAT_ID?.trim() || '',
+  // Admin ogohlantirishlari (mijoz rad etdi va h.k.) — alohida guruh; bo'sh bo'lsa SUPPORT_GROUP_CHAT_ID
+  adminAlertsChatId: process.env.ADMIN_ALERTS_CHAT_ID?.trim() || process.env.SUPPORT_GROUP_CHAT_ID?.trim() || '',
 
   // Frontend manzillari (aniq ajratilган)
   webappOrigin,            // mijoz webapp'и (WEBAPP_URL)
