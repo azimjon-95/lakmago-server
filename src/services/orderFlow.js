@@ -123,7 +123,7 @@ const STATUS_TEXT = {
  */
 const ADMIN_CANCEL_FROM = ['accepted', 'preparing', 'ready', 'delivering'];
 
-export async function changeOrderStatus({ orderId, restaurantId, status, actorName = '', cancelReason, approvedByAdmin = false }) {
+export async function changeOrderStatus({ orderId, restaurantId, status, actorName = '', cancelReason, cancelReasonCode, approvedByAdmin = false }) {
   if (!RESTAURANT_STATUSES.includes(status)) {
     throw new OrderFlowError('INVALID_STATUS', 'Noto‘g‘ri status');
   }
@@ -172,6 +172,10 @@ export async function changeOrderStatus({ orderId, restaurantId, status, actorNa
    * alohida updateOne bilan keyin yozilardi va xodimlarning
    * Telegram xabari sababsiz yangilanib qolardi.
    */
+  // Sabab kodi — takroriy holatlarni tahlil qilish uchun (constants/rejectReasons.js)
+  if (status === 'cancelled' && typeof cancelReasonCode === 'string' && /^[a-z_]{2,32}$/.test(cancelReasonCode)) {
+    update.cancelReasonCode = cancelReasonCode;
+  }
   if (status === 'cancelled' && typeof cancelReason === 'string' && cancelReason.trim()) {
     update.cancelReason = cancelReason.trim().slice(0, 200);
   }

@@ -1,3 +1,4 @@
+import { REJECT_REASONS } from '../constants/rejectReasons.js';
 import { generateUniqueBarcode, barcodeTakenInStore, cleanBarcode, BARCODE_RE } from '../services/barcode.js';
 import { isStore } from '../services/storeRules.js';
 import { MARKET_CATEGORY_VALUES, MARKET_UNIT_VALUES } from '../constants/marketCategories.js';
@@ -201,6 +202,9 @@ export const restaurantPanelController = {
     getIO()?.to('admin').emit('dish:update', { restaurantId: String(rid(req)) });
     res.status(201).json(dish);
   }),
+
+  // GET /api/panel/reject-reasons — qabul qilinmagan buyurtmani rad etish sabablari
+  rejectReasons: (_req, res) => res.json(Object.entries(REJECT_REASONS).map(([value, label]) => ({ value, label }))),
 
   /*
    * POST /api/panel/barcode — do'kon uchun unikal shtrix-kod (EAN-13, ichki prefiks 200).
@@ -406,10 +410,13 @@ export const restaurantPanelController = {
    */
   updateOrderStatus: asyncHandler(async (req, res) => {
     try {
+      // Rad etish sababi (ixtiyoriy): faqat ro'yxatdagi kod qabul qilinadi
+      const code = typeof req.body.reason === 'string' && REJECT_REASONS[req.body.reason] ? req.body.reason : undefined;
       const { order, changed } = await changeOrderStatus({
         orderId: req.params.id,
         restaurantId: rid(req),
         status: req.body.status,
+        ...(req.body.status === 'cancelled' && code ? { cancelReason: REJECT_REASONS[code], cancelReasonCode: code } : {}),
       });
       /*
        * XAVFSIZLIK: avval `res.json(order)` — XOM Mongoose hujjati edi:

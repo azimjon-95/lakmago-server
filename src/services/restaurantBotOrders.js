@@ -1,3 +1,4 @@
+import { REJECT_REASONS } from '../constants/rejectReasons.js';
 import { Order } from '../models/Order.js';
 import { Dish } from '../models/Dish.js';
 import { Reservation } from '../models/Reservation.js';
@@ -56,13 +57,7 @@ const DEFAULT_TZ = 'Asia/Tashkent';
  * Rad etish sabablari — tayyor tugmalar: xodim telefonda tez
  * harakat qiladi va statistikada guruhlanadi.
  */
-const REJECT_REASONS = {
-  out: 'Taom tugagan',
-  busy: 'Oshxona band',
-  far: 'Manzil juda uzoq',
-  closing: 'Yopilish vaqti',
-  other: 'Boshqa sabab',
-};
+// Rad etish sabablari — umumiy ro'yxat (panel bilan bir xil): constants/rejectReasons.js
 
 /* ═══════════════════════════════════════════════════════════
  * TAOM RASMLARI — XABARDAGI HAVOLALAR
@@ -656,6 +651,7 @@ export async function handleOrderCallback(cq) {
       status: meta.status,
       actorName,
       cancelReason: action === 'reject' ? (REJECT_REASONS[extra] || REJECT_REASONS.other) : undefined,
+      cancelReasonCode: action === 'reject' ? (REJECT_REASONS[extra] ? extra : 'other') : undefined,
     });
 
     /*

@@ -265,6 +265,8 @@ const orderSchema = new Schema(
     // Bekor qilish
     cancelledAt: { type: Date, default: null },
     cancelReason: { type: String, default: '' },
+    // Sabab kodi (no_answer, not_confirmed, out...) — tahlil uchun; constants/rejectReasons.js
+    cancelReasonCode: { type: String },
     /*
      * Qabul qilingandan keyin bekor qilish — FAQAT LokmaGo admin tasdig'i bilan
      * (restoran "Mijoz rad etdi" so'rovini yuboradi → admin hal qiladi).

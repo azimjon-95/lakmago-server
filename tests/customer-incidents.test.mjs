@@ -94,5 +94,24 @@ console.log('\n[4] Mijozga ko‘rsatiladigan matnlar');
   ok(blockedPayload(null).code === 'USER_BLOCKED', 'sababsiz blok ham to‘g‘ri javob');
 }
 
+console.log('\n[5] Rad etish sabablari (qabul qilinmagan buyurtma) — "javob bermadi" / "tasdiqlamadi"');
+{
+  const { REJECT_REASONS } = await import('../src/constants/rejectReasons.js');
+  ok(REJECT_REASONS.no_answer && REJECT_REASONS.not_confirmed, 'yangi sabablar bor');
+  ok(['out', 'busy', 'far', 'closing', 'other'].every((k) => REJECT_REASONS[k]), 'eski sabablar o‘zgarmagan (eski tugmalar ishlaydi)');
+  const longest = Object.keys(REJECT_REASONS).map((k) => `o:reject:${id}:${k}`).sort((a, b) => b.length - a.length)[0];
+  ok(Buffer.byteLength(longest) <= 64, `bot tugmasi ≤ 64 bayt (${Buffer.byteLength(longest)})`);
+  // Kod buyurtmaga yoziladi (atomik yangilash ichida)
+  Order.findOne = () => ({ select: () => ({ lean: async () => ({ status: 'pending', fulfillment: 'delivery' }) }) });
+  let upd = null;
+  Order.findOneAndUpdate = (f, u) => { upd = u; return { populate: async () => null }; };
+  try { await changeOrderStatus({ orderId: id, restaurantId: id, status: 'cancelled', cancelReason: REJECT_REASONS.no_answer, cancelReasonCode: 'no_answer' }); } catch { /* RACE_LOST soxtada */ }
+  const set = upd?.$set || upd;
+  ok(set?.cancelReasonCode === 'no_answer' && set?.cancelReason === 'Mijoz telefonga javob bermadi', 'sabab matni va kodi buyurtmaga yoziladi');
+  upd = null;
+  try { await changeOrderStatus({ orderId: id, restaurantId: id, status: 'cancelled', cancelReasonCode: 'DROP TABLE' }); } catch { /* */ }
+  ok(!(upd?.$set || upd)?.cancelReasonCode, 'noto‘g‘ri kod yozilmaydi');
+}
+
 console.log(fails ? `\n✗ ${fails} ta xato` : '\n✓ Hammasi o‘tdi');
 process.exit(fails ? 1 : 0);

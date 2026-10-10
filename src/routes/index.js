@@ -174,6 +174,7 @@ router.patch('/panel/reservations/:id/status', auth, requireRole('restaurant'), 
 router.patch('/panel/orders/:id/paid', auth, requireRole('restaurant'), restaurantPanelController.markPaid);
 // "Mijoz rad etdi" — qabul qilingan buyurtmani bekor qilish so'rovi (LokmaGo admini hal qiladi)
 router.get('/panel/refusal-reasons', auth, requireRole('restaurant'), panelIncidentController.reasons);
+router.get('/panel/reject-reasons', auth, requireRole('restaurant'), restaurantPanelController.rejectReasons);
 router.post('/panel/orders/:id/cancel-request', auth, requireRole('restaurant'), panelIncidentController.request);
 router.get('/panel/banner', auth, requireRole('restaurant'), restaurantPanelController.getBanner);
 router.put('/panel/banner', auth, requireRole('restaurant'), restaurantPanelController.setBanner);
