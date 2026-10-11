@@ -27,7 +27,7 @@ import { computeOrderFinance, reconcile, somToTiyin, tiyinToSom } from '../servi
 import { activeAgreement } from '../models/CommissionAgreement.js';
 import { COMPLETABLE_STATUSES } from '../services/reminderRules.js';
 import { emitOrderToRestaurant } from '../services/orderSocket.js';
-import { customerOrderView } from '../services/customerOrderView.js';
+import { customerOrderView, attachRestaurantGeo } from '../services/customerOrderView.js';
 
 // Faol kelishuvi yo'q restoran: ogohlantirish soatiga BIR marta (har buyurtmada jurnal to'lib ketmasin)
 const noAgreementWarned = new Map();
@@ -1067,41 +1067,29 @@ export const orderController = {
 
   myOrders: asyncHandler(async (req, res) => {
     const orders = await Order.find({ userId: req.userId }).sort({ createdAt: -1 });
-    res.json(orders.map(customerOrderView));
+    res.json(await attachRestaurantGeo(orders));
   }),
 
-  // GET /api/orders/group/:groupId  (bitta buyurtma = bir necha restoran)
   getGroup: asyncHandler(async (req, res) => {
     const orders = await Order.find({ groupId: req.params.groupId, userId: req.userId }).sort({ createdAt: 1 });
     if (orders.length === 0) return res.status(404).json({ error: 'Buyurtma topilmadi' });
-    res.json(orders.map(customerOrderView));
+    res.json(await attachRestaurantGeo(orders));
   }),
 
-  // GET /api/orders/active  (mijozning faol buyurtmalari)
   active: asyncHandler(async (req, res) => {
     const orders = await Order.find({
       userId: req.userId,
-      status: { $nin: ['delivered', 'cancelled'] },
+      status: { $nin: ['delivered', 'cancelled', 'awaiting_payment'] },
     }).sort({ createdAt: -1 });
-    res.json(orders.map(customerOrderView));
+    res.json(await attachRestaurantGeo(orders));
   }),
 
-  // GET /api/orders/:id
   getOne: asyncHandler(async (req, res) => {
     if (!/^[a-f\d]{24}$/i.test(req.params.id)) return res.status(404).json({ error: 'Buyurtma topilmadi' });
-    /*
-     * XAVFSIZLIK: userId bilan cheklanadi.
-     *
-     * ILGARI faqat Order.findById(id) edi — egasi TEKSHIRILMAGAN.
-     * Login qilgan istalgan mijoz istalgan buyurtma ID'sini
-     * kiritib, BOSHQA mijozning manzili, telefoni, to'lov
-     * holatini ko'ra olardi. ID'lar ketma-ket taxmin
-     * qilinadigan formatda emas (MongoDB ObjectId), lekin bu
-     * "xavfsizlik qorong'ulik orqali" — himoya emas.
-     */
     const order = await Order.findOne({ _id: req.params.id, userId: req.userId });
     if (!order) return res.status(404).json({ error: 'Buyurtma topilmadi' });
-    res.json(customerOrderView(order));
+    const [view] = await attachRestaurantGeo([order]);
+    res.json(view);
   }),
 
   /*
