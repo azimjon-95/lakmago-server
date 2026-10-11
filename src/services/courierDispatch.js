@@ -421,6 +421,12 @@ export async function updateCourierLocation(token, secret, { lat, lng, accuracy,
       && haversineMeters({ lat, lng }, { lat: snap.lat, lng: snap.lng }) <= ARRIVED_RADIUS_M) {
     await Order.updateOne({ _id: a.orderId, status: 'delivering', arrivedAt: { $exists: false } }, { $set: { arrivedAt: now } });
   }
-  getIO()?.to(`order:${a.orderId}`).emit('order:courier', { orderId: String(a.orderId), lat, lng, at: now.toISOString() });
+  /*
+   * Soket orqali KOORDINATA YUBORILMAYDI: `order:<id>` xonasiga ulangan soket
+   * tekshirilmaydi (io.js track:order), shuning uchun koordinata begona odamga
+   * oshkor bo'lishi mumkin. Faqat "yangilanish bor" belgisi; mijoz ilovasi
+   * koordinatani avtorizatsiyadan o'tgan GET /orders/:id/track bilan oladi.
+   */
+  getIO()?.to(`order:${a.orderId}`).emit('order:courier', { orderId: String(a.orderId) });
   return { ok: true };
 }
