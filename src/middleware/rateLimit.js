@@ -79,3 +79,17 @@ export const writeLimiter = rateLimit({
   legacyHeaders: false,
   handler: limitHandler,
 });
+
+/**
+ * Kuryer jonli joylashuvi — har ~8 soniyada bitta so'rov (daqiqada ~8), ehtiyot bilan 40.
+ * Havola tokeni bo'yicha cheklanadi (bir nechta kuryer bir IP ortida bo'lishi mumkin).
+ */
+export const courierLocationLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 40,
+  keyGenerator: (req) => `loc:${req.params.token || req.ip}`,
+  standardHeaders: true,
+  legacyHeaders: false,
+  validate: { keyGeneratorIpFallback: false },
+  handler: limitHandler,
+});

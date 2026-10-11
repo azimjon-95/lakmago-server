@@ -42,6 +42,30 @@ const deliveryAssignmentSchema = new Schema(
     },
 
     assignedCourierId: { type: Schema.Types.ObjectId, ref: 'Courier', default: null },
+
+    /*
+     * QABUL QILGAN KURYER — o'zi kiritgan ma'lumot (kuryer sahifasi, qabul qilgach).
+     * Mijoz kuzatuv sahifasida ko'rinadi (services/orderTrack.js): ism, telefon,
+     * transport turi. Telefon FAQAT buyurtma yo'lda bo'lganda mijozga beriladi.
+     */
+    courier: {
+      name: { type: String, default: '', trim: true, maxlength: 60 },
+      phone: { type: String, default: '', trim: true, maxlength: 20 },
+      vehicle: { type: String, enum: ['', 'scooter', 'bike', 'car', 'foot'], default: '' },
+    },
+
+    /*
+     * JONLI JOYLASHUV — kuryer sahifasi har ~8 soniyada yuboradi
+     * (courierDispatch.updateCourierLocation). Faqat OXIRGI nuqta saqlanadi;
+     * tarix yig'ilmaydi. Buyurtma yakunlangach mijozga berilmaydi.
+     */
+    location: {
+      lat: { type: Number },
+      lng: { type: Number },
+      accuracy: { type: Number },
+      heading: { type: Number },
+      at: { type: Date },
+    },
     assignedAt: { type: Date, default: null },
     deliveredAt: { type: Date, default: null },
 

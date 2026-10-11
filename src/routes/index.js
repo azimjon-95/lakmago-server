@@ -46,7 +46,7 @@ import {
   auth, requireRole, requirePage, waiterAuth, waiterOrRestaurantAuth,
   kioskAuth, requireKioskSection,
 } from '../middleware/auth.js';
-import { loginLimiter, writeLimiter } from '../middleware/rateLimit.js';
+import { loginLimiter, writeLimiter, courierLocationLimiter } from '../middleware/rateLimit.js';
 import { botBroadcastController } from '../controllers/botBroadcast.js';
 import { adAttachment, adChunkBody, adUploadController } from '../middleware/adUpload.js';
 import { restaurantPinsController } from '../controllers/restaurantPins.js';
@@ -104,6 +104,7 @@ router.get('/market/products', requireFeature('market'), marketController.market
 router.post('/orders', auth, orderController.create);
 router.get('/orders', auth, orderController.myOrders);
 router.patch('/orders/:id/cancel', auth, orderController.cancelOrder);
+router.get('/orders/:id/track', auth, orderController.track);
 router.get('/orders/active', auth, orderController.active);
 router.get('/orders/group/:groupId', auth, orderController.getGroup);
 router.get('/orders/:id', auth, orderController.getOne);
@@ -360,6 +361,9 @@ router.delete('/admin/couriers/:id', ...AS('couriers'), courierRegistryControlle
 router.get('/courier-portal/:token', courierPortalController.view);
 router.post('/courier-portal/:token/accept', writeLimiter, courierPortalController.accept);
 router.post('/courier-portal/:token/deliver', writeLimiter, courierPortalController.deliver);
+router.post('/courier-portal/:token/profile', writeLimiter, courierPortalController.profile);
+// GPS har ~8 soniyada — umumiy yozish limitidan alohida, yumshoqroq
+router.post('/courier-portal/:token/location', courierLocationLimiter, courierPortalController.location);
 
 // Reklama (banner) so'rovlari — restoran paneli
 router.get('/panel/ads', ...R, panelAdsController.list);

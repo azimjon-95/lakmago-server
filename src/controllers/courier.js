@@ -1,7 +1,7 @@
 import { asyncHandler } from '../middleware/error.js';
 import { z } from 'zod';
 import { Courier } from '../models/Courier.js';
-import { createShareLink, getShareView, acceptShare, deliverShare, buildShareUrls } from '../services/courierDispatch.js';
+import { createShareLink, getShareView, acceptShare, deliverShare, buildShareUrls, setCourierProfile, updateCourierLocation } from '../services/courierDispatch.js';
 
 function rid(req) {
   return req.restaurantId;
@@ -178,6 +178,24 @@ export const courierPortalController = {
     // MUHIM: secret FAQAT shu javobda qaytariladi — URL'da EMAS,
     // loglarda/tarixda qolib ketmasligi uchun
     res.json({ ok: true, secret: result.secret });
+  }),
+
+  // POST /courier-portal/:token/profile  { secret, name, phone, vehicle } — mijoz kuzatuvidagi kuryer kartasi
+  profile: asyncHandler(async (req, res) => {
+    const b = z.object({ secret: z.string().min(8).max(200), name: z.string().max(80), phone: z.string().max(30), vehicle: z.string().max(12).optional() }).safeParse(req.body);
+    if (!b.success) return res.status(400).json({ error: 'Ma‘lumot noto‘g‘ri' });
+    const r = await setCourierProfile(req.params.token, b.data.secret, b.data);
+    if (!r.ok) return res.status(409).json({ error: r.error });
+    res.json({ ok: true });
+  }),
+
+  // POST /courier-portal/:token/location  { secret, lat, lng, accuracy?, heading? } — jonli joylashuv
+  location: asyncHandler(async (req, res) => {
+    const b = z.object({ secret: z.string().min(8).max(200), lat: z.number(), lng: z.number(), accuracy: z.number().optional(), heading: z.number().optional() }).safeParse(req.body);
+    if (!b.success) return res.status(400).json({ error: 'Ma‘lumot noto‘g‘ri' });
+    const r = await updateCourierLocation(req.params.token, b.data.secret, b.data);
+    if (!r.ok) return res.status(409).json({ error: r.error });
+    res.json({ ok: true });
   }),
 
   // POST /courier-portal/:token/deliver  { secret }

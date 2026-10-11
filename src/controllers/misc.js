@@ -28,6 +28,7 @@ import { activeAgreement } from '../models/CommissionAgreement.js';
 import { COMPLETABLE_STATUSES } from '../services/reminderRules.js';
 import { emitOrderToRestaurant } from '../services/orderSocket.js';
 import { customerOrderView, attachRestaurantGeo } from '../services/customerOrderView.js';
+import { getOrderTrack } from '../services/orderTrack.js';
 
 // Faol kelishuvi yo'q restoran: ogohlantirish soatiga BIR marta (har buyurtmada jurnal to'lib ketmasin)
 const noAgreementWarned = new Map();
@@ -364,7 +365,6 @@ const batchOrderSchema = z.object({
   useBonus: z.number().nonnegative().default(0), // ishlatmoqchi bo'lган bonus (so'm)
 });
 
-const COURIERS = ['Aziz', 'Bek', 'Dilshod', 'Jasur', 'Sardor', 'Ulug\'bek'];
 
 export const orderController = {
   // POST /api/orders
@@ -901,8 +901,9 @@ export const orderController = {
         addressNote: addressNote || '',
         ...(o._distanceKm != null ? { distanceKm: o._distanceKm } : {}),
         etaMinutes: o.etaMinutes,
-        // Kuryer faqat yetkazishda tayinlanadi
-        ...(isPickup ? {} : { courierName: COURIERS[Math.floor(Math.random() * COURIERS.length)] }),
+        // courierName ATAYLAB yozilmaydi: avval bu yerda TASODIFIY ism tanlanardi va mijozga
+        // haqiqiy kuryer sifatida ko'rsatilardi. Haqiqiy ism kuryer qabul qilgach yoziladi
+        // (courierDispatch.setCourierProfile → Order.courierName).
       });
       created.push(doc);
 
@@ -1082,6 +1083,14 @@ export const orderController = {
       status: { $nin: ['delivered', 'cancelled', 'awaiting_payment'] },
     }).sort({ createdAt: -1 });
     res.json(await attachRestaurantGeo(orders));
+  }),
+
+  // GET /api/orders/:id/track — kuzatuv sahifasi uchun HAQIQIY ma'lumot (services/orderTrack.js)
+  track: asyncHandler(async (req, res) => {
+    if (!/^[a-f\d]{24}$/i.test(req.params.id)) return res.status(404).json({ error: 'Buyurtma topilmadi' });
+    const data = await getOrderTrack(req.params.id, req.userId);
+    if (!data) return res.status(404).json({ error: 'Buyurtma topilmadi' });
+    res.set('Cache-Control', 'no-store').json(data);
   }),
 
   getOne: asyncHandler(async (req, res) => {

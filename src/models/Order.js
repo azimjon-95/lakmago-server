@@ -351,7 +351,11 @@ const orderSchema = new Schema(
 
     // Vaqt belgilari (jarayon nazorati uchun)
     acceptedAt: { type: Date },
+    // "Tayyorlanmoqda" bosqichi boshlangan vaqt — mijoz kuzatuvi (OrderTrack) vaqt chizig'i uchun
+    preparingAt: { type: Date },
     readyAt: { type: Date },
+    // Kuryer mijoz manziliga yetib kelgan vaqt (kuryer GPS'i 150 m ichiga kirganda server yozadi)
+    arrivedAt: { type: Date },
     // Kuryerga topshirilgan vaqt — restaurantReminder shundan
     // hisoblaydi (updatedAt emas: boshqa maydon o'zgarishi — masalan
     // to'lov belgilanishi — bexosdan eslatma vaqtini surib qo'ymasin)

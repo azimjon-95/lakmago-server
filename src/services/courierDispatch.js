@@ -193,7 +193,8 @@ export async function acceptShare(token) {
    */
   const moved = await Order.findOneAndUpdate(
     { _id: won.orderId, status: 'ready' },
-    { status: 'delivering' },
+    // deliveringAt — avval yozilmasdi: mijoz kuzatuvida "Kuryer yo'lda" vaqti bo'sh qolardi
+    { status: 'delivering', deliveringAt: new Date() },
     { new: true },
   ).populate('userId', 'telegramId');
 
@@ -349,4 +350,77 @@ export function buildShareUrls(token, snapshot) {
     telegram: `https://t.me/share/url?url=${encodeURIComponent(link)}&text=${encodeURIComponent(text)}`,
     whatsapp: `https://wa.me/?text=${encodeURIComponent(`${text}\n\n${link}`)}`,
   };
+}
+
+/* ═══════════════════════════════════════════════════════════
+ * KURYER PROFILI VA JONLI JOYLASHUV (mijoz kuzatuvi uchun)
+ * ═══════════════════════════════════════════════════════════
+ * Havola orqali qabul qilgan kuryer o'zi haqida (ism, telefon, transport)
+ * kiritadi va buyurtma davomida GPS yuboradi. Ikkalasi ham FAQAT shu
+ * buyurtmani qabul qilgan qurilma (acceptanceSecret) uchun — yot odam
+ * boshqa buyurtmaga soxta joylashuv yoza olmaydi.
+ */
+const VEHICLES = ['scooter', 'bike', 'car', 'foot'];
+const ARRIVED_RADIUS_M = 150;
+
+export function haversineMeters(a, b) {
+  const R = 6371000;
+  const toRad = (d) => (d * Math.PI) / 180;
+  const dLat = toRad(b.lat - a.lat);
+  const dLng = toRad(b.lng - a.lng);
+  const s = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(a.lat)) * Math.cos(toRad(b.lat)) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(s));
+}
+
+async function ownedActiveAssignment(token, secret) {
+  if (!token || !secret) return null;
+  const a = await DeliveryAssignment.findOne({ token });
+  if (!a || a.status !== 'assigned' || !a.acceptanceSecret || a.acceptanceSecret !== secret) return null;
+  return a;
+}
+
+export async function setCourierProfile(token, secret, { name, phone, vehicle }) {
+  const a = await ownedActiveAssignment(token, secret);
+  if (!a) return { ok: false, error: 'Ruxsat yo‘q yoki buyurtma yakunlangan' };
+  const cleanName = String(name || '').trim().slice(0, 60);
+  const digits = String(phone || '').replace(/\D/g, '');
+  if (cleanName.length < 2) return { ok: false, error: 'Ismingizni kiriting' };
+  if (digits.length < 9 || digits.length > 13) return { ok: false, error: 'Telefon raqamni to‘liq kiriting' };
+  a.courier = {
+    name: cleanName,
+    phone: `+${digits.length === 9 ? `998${digits}` : digits}`,
+    vehicle: VEHICLES.includes(vehicle) ? vehicle : '',
+  };
+  await a.save();
+  // Restoran va admin panellardagi "Kuryer: ..." ham endi HAQIQIY ism (avval tasodifiy edi)
+  await Order.updateOne({ _id: a.orderId }, { $set: { courierName: a.courier.name } });
+  getIO()?.to(`order:${a.orderId}`).emit('order:courier', { orderId: String(a.orderId), profile: true });
+  return { ok: true };
+}
+
+export async function updateCourierLocation(token, secret, { lat, lng, accuracy, heading }) {
+  const a = await ownedActiveAssignment(token, secret);
+  if (!a) return { ok: false, error: 'Ruxsat yo‘q yoki buyurtma yakunlangan' };
+  lat = Number(lat); lng = Number(lng);
+  // O'zbekiston va qo'shni hududlar doirasi — ahmoqona/soxta qiymatlar rad etiladi
+  if (!Number.isFinite(lat) || !Number.isFinite(lng) || lat < 36 || lat > 46 || lng < 55 || lng > 74) {
+    return { ok: false, error: 'Joylashuv noto‘g‘ri' };
+  }
+  const now = new Date();
+  a.location = {
+    lat, lng,
+    accuracy: Number.isFinite(Number(accuracy)) ? Math.min(5000, Math.max(0, Number(accuracy))) : undefined,
+    heading: Number.isFinite(Number(heading)) ? ((Number(heading) % 360) + 360) % 360 : undefined,
+    at: now,
+  };
+  await a.save();
+
+  // Mijoz manziliga yetib keldimi (faqat yo'lda; bir marta yoziladi)
+  const snap = a.deliverySnapshot || {};
+  if (Number.isFinite(snap.lat) && Number.isFinite(snap.lng)
+      && haversineMeters({ lat, lng }, { lat: snap.lat, lng: snap.lng }) <= ARRIVED_RADIUS_M) {
+    await Order.updateOne({ _id: a.orderId, status: 'delivering', arrivedAt: { $exists: false } }, { $set: { arrivedAt: now } });
+  }
+  getIO()?.to(`order:${a.orderId}`).emit('order:courier', { orderId: String(a.orderId), lat, lng, at: now.toISOString() });
+  return { ok: true };
 }
