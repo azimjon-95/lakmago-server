@@ -26,8 +26,12 @@ const adminOrigins = String(process.env.CORS_ORIGINS ?? process.env.CLIENT_ORIGI
 
 // 3) Lokal ishlab chiqish (har doim ruxsat)
 const localOrigins = [
-  'http://localhost:5173', 'http://localhost:5174',
-  'http://127.0.0.1:5173', 'http://127.0.0.1:5174',
+  'https://localhost',
+  'http://localhost',
+  'http://localhost:5173',
+  'http://localhost:5174',
+  'http://127.0.0.1:5173',
+  'http://127.0.0.1:5174',
 ];
 
 // Umumiy ruxsat ro'yxati
