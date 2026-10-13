@@ -180,23 +180,29 @@ function timingSafePasswordEqual(provided) {
   return crypto.timingSafeEqual(a, b);
 }
 
+/** Telegram tel: URL — + ni encode qilmaslik (aks holda Wrong port number). */
+function normalizeTelHref(raw) {
+  const cleaned = String(raw || '').replace(/[^\d+]/g, '');
+  if (!cleaned) return null;
+  const digits = cleaned.replace(/\D/g, '');
+  if (digits.length < 9) return null;
+  const normalized = cleaned.startsWith('+') ? `+${digits}` : `+${digits}`;
+  return `tel:${normalized}`;
+}
+
 function buildKeyboard(order, { showActions = true } = {}) {
   const rows = [];
   const phone = order.phone || order.userId?.phone || '';
   const restPhone = order.restaurantId?.phone || order.restaurantPhone || '';
 
   const contactRow = [];
-  if (phone) {
-    contactRow.push({
-      text: '📞 Mijozga qo‘ng‘iroq',
-      url: `tel:${encodeURIComponent(phone.replace(/\s/g, ''))}`,
-    });
+  const telUser = normalizeTelHref(phone);
+  if (telUser) {
+    contactRow.push({ text: '📞 Mijozga qo‘ng‘iroq', url: telUser });
   }
-  if (restPhone) {
-    contactRow.push({
-      text: '📞 Restoranga qo‘ng‘iroq',
-      url: `tel:${encodeURIComponent(String(restPhone).replace(/\s/g, ''))}`,
-    });
+  const telRest = normalizeTelHref(restPhone);
+  if (telRest) {
+    contactRow.push({ text: '📞 Restoranga qo‘ng‘iroq', url: telRest });
   }
   if (contactRow.length) rows.push(contactRow);
 
