@@ -213,9 +213,12 @@ async function releaseOrderToKitchen(orderId, provider) {
    * paytida yuborilmagan edi, chunki u 'awaiting_payment'
    * holatida edi va to'lanmasligi ham mumkin edi.
    */
-  import('./restaurantBotOrders.js')
+   import('./restaurantBotOrders.js')
     .then((m) => m.notifyNewOrder(order._id))
     .catch((e) => console.error('[restaurantBot]', e.message));
+  import('./adminOrderMonitor.js')
+    .then((m) => m.onOrderReleasedToKitchen(order._id))
+    .catch((e) => console.error('[adminOrderMonitor]', e.message));
   io?.to('admin').emit('order:new', order);
 }
 

@@ -960,20 +960,16 @@ export const orderController = {
        * to'xtatish HECH NARSA yo'qotmaydi, faqat kechiktiradi.
        */
       if (doc.status !== 'awaiting_payment') {
-        // Real-time: restoranga yangi buyurtma (signal chalinadi)
-        await emitOrderToRestaurant(io, 'order:new', doc);
-        io?.to('admin').emit('order:new', doc);
-
-        /*
-         * Telegram bot — ulangan xodimlarga.
-         *
-         * `await` YO'Q: Telegram sekin javob bersa mijoz
-         * buyurtma yaratilishini kutib qolmasligi kerak.
-         * Bot ichida dine-in o'zi filtrlanadi.
-         */
-        import('../services/restaurantBotOrders.js')
-          .then((m) => m.notifyNewOrder(doc._id))
-          .catch((e) => console.error('[restaurantBot]', e.message));
+      await emitOrderToRestaurant(io, 'order:new', doc);
+      io?.to('admin').emit('order:new', doc);
+    
+      import('../services/restaurantBotOrders.js')
+        .then((m) => m.notifyNewOrder(doc._id))
+        .catch((e) => console.error('[restaurantBot]', e.message));
+    
+      import('../services/adminOrderMonitor.js')
+        .then((m) => m.onOrderReleasedToKitchen(doc._id))
+        .catch((e) => console.error('[adminOrderMonitor]', e.message));
 
         // Markaziy bildirishnoma — bazaga yoziladi, socket uzilsa
         // qayta ulanganda yo'qolmaydi

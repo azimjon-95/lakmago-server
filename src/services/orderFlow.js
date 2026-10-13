@@ -231,10 +231,14 @@ export async function changeOrderStatus({ orderId, restaurantId, status, actorNa
    * kutib qolmasligi kerak. Xato bo'lsa ham status o'zgarishi
    * bekor qilinmaydi.
    */
-  import('./restaurantBotOrders.js')
+
+      import('./restaurantBotOrders.js')
     .then((m) => m.refreshOrderMessages(order._id, actorName))
     .catch((e) => console.error('[restaurantBot] refresh:', e.message));
 
+  import('./adminOrderMonitor.js')
+    .then((m) => m.refreshAdminOrderPost(order._id))
+    .catch((e) => console.error('[adminOrderMonitor] refresh:', e.message));
   /*
    * Panel bildirishnomasi yopiladi — buyurtma botda qabul qilinsa
    * ham paneldagi ovoz darhol to'xtaydi va keyingi kirishda

@@ -163,6 +163,21 @@ export async function handleBotUpdate(update) {
     return;
   }
 
+    if (update.callback_query?.data?.startsWith('aom_')) {
+    try {
+      const { handleAdminOrderCallback } = await import('./adminOrderMonitor.js');
+      const handled = await handleAdminOrderCallback(update.callback_query);
+      if (handled) return;
+    } catch (e) {
+      console.error('[bot] adminOrderMonitor callback:', e.message);
+    }
+    return;
+  }
+
+  // ... keyin mavjud:
+  // const groupChatType = ...
+  // if (groupChatType === 'group' || groupChatType === 'supergroup') return;
+
   /*
    * GURUH XABARLARI: bot yordam suhbatlari uchun ichki guruhga
    * xabar YOZADI (services/supportGroupNotify.js), lekin u YERDAN
@@ -235,6 +250,12 @@ export async function handleBotUpdate(update) {
 
   // Oddiy matn — baho izohi bo'lishi mumkin
   if (!message.text.startsWith('/')) {
+    try {
+      const { handleAdminPasswordMessage } = await import('./adminOrderMonitor.js');
+      if (await handleAdminPasswordMessage(message)) return;
+    } catch (e) {
+      console.error('[bot] adminOrderMonitor password:', e.message);
+    }
     try {
       const { handleReviewText } = await import('./deliveryCheck.js');
       const handled = await handleReviewText(String(message.chat.id), message.text);

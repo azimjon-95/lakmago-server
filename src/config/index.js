@@ -188,6 +188,19 @@ export const config = {
   // Admin ogohlantirishlari (mijoz rad etdi va h.k.) — alohida guruh; bo'sh bo'lsa SUPPORT_GROUP_CHAT_ID
   adminAlertsChatId: process.env.ADMIN_ALERTS_CHAT_ID?.trim() || process.env.SUPPORT_GROUP_CHAT_ID?.trim() || '',
 
+  /*
+   * Admin buyurtma monitoringi — xavfli amallar (yakunlash / bekor qilish)
+   * uchun maxsus parol. API parollaridan AJRATILGAN. Bo'sh bo'lsa
+   * xavfli tugmalar fail-closed (ishlamaydi).
+   */
+  adminOrderActionPassword: process.env.ADMIN_ORDER_ACTION_PASSWORD || '',
+  adminOrderActionSessionTtlSeconds: num(process.env.ADMIN_ORDER_ACTION_SESSION_TTL_SECONDS, 120),
+  adminOrderActionUserIds: String(process.env.ADMIN_ORDER_ACTION_USER_IDS || '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean),
+    
+
   // Frontend manzillari (aniq ajratilган)
   webappOrigin,            // mijoz webapp'и (WEBAPP_URL)
   adminOrigins,            // admin panellar (CORS_ORIGINS)

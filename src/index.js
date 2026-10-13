@@ -37,7 +37,7 @@ async function main() {
   await ensureDefaultAdmin();
 
   const app = express();
-  // Nginx orqali ishlaganда (reverse proxy) — haqiqий protokol/IP ni oladi.
+  // Nginx orqali ishlaganda (reverse proxy) — haqiqiy protokol/IP ni oladi.
   // Shu tufayli req.protocol 'https' bo'ladi va /diag to'g'ri ko'rsatadi.
   app.set('trust proxy', 1);
   const httpServer = createServer(app);
@@ -153,7 +153,7 @@ async function main() {
 
   app.get('/health', (_req, res) => res.json({ status: 'ok', service: 'lokmago-api' }));
 
-  // Diagnostika — sozlamаlar to'g'rimi tekshirish (maxfiy ma'lumot ko'rsatilmaydi)
+  // Diagnostika — sozlamalar to'g'rimi tekshirish (maxfiy ma'lumot ko'rsatilmaydi)
   // Telegram webhook holatini tekshirish — guruh muammosini topish uchun
   // Taom modeli qaysi maydonlarni biladi — server yangilanganini tekshirish
   // Inline ulashish tayyormi — barcha shartlarni tekshiradi
@@ -261,7 +261,6 @@ async function main() {
       out.webappName = config.webappName;
       out.namunaHavola =
         `https://t.me/${out.bot}/${config.webappName}?startapp=food_<id>`;
-
     } catch (e) {
       out.ok = false;
       out.muammolar.push(`Telegram bilan aloqa xatosi: ${e.message}`);
@@ -352,11 +351,11 @@ async function main() {
       protocol: req.protocol,              // https bo'lishi kerak (Vercel uchun)
       behindProxy: Boolean(req.headers['x-forwarded-proto']), // Nginx sozlanganmi
       httpsReady: req.protocol === 'https', // true bo'lsa Vercel bilan ishlaydi
-      // Frontend manzillari (aniq ajratilган)
+      // Frontend manzillari (aniq ajratilgan)
       webapp: config.webappOrigin || '(sozlanmagan — WEBAPP_URL)',
       adminPanels: config.adminOrigins.length ? config.adminOrigins : '(sozlanmagan — CORS_ORIGINS)',
       allAllowed: config.corsOrigins,
-      // Boshqa sozlamаlar
+      // Boshqa sozlamalar
       mainChannel: config.mainChannel || '(sozlanmagan)',
       hasBotToken: Boolean(config.telegramBotToken),
       hasCloudinary: Boolean(config.cloudinary?.apiSecret),
@@ -610,13 +609,22 @@ async function main() {
   }
 
   // Kunlik guruh tekshiruvi (reklama yuborilganmi + pin qilinganmi)
-  // Server ishga tushганда 1 marta, keyin har 24 soatda.
+  // Server ishga tushganda 1 marta, keyin har 24 soatda.
   if (config.telegramBotToken) {
     const { dailyGroupCheck } = await import('./services/telegramGroup.js');
     // Startda 30 soniyadan keyin (server barqarorlashsin)
     setTimeout(() => dailyGroupCheck().catch((e) => console.error('Guruh tekshiruv:', e.message)), 30_000);
     // Keyin har 24 soatda
     setInterval(() => dailyGroupCheck().catch((e) => console.error('Guruh tekshiruv:', e.message)), 24 * 60 * 60 * 1000);
+  }
+
+  /*
+   * Admin buyurtma monitoring — faol postlarni har daqiqada yangilash
+   * va vaqtinchalik xabarlarni tozalash. Bitta process ichida bir marta.
+   */
+  if (config.telegramBotToken && config.adminAlertsChatId) {
+    const { startAdminOrderMonitorScheduler } = await import('./services/adminOrderMonitor.js');
+    startAdminOrderMonitorScheduler();
   }
 }
 
