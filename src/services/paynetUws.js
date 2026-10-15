@@ -139,7 +139,7 @@ async function handleGetInformation(params) {
     fields: {
       // Mijozga Paynet ekranida ko'rsatiladi — order summasi va nomi
       name: `LokmaGo buyurtma #${String(order._id).slice(-6)}`,
-      amount: String(Math.round(order.total * 100)),   // tiyinda
+      amount: String(Math.round(order.total)),         // so'm (Paynet talabi)
     },
   };
 }
@@ -175,11 +175,13 @@ async function handlePerformTransaction(params) {
   if (!order || order.status !== 'awaiting_payment') throw ERR.CLIENT_NOT_FOUND();
 
   /*
-   * Summani TEKSHIRISH — mijoz Paynet ekranida ko'rgan summani
-   * o'zgartirib to'lay olmaydi. Ikkalasi ham tiyinda solishtiriladi.
+   * Summani TEKSHIRISH — Paynet amount ni SO'M da yuboradi.
+   * Ichki Transaction / recordSuccess esa tiyin saqlaydi
+   * (boshqa gatewaylar bilan bir xil).
    */
-  const expectedTiyin = Math.round(order.total * 100);
-  if (Number(amount) !== expectedTiyin) throw ERR.WRONG_AMOUNT();
+  const expectedSom = Math.round(order.total);
+  if (Number(amount) !== expectedSom) throw ERR.WRONG_AMOUNT();
+  const expectedTiyin = expectedSom * 100;
 
   /*
    * Tranzaksiya YOZUVI OLDINDAN — pul "qabul qilindi" deb
