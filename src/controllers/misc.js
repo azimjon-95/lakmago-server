@@ -29,6 +29,7 @@ import { COMPLETABLE_STATUSES } from '../services/reminderRules.js';
 import { emitOrderToRestaurant } from '../services/orderSocket.js';
 import { customerOrderView, attachRestaurantGeo } from '../services/customerOrderView.js';
 import { getOrderTrack } from '../services/orderTrack.js';
+import { confirmOrderDelivered, syncRestaurantBot } from '../services/deliveryCheck.js';
 import { routeBetween } from '../services/routeGeometry.js';
 
 // Faol kelishuvi yo'q restoran: ogohlantirish soatiga BIR marta (har buyurtmada jurnal to'lib ketmasin)
@@ -1105,6 +1106,21 @@ export const orderController = {
     res.set('Cache-Control', 'no-store').json({ ...r, from: tr.courier?.location ? 'courier' : 'restaurant' });
   }),
 
+  /*
+   * POST /api/orders/:id/delivery-wait — mijoz "Kutyapman" dedi: tasdiqlash tugmalari
+   * 15 daqiqa chiqmaydi (keyin yana so'raladi). Buyurtma holatiga TEGILMAYDI.
+   */
+  deliveryWait: asyncHandler(async (req, res) => {
+    if (!/^[a-f\d]{24}$/i.test(req.params.id)) return res.status(404).json({ error: 'Buyurtma topilmadi' });
+    const until = new Date(Date.now() + 15 * 60_000);
+    const r = await Order.updateOne(
+      { _id: req.params.id, userId: req.userId, status: { $in: COMPLETABLE_STATUSES } },
+      { $set: { 'deliveryCheck.snoozeUntil': until } },
+    );
+    if (!r.matchedCount) return res.status(404).json({ error: 'Buyurtma topilmadi yoki yakunlangan' });
+    res.json({ ok: true, snoozeUntil: until.toISOString() });
+  }),
+
   getOne: asyncHandler(async (req, res) => {
     if (!/^[a-f\d]{24}$/i.test(req.params.id)) return res.status(404).json({ error: 'Buyurtma topilmadi' });
     const order = await Order.findOne({ _id: req.params.id, userId: req.userId });
@@ -1138,21 +1154,18 @@ export const orderController = {
     let order = null;
     let justCompleted = false;
     if (COMPLETABLE_STATUSES.includes(existing.status)) {
-      order = await Order.findOneAndUpdate(
-        { ...mine, status: { $in: COMPLETABLE_STATUSES } },
-        {
-          $set: {
-            status: 'delivered',
-            deliveredAt: now,
-            'deliveryCheck.confirmed': true,
-            'deliveryCheck.confirmedAt': now,
-            'deliveryCheck.confirmedBy': 'customer',
-            ...ratingFields,
-          },
-        },
-        { new: true },
-      );
+      /*
+       * YAGONA YAKUNLASH YO'LI: telegram bot ("Ha, qabul qildim") bilan bir xil funksiya —
+       * atomik yakunlash, pul hisobi (settleOrder), mijoz/restoran/admin soketlari.
+       * Egalik yuqorida (`mine`) tekshirilgan. Baho (ixtiyoriy) keyin yoziladi.
+       */
+      order = await confirmOrderDelivered(req.params.id, 'customer');
       justCompleted = Boolean(order);
+      if (order && Object.keys(ratingFields).length) {
+        order = await Order.findOneAndUpdate({ ...mine, status: 'delivered' }, { $set: ratingFields }, { new: true }) || order;
+      }
+      // Restoran botidagi "yetkazdingizmi?" tugmalari va karta yangilanadi (xodim ikki marta bosmasin)
+      if (order) syncRestaurantBot(order._id).catch(() => {});
     }
 
     if (!order) {
@@ -1166,12 +1179,8 @@ export const orderController = {
         : await Order.findOne(mine);
     }
 
-    if (justCompleted) {
-      // Komissiya + naqd uchun avtomatik "to'langan" (takroriy chaqiruvdan himoyalangan)
-      import('../services/billing.js')
-        .then((m) => m.settleOrder(order._id))
-        .catch((e) => console.error('[billing] settleOrder (mijoz ilovasi):', e.message));
-    }
+    // Pul hisobi (settleOrder) confirmOrderDelivered ichida bajarildi — bu yerda takrorlanmaydi
+    void justCompleted;
 
     await emitOrderToRestaurant(getIO(), 'order:update', order);
     getIO()?.to('admin').emit('order:update', order);

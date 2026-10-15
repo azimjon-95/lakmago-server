@@ -311,6 +311,8 @@ const orderSchema = new Schema(
       askedCount: { type: Number, default: 0 },
       // Oxirgi so'rov vaqti — keyingisini shundan hisoblaymiz
       lastAskedAt: { type: Date, default: null },
+      // Mijoz ilovada "Kutyapman" desa — shu vaqtgacha tasdiqlash tugmalari qayta chiqmaydi
+      snoozeUntil: { type: Date, default: null },
       // Mijoz tasdiqladimi
       confirmed: { type: Boolean, default: false },
       confirmedAt: { type: Date, default: null },

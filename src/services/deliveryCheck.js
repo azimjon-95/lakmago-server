@@ -205,7 +205,7 @@ export async function confirmOrderDelivered(orderId, confirmedBy = 'customer', {
 }
 
 /** Mijoz yakunlagach restoran botidagi eslatma tugmalarini olib tashlaydi va kartani yangilaydi (xatosi jim) */
-async function syncRestaurantBot(orderId) {
+export async function syncRestaurantBot(orderId) {
   try {
     // Dinamik import — restaurantReminders.js bu faylni import qiladi (aylanma bog'liqlik bo'lmasin)
     const { clearReminderButtons } = await import('./restaurantReminders.js');

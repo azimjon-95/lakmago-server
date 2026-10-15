@@ -115,6 +115,24 @@ export function estimateEta(o, { prepMinutes, distanceKm, courierPoint, customer
   }
 }
 
+/* ───────────── "Qabul qildingizmi?" (mijoz ilovasi) ───────────── */
+/**
+ * Buyurtma qabul qilinganidan 1 soat o'tib hali yakunlanmagan bo'lsa, ilovada pastda
+ * [Ha, oldim] [Kutyapman] ko'rinadi (telegram bot bilan bir xil qoida: reminderRules.CUSTOMER_ASK).
+ * "Kutyapman" — 15 daqiqaga yashiradi. Rejalashtirilgan buyurtma vaqti kelmaguncha so'ralmaydi.
+ */
+export const CONFIRM_AFTER_MIN = 60;
+export function confirmPrompt(o, now = Date.now()) {
+  const open = ['accepted', 'preparing', 'ready', 'delivering'].includes(o.status);
+  const delivery = o.fulfillment !== 'pickup' && o.fulfillment !== 'dinein';
+  if (!open || !delivery || !o.acceptedAt || o.deliveryCheck?.confirmed) return { available: false, since: null };
+  const base = o.scheduledFor ? Math.max(t(o.acceptedAt), t(o.scheduledFor)) : t(o.acceptedAt);
+  const dueAt = base + CONFIRM_AFTER_MIN * MIN;
+  const snooze = t(o.deliveryCheck?.snoozeUntil);
+  const available = now >= dueAt && !(snooze && now < snooze);
+  return { available, since: iso(dueAt), snoozeUntil: snooze && now < snooze ? iso(snooze) : null };
+}
+
 /* ───────────── Kuryer (mijozga ko'rinadigan qism) ───────────── */
 const VEHICLE_LABEL = { scooter: 'Skuter', bike: 'Velosiped', car: 'Mashina', foot: 'Piyoda' };
 
@@ -190,6 +208,7 @@ export async function getOrderTrack(orderId, userId, now = Date.now()) {
     steps,
     currentStep: current,
     eta,
+    confirm: confirmPrompt(o, now),
     restaurant: rest ? {
       id: String(rest._id),
       name: rest.name,

@@ -3,7 +3,7 @@
  * Baza KERAK EMAS (sof funksiyalar). npm run test:track
  */
 process.env.JWT_SECRET = process.env.JWT_SECRET || 'x'.repeat(40);
-const { buildSteps, estimateEta, courierView, travelMinutes, haversineKm, TRACK } = await import('../src/services/orderTrack.js');
+const { buildSteps, estimateEta, courierView, travelMinutes, haversineKm, TRACK, confirmPrompt, CONFIRM_AFTER_MIN } = await import('../src/services/orderTrack.js');
 const { haversineMeters } = await import('../src/services/courierDispatch.js');
 
 let fails = 0;
@@ -143,6 +143,24 @@ console.log('\n[7] Yo‘l chizig‘i: Yandex → OSRM → to‘g‘ri chiziq');
   r = await routeBetween({ lat: 41.2, lng: 69.1 }, { lat: 41.21, lng: 69.11 });
   ok(r.source === 'straight' && r.points.length === 2, 'tarmoq yo‘q — to‘g‘ri chiziq (ilova shunga qarab chizadi)');
   globalThis.fetch = realFetch;
+}
+
+console.log('\n[8] "Qabul qildingizmi?" — 1 soatdan keyin [Ha, oldim] [Kutyapman]');
+{
+  const o = (over = {}) => ({ status: 'ready', fulfillment: 'delivery', acceptedAt: ago(61), deliveryCheck: { confirmed: false }, ...over });
+  ok(CONFIRM_AFTER_MIN === 60, 'qoida: qabuldan 60 daqiqa');
+  ok(confirmPrompt(o(), NOW).available === true, '61 daqiqa — chiqadi');
+  ok(confirmPrompt(o({ acceptedAt: ago(59) }), NOW).available === false, '59 daqiqa — hali yo‘q');
+  for (const st of ['accepted', 'preparing', 'ready', 'delivering']) ok(confirmPrompt(o({ status: st }), NOW).available === true, `${st} holatida chiqadi`);
+  ok(confirmPrompt(o({ status: 'delivered' }), NOW).available === false, 'yakunlangan — chiqmaydi');
+  ok(confirmPrompt(o({ status: 'cancelled' }), NOW).available === false, 'bekor — chiqmaydi');
+  ok(confirmPrompt(o({ status: 'pending', acceptedAt: undefined }), NOW).available === false, 'qabul qilinmagan — chiqmaydi');
+  ok(confirmPrompt(o({ fulfillment: 'pickup' }), NOW).available === false, 'olib ketish — chiqmaydi (bot bilan bir xil)');
+  ok(confirmPrompt(o({ deliveryCheck: { confirmed: true } }), NOW).available === false, 'tasdiqlangan — chiqmaydi');
+  const sn = confirmPrompt(o({ deliveryCheck: { snoozeUntil: new Date(NOW + 10 * MIN) } }), NOW);
+  ok(sn.available === false && sn.snoozeUntil, '"Kutyapman" — 15 daqiqa yashiriladi');
+  ok(confirmPrompt(o({ deliveryCheck: { snoozeUntil: new Date(NOW - 1000) } }), NOW).available === true, 'kechiktirish tugagach — qayta chiqadi');
+  ok(confirmPrompt(o({ scheduledFor: new Date(NOW + 2 * 60 * MIN), acceptedAt: ago(300) }), NOW).available === false, 'rejalashtirilgan (kelajak) — vaqti kelmaguncha chiqmaydi');
 }
 
 console.log(fails ? `\n✗ ${fails} ta xato` : '\n✓ Hammasi o‘tdi');
