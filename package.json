@@ -46,7 +46,8 @@
     "test:order-socket": "node tests/order-socket.test.mjs",
     "test:customer-ask": "node tests/customer-ask.test.mjs",
     "test:incidents": "node tests/customer-incidents.test.mjs",
-    "test:track": "node tests/order-track.test.mjs"
+    "test:track": "node tests/order-track.test.mjs",
+    "test:contact": "node tests/restaurant-contact.test.mjs"
   },
   "dependencies": {
     "@socket.io/redis-adapter": "^8.3.0",

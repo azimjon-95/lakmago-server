@@ -31,6 +31,7 @@ import { customerOrderView, attachRestaurantGeo } from '../services/customerOrde
 import { getOrderTrack } from '../services/orderTrack.js';
 import { confirmOrderDelivered, syncRestaurantBot } from '../services/deliveryCheck.js';
 import { routeBetween } from '../services/routeGeometry.js';
+import { sendRestaurantContact } from '../services/restaurantContact.js';
 
 // Faol kelishuvi yo'q restoran: ogohlantirish soatiga BIR marta (har buyurtmada jurnal to'lib ketmasin)
 const noAgreementWarned = new Map();
@@ -1104,6 +1105,19 @@ export const orderController = {
     if (!from || !to || ['delivered', 'cancelled'].includes(tr.status)) return res.json({ points: [], source: null });
     const r = await routeBetween({ lat: from.lat, lng: from.lng }, { lat: to.lat, lng: to.lng });
     res.set('Cache-Control', 'no-store').json({ ...r, from: tr.courier?.location ? 'courier' : 'restaurant' });
+  }),
+
+  /*
+   * POST /api/orders/:id/call-restaurant — restoran raqamini botdan KONTAKT kartasi sifatida yuboradi
+   * (Mini App ichida tel: ishlamasa, kartadagi raqamni bosib qo'ng'iroq qilinadi).
+   */
+  callRestaurant: asyncHandler(async (req, res) => {
+    if (!/^[a-f\d]{24}$/i.test(req.params.id)) return res.status(404).json({ error: 'Buyurtma topilmadi' });
+    const me = await User.findById(req.userId).select('telegramId').lean();
+    const r = await sendRestaurantContact(req.params.id, req.userId, me?.telegramId);
+    if (r.ok) return res.json({ ok: true });
+    const http = { NOT_FOUND: 404, NOT_ALLOWED: 409, NO_PHONE: 422, NO_TELEGRAM: 422, SEND_FAILED: 502 }[r.code] || 400;
+    res.status(http).json({ ok: false, code: r.code });
   }),
 
   /*
