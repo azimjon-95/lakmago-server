@@ -121,5 +121,29 @@ console.log('\n[5] To‘liq javob (modellar soxta): maxfiylik va shakl');
   ok(!/SECRET|token|acceptanceSecret|finance|telegramId/i.test(json), 'javobda maxfiy ma’lumot (token, secret, moliya) YO‘Q');
 }
 
+console.log('\n[6] Qabul qilinmagan buyurtmada "Qabul qilindi" vaqti yo‘q');
+{
+  const r = buildSteps({ status: 'pending', fulfillment: 'delivery', createdAt: ago(3) });
+  ok(r.steps[0].at === null && !r.steps[0].done && !r.steps[0].active, 'kutilmoqda: hech qaysi qadam bajarilmagan va vaqtsiz');
+}
+
+console.log('\n[7] Yo‘l chizig‘i: Yandex → OSRM → to‘g‘ri chiziq');
+{
+  const { routeBetween } = await import('../src/services/routeGeometry.js');
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async (url) => {
+    const u = String(url);
+    if (u.includes('router.project-osrm.org')) return { ok: true, json: async () => ({ routes: [{ distance: 2900, duration: 480, geometry: { coordinates: [[69.24, 41.31], [69.245, 41.308], [69.25, 41.304]] } }] }) };
+    return { ok: false, json: async () => ({}) };
+  };
+  let r = await routeBetween({ lat: 41.31, lng: 69.24 }, { lat: 41.304, lng: 69.25 });
+  ok(r.source === 'osrm' && r.points.length === 3 && r.points[1][0] === 41.308, `OSRM: ko‘chalar bo‘ylab ${r.points.length} nuqta, [lat,lng] tartibida`);
+  ok(r.distanceKm === 2.9 && r.durationMin === 8, 'masofa va vaqt');
+  globalThis.fetch = async () => { throw new Error('network'); };
+  r = await routeBetween({ lat: 41.2, lng: 69.1 }, { lat: 41.21, lng: 69.11 });
+  ok(r.source === 'straight' && r.points.length === 2, 'tarmoq yo‘q — to‘g‘ri chiziq (ilova shunga qarab chizadi)');
+  globalThis.fetch = realFetch;
+}
+
 console.log(fails ? `\n✗ ${fails} ta xato` : '\n✓ Hammasi o‘tdi');
 process.exit(fails ? 1 : 0);

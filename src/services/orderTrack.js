@@ -43,7 +43,8 @@ export function travelMinutes(distanceKm) {
 export function buildSteps(o) {
   const delivery = o.fulfillment !== 'pickup';
   const at = {
-    accepted: t(o.acceptedAt) ?? t(o.createdAt),
+    // Faqat haqiqatan qabul qilingan bo'lsa (avval yaratilgan vaqt ko'rsatilardi — kutilayotgan buyurtmada ham)
+    accepted: t(o.acceptedAt),
     preparing: t(o.preparingAt),
     ready: t(o.readyAt),
     delivering: t(o.deliveringAt),

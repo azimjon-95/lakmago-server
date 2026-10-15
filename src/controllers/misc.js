@@ -29,6 +29,7 @@ import { COMPLETABLE_STATUSES } from '../services/reminderRules.js';
 import { emitOrderToRestaurant } from '../services/orderSocket.js';
 import { customerOrderView, attachRestaurantGeo } from '../services/customerOrderView.js';
 import { getOrderTrack } from '../services/orderTrack.js';
+import { routeBetween } from '../services/routeGeometry.js';
 
 // Faol kelishuvi yo'q restoran: ogohlantirish soatiga BIR marta (har buyurtmada jurnal to'lib ketmasin)
 const noAgreementWarned = new Map();
@@ -1087,6 +1088,21 @@ export const orderController = {
     const data = await getOrderTrack(req.params.id, req.userId);
     if (!data) return res.status(404).json({ error: 'Buyurtma topilmadi' });
     res.set('Cache-Control', 'no-store').json(data);
+  }),
+
+  /*
+   * GET /api/orders/:id/route — xaritadagi yo'l chizig'i (haqiqiy ko'chalar bo'ylab).
+   * Boshlanish: kuryerning jonli joyi (yo'lda va yangi bo'lsa), aks holda restoran; oxiri — mijoz.
+   */
+  route: asyncHandler(async (req, res) => {
+    if (!/^[a-f\d]{24}$/i.test(req.params.id)) return res.status(404).json({ error: 'Buyurtma topilmadi' });
+    const tr = await getOrderTrack(req.params.id, req.userId);
+    if (!tr) return res.status(404).json({ error: 'Buyurtma topilmadi' });
+    const to = tr.customer?.point;
+    const from = tr.courier?.location || tr.restaurant?.point;
+    if (!from || !to || ['delivered', 'cancelled'].includes(tr.status)) return res.json({ points: [], source: null });
+    const r = await routeBetween({ lat: from.lat, lng: from.lng }, { lat: to.lat, lng: to.lng });
+    res.set('Cache-Control', 'no-store').json({ ...r, from: tr.courier?.location ? 'courier' : 'restaurant' });
   }),
 
   getOne: asyncHandler(async (req, res) => {
