@@ -7,6 +7,7 @@ import { notify } from '../services/notifications.js';
 import { tgCall } from '../services/telegramApi.js';
 import { config } from '../config/index.js';
 import { notifySupportGroup, markSupportGroupReplied, markSupportGroupClosed, supportGroupStatus, sendSupportGroupTest } from '../services/supportGroupNotify.js';
+import { adminOrderGroupStatus, sendAdminOrderGroupTest } from '../services/adminOrderMonitor.js';
 
 const messageSchema = z.object({
   text: z.string().min(1).max(2000),
@@ -174,6 +175,17 @@ export const supportController = {
   // GET /api/admin/support-group/status — adminlar guruhi to'g'ri sozlanganmi (sabablari bilan)
   groupStatus: asyncHandler(async (_req, res) => {
     res.set('Cache-Control', 'no-store').json(await supportGroupStatus());
+  }),
+
+  // GET /api/admin/order-group/status — yangi mijoz buyurtmalari tushadigan admin guruhi to'g'ri sozlanganmi
+  orderGroupStatus: asyncHandler(async (_req, res) => {
+    res.set('Cache-Control', 'no-store').json(await adminOrderGroupStatus());
+  }),
+
+  // POST /api/admin/order-group/test — buyurtmalar guruhiga sinov xabari
+  orderGroupTest: asyncHandler(async (req, res) => {
+    const r = await sendAdminOrderGroupTest(req.role === 'admin' ? 'Admin' : 'Xodim');
+    res.status(r.ok ? 200 : 502).json(r);
   }),
 
   // POST /api/admin/support-group/test — guruhga sinov xabari yuboradi

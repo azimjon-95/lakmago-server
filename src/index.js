@@ -494,6 +494,7 @@ async function main() {
 
   // Mijoz xabarlari adminlar guruhiga boradimi — sozlama bo'sh bo'lsa aniq ogohlantirish
   import('./services/supportGroupNotify.js').then((m) => m.warnIfSupportGroupMissing()).catch(() => {});
+  import('./services/adminOrderMonitor.js').then((m) => m.warnIfOrderGroupMissing()).catch(() => {});
 
   // Yetkazish tasdiqlash — har 2 daqiqada
   // (kuryer olib ketgach 20 → 10 → 30 daqiqada so'raydi)

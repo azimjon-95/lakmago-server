@@ -13,7 +13,8 @@ import { AdminOrderPost } from '../models/AdminOrderPost.js';
 import { orderLabel } from './orderNumber.js';
 import { changeOrderStatus, OrderFlowError } from './orderFlow.js';
 
-const TG_API = () => `https://api.telegram.org/bot${config.telegramBotToken}`;
+// Boshqa servislar kabi sozlanadigan baza manzil (config.telegramApiBase; standart https://api.telegram.org) — testlanadi
+const TG_API = () => `${config.telegramApiBase}/bot${config.telegramBotToken}`;
 const PREFIX = 'aom_';
 const TERMINAL = new Set(['delivered', 'cancelled']);
 const ACTIVE = ['pending', 'accepted', 'preparing', 'ready', 'delivering'];
@@ -107,6 +108,61 @@ function durationText(order) {
   return m != null ? `Shu holatda: ${m} daqiqa` : '';
 }
 
+/*
+ * Guruh ID: sozlamadagi, lekin Telegram "guruh supergruppaga aylandi (migrate_to_chat_id)" desa —
+ * YANGI ID (xotirada; server qayta ishga tushsa birinchi xatoda o'zi qayta tuzaladi).
+ */
+let chatOverride = null;
+export const alertsChatId = () => String(chatOverride || config.adminAlertsChatId || '');
+/** Faqat testlar uchun: migratsiya natijasini tozalaydi */
+export const _resetChatOverride = () => { chatOverride = null; };
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const SAFE_URL = /^(https?:\/\/|tg:\/\/)/i;
+/** Telegram inline tugmada faqat http(s):// va tg:// ni qabul qiladi (tel: rad etilishi mumkin) */
+const stripUnsafeButtons = (markup) => ({
+  inline_keyboard: (markup?.inline_keyboard || [])
+    .map((row) => row.filter((b) => !b.url || SAFE_URL.test(b.url)))
+    .filter((row) => row.length),
+});
+const hasUnsafeButtons = (markup) => (markup?.inline_keyboard || []).flat().some((b) => b.url && !SAFE_URL.test(b.url));
+// Bir marta rad etilgan bo'lsa — keyingi postlarga tel: tugmalari qo'shilmaydi (har safar qayta urinmaslik uchun)
+let telButtonsBroken = false;
+
+/**
+ * tg() + vaqtinchalik xatolarda BUYURTMA YO'QOLMASLIGI uchun qayta urinish:
+ *   • 429 — retry_after (≤3 s) kutib;
+ *   • migrate_to_chat_id — yangi guruh ID'siga o'tib;
+ *   • tugma URL'i rad etilsa (tel: va h.k.) — xavfli tugmalarsiz (amal tugmalari qoladi);
+ *   • HTML parse xatosida — oddiy matn bilan.
+ */
+async function tgRetry(method, body, attempt = 0) {
+  const res = await tg(method, body);
+  if (!res || res.ok || attempt >= 3) return res;
+  const desc = String(res.description || '');
+  if (res.parameters?.migrate_to_chat_id && body.chat_id) {
+    chatOverride = String(res.parameters.migrate_to_chat_id);
+    console.error(`[adminOrderMonitor] guruh supergruppaga aylangan! Yangi ID: ${chatOverride} — .env dagi ADMIN_ALERTS_CHAT_ID ni yangilang`);
+    return tgRetry(method, { ...body, chat_id: chatOverride }, attempt + 1);
+  }
+  if (res.error_code === 429) {
+    await sleep(Math.min(Number(res.parameters?.retry_after) || 1, 3) * 1000);
+    return tgRetry(method, body, attempt + 1);
+  }
+  if (res.error_code === 400 && body.reply_markup && hasUnsafeButtons(body.reply_markup)
+      && /url|button|port|host/i.test(desc)) {
+    telButtonsBroken = true;
+    console.warn('[adminOrderMonitor] Telegram tel: tugmasini rad etdi — qo‘ng‘iroq tugmalarisiz yuboriladi (telefon matnda)');
+    return tgRetry(method, { ...body, reply_markup: stripUnsafeButtons(body.reply_markup) }, attempt + 1);
+  }
+  if (res.error_code === 400 && body.parse_mode && /can't parse entities|can not parse entities/i.test(desc)) {
+    const { parse_mode: _p, ...rest } = body;
+    const plain = String(body.text || '').replace(/<[^>]*>/g, '').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
+    return tgRetry(method, { ...rest, text: plain }, attempt + 1);
+  }
+  return res;
+}
+
 async function tg(method, body) {
   if (!config.telegramBotToken) return null;
   try {
@@ -196,11 +252,11 @@ function buildKeyboard(order, { showActions = true } = {}) {
   const restPhone = order.restaurantId?.phone || order.restaurantPhone || '';
 
   const contactRow = [];
-  const telUser = normalizeTelHref(phone);
+  const telUser = telButtonsBroken ? null : normalizeTelHref(phone);
   if (telUser) {
     contactRow.push({ text: '📞 Mijozga qo‘ng‘iroq', url: telUser });
   }
-  const telRest = normalizeTelHref(restPhone);
+  const telRest = telButtonsBroken ? null : normalizeTelHref(restPhone);
   if (telRest) {
     contactRow.push({ text: '📞 Restoranga qo‘ng‘iroq', url: telRest });
   }
@@ -237,6 +293,8 @@ function buildText(order) {
   lines.push(`👤 ${esc(name)}`);
   lines.push(`📱 ${esc(phone)}`);
   if (u?.username) lines.push(`Telegram: @${esc(u.username)}`);
+  const restPhoneText = order.restaurantId?.phone || order.restaurantPhone || '';
+  if (restPhoneText) lines.push(`☎️ Restoran: ${esc(restPhoneText)}`);
 
   lines.push('');
   for (const it of order.items || []) {
@@ -269,7 +327,7 @@ function buildText(order) {
 
 export async function onOrderReleasedToKitchen(orderId) {
   try {
-    if (!config.adminAlertsChatId || !config.telegramBotToken) return;
+    if (!alertsChatId() || !config.telegramBotToken) return;
 
     const order = await Order.findById(orderId)
       .populate('userId', 'firstName lastName username phone telegramId')
@@ -288,8 +346,8 @@ export async function onOrderReleasedToKitchen(orderId) {
     const text = buildText(order);
     const reply_markup = buildKeyboard(order);
     const markupJson = JSON.stringify(reply_markup);
-    const res = await tg('sendMessage', {
-      chat_id: config.adminAlertsChatId,
+    const res = await tgRetry('sendMessage', {
+      chat_id: alertsChatId(),
       text,
       parse_mode: 'HTML',
       reply_markup,
@@ -304,7 +362,7 @@ export async function onOrderReleasedToKitchen(orderId) {
       { orderId: order._id },
       {
         $set: {
-          chatId: String(config.adminAlertsChatId),
+          chatId: alertsChatId(),   // migratsiya bo'lgan bo'lsa — yangi ID
           messageId: res.result.message_id,
           lastStatus: order.status,
           lastEditedAt: new Date(),
@@ -321,7 +379,7 @@ export async function onOrderReleasedToKitchen(orderId) {
 
 export async function refreshAdminOrderPost(orderId) {
   try {
-    if (!config.adminAlertsChatId || !config.telegramBotToken) return;
+    if (!alertsChatId() || !config.telegramBotToken) return;
 
     const post = await AdminOrderPost.findOne({ orderId }).lean();
     if (!post || post.orphaned) return;
@@ -338,7 +396,7 @@ export async function refreshAdminOrderPost(orderId) {
     const hash = contentHash(text, markupJson);
     if (hash === post.lastContentHash && post.lastStatus === order.status) return;
 
-    const res = await tg('editMessageText', {
+    const res = await tgRetry('editMessageText', {
       chat_id: post.chatId,
       message_id: post.messageId,
       text,
@@ -347,7 +405,10 @@ export async function refreshAdminOrderPost(orderId) {
       disable_web_page_preview: true,
     });
 
-    if (res?.ok) {
+    // "o'zgarmadi" — xato EMAS: post joyida, faqat hash yangilanadi (avval bu postni yetim qilib,
+    // keyingi barcha yangilanishlarni jim to'xtatardi)
+    const notModified = res?.error_code === 400 && /message is not modified/i.test(res.description || '');
+    if (res?.ok || notModified) {
       await AdminOrderPost.updateOne(
         { _id: post._id },
         {
@@ -359,9 +420,10 @@ export async function refreshAdminOrderPost(orderId) {
         },
       );
     } else if (
-      res?.error_code === 400 ||
-      res?.description?.includes('message to edit not found')
+      res?.error_code === 400
+      && /message to edit not found|message can't be edited|MESSAGE_ID_INVALID|chat not found/i.test(res.description || '')
     ) {
+      // Post guruhdan o'chirilgan (ehtimol admin ataylab tozalagan) — endi tegilmaydi
       await AdminOrderPost.updateOne({ _id: post._id }, { $set: { orphaned: true } });
     }
   } catch (e) {
@@ -619,6 +681,33 @@ async function finalizeAction(token, fromId, cq) {
   return true;
 }
 
+/*
+ * YETKAZILMAGAN BUYURTMALAR: buyurtma posti faqat buyurtma chiqarilganda BIR MARTA yuborilardi.
+ * Telegram o'sha payt ishlamasa (tarmoq, 429, guruh sozlamasi xato edi, keyin tuzaldi) —
+ * buyurtma guruhga HECH QACHON tushmasdi. Endi har tekshiruvda oxirgi 3 soatdagi faol,
+ * posti yo'q buyurtmalar yuboriladi (AdminOrderPost.orderId unikal — dublikat bo'lmaydi;
+ * guruhdan o'chirilgan "yetim" postlar qayta yuborilmaydi).
+ */
+const CATCHUP_HOURS = 3;
+async function catchUpMissingPosts() {
+  const since = new Date(Date.now() - CATCHUP_HOURS * 3600_000);
+  const recent = await Order.find({
+    createdAt: { $gte: since },
+    status: { $in: ACTIVE },
+    fulfillment: { $in: ['delivery', 'pickup'] },
+  }).select('_id').sort({ createdAt: 1 }).limit(30).lean();
+  if (!recent.length) return;
+  const have = new Set((await AdminOrderPost.find({ orderId: { $in: recent.map((o) => o._id) } }).select('orderId').lean())
+    .map((p) => String(p.orderId)));
+  let sent = 0;
+  for (const o of recent) {
+    if (have.has(String(o._id))) continue;
+    await onOrderReleasedToKitchen(o._id);
+    if (++sent >= 10) break;           // bir tekshiruvda ko'pi bilan 10 ta (Telegram limiti)
+    await sleep(150);
+  }
+}
+
 export async function tickAdminOrderMonitor() {
   try {
     for (const [k, sess] of sessions) {
@@ -640,7 +729,9 @@ export async function tickAdminOrderMonitor() {
       else tempMessages.delete(token);
     }
 
-    if (!config.adminAlertsChatId || !config.telegramBotToken) return;
+    if (!alertsChatId() || !config.telegramBotToken) return;
+
+    await catchUpMissingPosts();
 
     const posts = await AdminOrderPost.find({
       orphaned: { $ne: true },
@@ -664,4 +755,56 @@ export function startAdminOrderMonitorScheduler() {
     tickAdminOrderMonitor().catch(() => {});
     setInterval(() => tickAdminOrderMonitor().catch(() => {}), 60_000);
   }, delay);
+}
+/* ═══ DIAGNOSTIKA: buyurtmalar admin guruhiga yetib boradimi? ═══ */
+export async function adminOrderGroupStatus() {
+  const out = { ok: false, tokenSet: Boolean(config.telegramBotToken), chatId: alertsChatId(), problems: [], hints: [] };
+  const bad = (problem, hint) => { out.problems.push(problem); if (hint) out.hints.push(hint); };
+  if (!out.tokenSet) bad('TELEGRAM_BOT_TOKEN sozlanmagan', '.env ga bot tokenini yozing');
+  if (!out.chatId) bad('ADMIN_ALERTS_CHAT_ID (yoki SUPPORT_GROUP_CHAT_ID) sozlanmagan — yangi buyurtmalar admin guruhiga yuborilmaydi', 'Guruh ID sini (-100… bilan boshlanadi) .env ga yozing va serverni qayta ishga tushiring');
+  if (out.problems.length) return out;
+  if (!/^-?\d+$/.test(out.chatId)) bad(`Guruh ID noto'g'ri formatda: "${out.chatId}"`, 'Faqat raqam, masalan -1001234567890 (@nom emas)');
+
+  const me = await tgRetry('getMe', {});
+  if (!me?.ok) { bad(`Bot tokeni ishlamayapti: ${me?.description || 'javob yo‘q'}`, 'TELEGRAM_BOT_TOKEN ni @BotFather dan qayta oling'); return out; }
+  out.bot = { id: me.result.id, username: me.result.username };
+
+  const chat = await tgRetry('getChat', { chat_id: alertsChatId() });
+  if (!chat?.ok) {
+    if (/chat not found/i.test(chat?.description || '')) bad('Guruh topilmadi', 'ID noto‘g‘ri yoki bot guruhga qo‘shilmagan. Botni guruhga qo‘shing (ID odatda -100 bilan boshlanadi)');
+    else bad(`Guruhni olib bo'lmadi: ${chat?.description || 'javob yo‘q'}`);
+    return out;
+  }
+  out.chatId = alertsChatId();
+  out.chat = { id: chat.result.id, title: chat.result.title || null, type: chat.result.type };
+  if (chat.result.type === 'private') bad('Bu guruh emas, shaxsiy chat', 'Guruh ID sini ishlating (manfiy son)');
+
+  const m = await tgRetry('getChatMember', { chat_id: alertsChatId(), user_id: me.result.id });
+  if (m?.ok) {
+    out.bot.status = m.result.status;
+    if (['left', 'kicked'].includes(m.result.status)) bad(`Bot guruhda emas (${m.result.status})`, 'Botni guruhga qayta qo‘shing');
+    else if (m.result.status === 'restricted' && m.result.can_send_messages === false) bad('Botga guruhda yozish taqiqlangan', 'Guruh sozlamalaridan botga xabar yozish huquqini bering');
+  } else bad(`Bot huquqlarini tekshirib bo'lmadi: ${m?.description || 'javob yo‘q'}`);
+  if (!config.adminOrderActionPassword) out.hints.push('ADMIN_ORDER_ACTION_PASSWORD sozlanmagan: guruhdagi "Yakunlandi/Bekor qilish" tugmalari ishlamaydi (buyurtmalar baribir ko‘rinadi)');
+  out.ok = out.problems.length === 0;
+  return out;
+}
+
+/** Sinov: guruhga xabar yuboradi */
+export async function sendAdminOrderGroupTest(by = 'Admin') {
+  const st = await adminOrderGroupStatus();
+  if (!st.ok) return { ok: false, status: st };
+  const r = await tgRetry('sendMessage', {
+    chat_id: alertsChatId(),
+    text: `✅ <b>Sinov xabari</b>\n\nYangi mijoz buyurtmalari shu guruhga tushadi.\n<i>${esc(by)} · ${fmtTime(new Date())}</i>`,
+    parse_mode: 'HTML',
+  });
+  return r?.ok ? { ok: true, messageId: r.result.message_id, status: st } : { ok: false, error: r?.description || 'javob yo‘q', status: st };
+}
+
+/** Ishga tushganda: sozlama bo'sh bo'lsa — aniq ogohlantirish (avval jimgina o'tkazilardi) */
+export function warnIfOrderGroupMissing() {
+  if (config.telegramBotToken && !alertsChatId()) {
+    console.warn('[adminOrderMonitor] ⚠️  ADMIN_ALERTS_CHAT_ID (va SUPPORT_GROUP_CHAT_ID) bo‘sh — yangi mijoz buyurtmalari Telegram admin guruhiga YUBORILMAYDI');
+  }
 }

@@ -588,6 +588,8 @@ router.get('/support/presence', supportController.presence);
 router.post('/support/message', auth, supportController.sendMessage);
 // Admin tomoni
 router.get('/admin/support-group/status', auth, requireRole('admin'), supportController.groupStatus);
+router.get('/admin/order-group/status', auth, requireRole('admin'), supportController.orderGroupStatus);
+router.post('/admin/order-group/test', auth, requireRole('admin'), writeLimiter, supportController.orderGroupTest);
 router.post('/admin/support-group/test', auth, requireRole('admin'), writeLimiter, supportController.groupTest);
 router.get('/admin/support', auth, requireRole('admin'), supportController.list);
 router.get('/admin/support/:id', auth, requireRole('admin'), supportController.getOne);
