@@ -27,6 +27,8 @@ async function finish(method, res) {
   err.code = data?.error_code || res.status;
   err.description = data?.description || '';
   err.retryAfter = data?.parameters?.retry_after;
+  // Guruh supergruppaga aylangan bo'lsa Telegram yangi ID ni shu yerda beradi
+  err.migrateTo = data?.parameters?.migrate_to_chat_id;
   throw err;
 }
 

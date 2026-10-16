@@ -492,6 +492,9 @@ async function main() {
     ensureWebhook().catch((e) => console.error('Webhook sozlash:', e.message));
   }
 
+  // Mijoz xabarlari adminlar guruhiga boradimi — sozlama bo'sh bo'lsa aniq ogohlantirish
+  import('./services/supportGroupNotify.js').then((m) => m.warnIfSupportGroupMissing()).catch(() => {});
+
   // Yetkazish tasdiqlash — har 2 daqiqada
   // (kuryer olib ketgach 20 → 10 → 30 daqiqada so'raydi)
   if (config.telegramBotToken) {

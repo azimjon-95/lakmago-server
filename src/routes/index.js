@@ -587,6 +587,8 @@ router.get('/support/chat', auth, supportController.myChat);
 router.get('/support/presence', supportController.presence);
 router.post('/support/message', auth, supportController.sendMessage);
 // Admin tomoni
+router.get('/admin/support-group/status', auth, requireRole('admin'), supportController.groupStatus);
+router.post('/admin/support-group/test', auth, requireRole('admin'), writeLimiter, supportController.groupTest);
 router.get('/admin/support', auth, requireRole('admin'), supportController.list);
 router.get('/admin/support/:id', auth, requireRole('admin'), supportController.getOne);
 router.post('/admin/support/:id/reply', auth, requireRole('admin'), supportController.reply);

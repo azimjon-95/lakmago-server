@@ -6,7 +6,7 @@ import { getIO, getSupportPresence } from '../sockets/io.js';
 import { notify } from '../services/notifications.js';
 import { tgCall } from '../services/telegramApi.js';
 import { config } from '../config/index.js';
-import { notifySupportGroup, markSupportGroupReplied, markSupportGroupClosed } from '../services/supportGroupNotify.js';
+import { notifySupportGroup, markSupportGroupReplied, markSupportGroupClosed, supportGroupStatus, sendSupportGroupTest } from '../services/supportGroupNotify.js';
 
 const messageSchema = z.object({
   text: z.string().min(1).max(2000),
@@ -170,6 +170,17 @@ export const supportController = {
   }),
 
   // ===== ADMIN TOMONI =====
+
+  // GET /api/admin/support-group/status — adminlar guruhi to'g'ri sozlanganmi (sabablari bilan)
+  groupStatus: asyncHandler(async (_req, res) => {
+    res.set('Cache-Control', 'no-store').json(await supportGroupStatus());
+  }),
+
+  // POST /api/admin/support-group/test — guruhga sinov xabari yuboradi
+  groupTest: asyncHandler(async (req, res) => {
+    const r = await sendSupportGroupTest(req.role === 'admin' ? 'Admin' : 'Xodim');
+    res.status(r.ok ? 200 : 502).json(r);
+  }),
 
   // GET /api/admin/support — barcha suhbatlar (o'qilmagan birinchi)
   list: asyncHandler(async (req, res) => {

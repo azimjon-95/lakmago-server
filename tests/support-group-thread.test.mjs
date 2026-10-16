@@ -70,7 +70,12 @@ const chatOf = (u) => SupportChat.findOne({ userId: u._id }).lean();
 // FAQAT guruhga (manfiy chat_id) ketgan xabarlar. Admin javobida mijozning SHAXSIY chatiga ham
 // bildirishnoma ketadi (notifyUser) — u guruh postlariga kirmaydi.
 const inGroup = (c) => String(c.body.chat_id).startsWith('-');
-const sends = () => calls.filter((c) => c.method === 'sendMessage' && inGroup(c));
+// POST yuborishlari (yangi post). Keyingi xabarlar uchun postga JAVOB sifatida ketadigan qisqa bildirishnoma
+// (reply_parameters bilan) bu yerga KIRMAYDI — u alohida `notices()` da (Telegram tahrir uchun
+// bildirishnoma bermagani sababli adminlar keyingi xabarlarni sezishi uchun qo'shilgan).
+const isNotice = (c) => Boolean(c.body.reply_parameters);
+const sends = () => calls.filter((c) => c.method === 'sendMessage' && inGroup(c) && !isNotice(c));
+const notices = () => calls.filter((c) => c.method === 'sendMessage' && inGroup(c) && isNotice(c));
 const edits = () => calls.filter((c) => c.method === 'editMessageText' && inGroup(c));
 const lastText = () => [...calls].reverse().find((c) => (c.method === 'sendMessage' || c.method === 'editMessageText') && inGroup(c))?.body.text || '';
 const reset = () => { calls.length = 0; editMode = 'ok'; };
@@ -96,6 +101,7 @@ console.log('\n[2] Qayta-qayta yozsa — YANGI xabar YO‘Q, o‘sha post tahrir
   await say(A, 'Qanday krtsma buladi');
   await say(A, 'Yana bir savol');
   ok(sends().length === 0 && edits().length === 2, `sendMessage 0 ta, editMessageText 2 ta (${sends().length}/${edits().length})`);
+  ok(notices().length === 2 && notices().every((n) => n.body.disable_notification !== true), `har bir keyingi xabar adminlarga TOVUSHLI bildirishnoma bilan keldi (${notices().length} ta)`);
   ok(edits().every((e) => e.body.chat_id === '-100777' && e.body.message_id === 501), 'ikkalasi ham 501-xabarni tahrirlaydi');
   const t = lastText();
   const i1 = t.indexOf('«Hop»'); const i2 = t.indexOf('«Qanday krtsma buladi»'); const i3 = t.indexOf('«Yana bir savol»');
@@ -241,6 +247,8 @@ console.log('\n[7] POYGA: bir mijozning 5 ta xabari BIR VAQTDA — bitta post, 5
   const cC = await chatOf(C);
   ok(sends().length === 1, `faqat 1 ta post yaratildi (${sends().length})`);
   ok(edits().length === 4, `4 ta tahrir (${edits().length})`);
+  ok(notices().length === 4, `4 ta keyingi xabar — 4 ta bildirishnoma (adminlar har birini sezadi) (${notices().length})`);
+  ok(notices().every((n) => n.body.reply_parameters.message_id > 0), 'bildirishnomalar mijoz postiga javob sifatida');
   ok(cC.groupPost.lines.length === 5, `bazada 5 satr: ${cC.groupPost.lines.length}`);
   const t = lastText();
   ok(['1', '2', '3', '4', '5'].every((n) => t.includes(`«parallel ${n}»`)), 'oxirgi post matnida 5 ta xabarning hammasi bor (birortasi yo‘qolmagan)');
