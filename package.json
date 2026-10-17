@@ -50,7 +50,8 @@
     "test:contact": "node tests/restaurant-contact.test.mjs",
     "test:support-delivery": "node tests/support-delivery.test.mjs",
     "test:admin-order-delivery": "node tests/admin-order-delivery.test.mjs",
-    "test:wedding-proxy": "node tests/wedding-owner-proxy.test.mjs"
+    "test:wedding-proxy": "node tests/wedding-owner-proxy.test.mjs",
+    "test:promo-modals": "node tests/promo-modals.test.mjs"
   },
   "dependencies": {
     "@socket.io/redis-adapter": "^8.3.0",

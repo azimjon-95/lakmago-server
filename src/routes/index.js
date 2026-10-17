@@ -14,6 +14,7 @@ import { notificationController } from '../controllers/notifications.js';
 import { agreementController } from '../controllers/agreements.js';
 import { restaurantPanelController } from '../controllers/restaurantPanel.js';
 import { uploadController } from '../controllers/upload.js';
+import { promoModalController } from '../controllers/promoModals.js';
 import { referralController } from '../controllers/referralController.js';
 import { addressController } from '../controllers/address.js';
 import { userProfileController } from '../controllers/userProfile.js';
@@ -80,6 +81,9 @@ router.get('/auth/me', auth, panelAuthController.me);                 // umumiy 
 
 // ===== Ochiq katalog (mijoz webapp) =====
 router.get('/banners', bannerController.list);
+// Reklama oynalari: mijoz ilovasi ochilganda navbat bilan (kuniga bir marta)
+router.get('/promo-modals/active', promoModalController.active);
+router.post('/promo-modals/:id/track', writeLimiter, promoModalController.track);
 router.get('/restaurants', restaurantController.list);
 router.get('/restaurants/:id', restaurantController.getOne);
 router.get('/restaurants/:id/dishes', restaurantController.getDishes);
@@ -642,6 +646,12 @@ router.patch('/admin/settings', auth, requireRole('admin'), adminController.upda
 // lekin ma'lumot 403 bilan qaytardi (frontend jim yutardi).
 router.get('/admin/revenue', ...AS('revenue'), adminController.revenue);
 router.get('/admin/banners', ...AS('banners'), adminController.banners);
+router.get('/admin/promo-modals', ...AS('banners'), promoModalController.list);
+router.post('/admin/promo-modals', auth, requireRole('admin'), promoModalController.create);
+router.post('/admin/promo-modals/reorder', auth, requireRole('admin'), promoModalController.reorder);
+router.patch('/admin/promo-modals/:id', auth, requireRole('admin'), promoModalController.update);
+router.post('/admin/promo-modals/:id/reshow', auth, requireRole('admin'), promoModalController.reshow);
+router.delete('/admin/promo-modals/:id', auth, requireRole('admin'), promoModalController.remove);
 router.post('/admin/banners', auth, requireRole('admin'), adminController.createBanner);
 router.patch('/admin/banners/:id', auth, requireRole('admin'), adminController.updateBanner);
 router.delete('/admin/banners/:id', auth, requireRole('admin'), adminController.deleteBanner);
