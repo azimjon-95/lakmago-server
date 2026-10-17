@@ -43,6 +43,12 @@ console.log('\n[3] sanitizePromo');
   ok(/Tugash/.test(r.error || ''), 'tugash boshlanishdan oldin — xato');
   r = sanitizePromo({ title: 'Yaxshi *taklif*', footer: '*LokmaGo* bilan', template: 'coupon', active: 1, frequency: 'once', link: '/market', imageUrl: 'https://res.cloudinary.com/x/a.png' });
   ok(!r.error && r.data.template === 'coupon' && r.data.active === true && r.data.frequency === 'once', 'to‘g‘ri ma’lumot qabul qilindi');
+  r = sanitizePromo({ template: 'image', title: '', imageUrl: 'https://res.cloudinary.com/x/full.jpg' });
+  ok(!r.error && r.data.template === 'image' && r.data.title === '', '"Faqat rasm": sarlavhasiz qabul qilinadi');
+  r = sanitizePromo({ template: 'image', title: '' });
+  ok(/rasm yuklang/.test(r.error || ''), '"Faqat rasm": rasmsiz — xato');
+  r = sanitizePromo({ template: 'brush', title: '' });
+  ok(/Sarlavhani/.test(r.error || ''), 'boshqa dizaynda sarlavha hamon majburiy');
   r = sanitizePromo({ active: false }, { partial: true });
   ok(!r.error && Object.keys(r.data).join() === 'active', 'PATCH faqat berilgan maydon');
 }

@@ -9,8 +9,9 @@ import mongoose from 'mongoose';
  */
 const promoModalSchema = new mongoose.Schema(
   {
-    template: { type: String, enum: ['brush', 'coupon', 'sunburst'], default: 'brush' },
-    title: { type: String, required: true, maxlength: 90 },
+    // image — faqat rasm: matnsiz, ramkasiz, butun oynani qoplaydi
+    template: { type: String, enum: ['brush', 'coupon', 'sunburst', 'image'], default: 'brush' },
+    title: { type: String, default: '', maxlength: 90 },
     footer: { type: String, default: '', maxlength: 70 },
     imageUrl: { type: String, default: '' },
     /** Bosilganda ochiladigan sahifa: ilova ichidagi yo'l (/market) yoki https havola; bo'sh — faqat yopiladi */

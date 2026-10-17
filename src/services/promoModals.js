@@ -1,7 +1,7 @@
 /*
  * Reklama oynalari — sof mantiq (bazasiz testlanadi): matnni tozalash, faollik, mijozga ko'rinish.
  */
-export const TEMPLATES = ['brush', 'coupon', 'sunburst'];
+export const TEMPLATES = ['brush', 'coupon', 'sunburst', 'image'];
 export const LIMITS = { title: 90, footer: 70, link: 200 };
 export const MAX_ACTIVE = 5;
 
@@ -55,15 +55,18 @@ export function sanitizePromo(input = {}, { partial = false } = {}) {
     if (!TEMPLATES.includes(input.template ?? 'brush')) return { data, error: 'Shablon noto‘g‘ri' };
     data.template = input.template ?? 'brush';
   }
+  // "Faqat rasm" (image) — matn shart emas, rasm majburiy
+  const imageOnly = (input.template ?? (partial ? undefined : 'brush')) === 'image';
   if (!partial || has('title')) {
     data.title = cleanText(input.title, LIMITS.title);
-    if (data.title.replace(/\*/g, '').trim().length < 3) return { data, error: 'Sarlavhani yozing (kamida 3 belgi)' };
+    if (!imageOnly && data.title.replace(/\*/g, '').trim().length < 3) return { data, error: 'Sarlavhani yozing (kamida 3 belgi)' };
   }
   if (!partial || has('footer')) data.footer = cleanText(input.footer, LIMITS.footer);
   if (!partial || has('imageUrl')) {
     data.imageUrl = cleanUrl(input.imageUrl);
     if (input.imageUrl && !data.imageUrl) return { data, error: 'Rasm havolasi noto‘g‘ri (https bo‘lishi kerak)' };
   }
+  if (imageOnly && (!partial || has('imageUrl')) && !data.imageUrl) return { data, error: '“Faqat rasm” uchun rasm yuklang' };
   if (!partial || has('link')) {
     data.link = cleanLink(input.link);
     if (input.link && !data.link) return { data, error: 'Havola noto‘g‘ri: /market kabi yo‘l yoki https:// manzil yozing' };
