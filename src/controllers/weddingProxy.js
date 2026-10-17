@@ -21,7 +21,20 @@ const TIMEOUT_MS = 20_000;
 // Faqat ma'lum bo'limlar — ixtiyoriy yo'lni proksilash yo'q
 const ALLOWED = /^(stats|venues|vendors|bookings|payments|subscriptions|slots)(\/[a-f0-9]{24})?(\/(block|unblock|confirm|cancel|account))?$/i;
 // To'yxona egasi (CRM) — faqat o'z bo'limlari
-const OWNER_ALLOWED = /^(me|calendar|reservations|bookings|transactions|employees|finance\/summary)(\/[a-f0-9]{24})?$/i;
+/*
+ * Egasi panelining wedding serverga ochiq yo'llari (qat'iy ro'yxat — boshqasi 404).
+ * Mijoz bronlari qutisi: inbox, inbox/:id, inbox/:id/(seen|agree|reject|advance|confirm|cancel), notifications.
+ */
+const OWNER_ALLOWED = new RegExp(
+  '^(' +
+    '(me|calendar|reservations|bookings|transactions|employees|finance/summary)(/[a-f0-9]{24})?' +
+    '|inbox(/summary)?' +
+    '|inbox/[a-f0-9]{24}(/(seen|agree|reject|advance|confirm|cancel))?' +
+    '|notifications(/read)?' +
+  ')$',
+  'i',
+);
+export { OWNER_ALLOWED };
 
 /** To'yxona serveriga so'rov (kalit shu yerda qo'shiladi). Tarmoq xatosida null. */
 export async function weddingFetch(path, { method = 'GET', body, headers = {} } = {}) {
