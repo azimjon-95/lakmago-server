@@ -7,6 +7,7 @@ import { orderLabel } from './orderNumber.js';
 import { notifyUser } from './telegram.js';
 import { getIO } from '../sockets/io.js';
 import { emitOrderToRestaurant } from './orderSocket.js';
+import { editAlert, sendAlert } from './adminOrderMonitor.js';
 
 /*
  * ═══ "MIJOZ RAD ETDI" — admin tasdig'i bilan bekor qilish ═══
@@ -134,6 +135,7 @@ export async function createCancelRequest({ orderId, restaurantId, reasonCode, n
     throw new IncidentError('ALREADY_PENDING', 'So‘rov allaqachon yuborilgan — admin ko‘rib chiqmoqda', 409);
   }
 
+  // Natija tekshiriladi: yetmasa log + tiklash vazifasi (catchUpIncidentPosts) keyin qayta yuboradi
   await postToGroup(incident).catch((e) => console.error('[incident] guruh:', e.message));
   getIO()?.to('admin').emit('incident:new', { _id: incident._id });
   await pushOrderUpdate(claimed._id);
@@ -169,24 +171,46 @@ function groupKeyboard(inc) {
   return { inline_keyboard: [[{ text: inc.status === 'pending' ? '🔎 Ko‘rib chiqish (admin panel)' : '📄 Batafsil', url: `${config.adminPanelUrl}/incidents?id=${inc._id}` }]] };
 }
 
+/**
+ * Guruhga yuborish. true — yuborildi. Xato bo'lsa SABABI logga yoziladi (avval jim yutilardi: guruh sozlanmagan,
+ * bot guruhda emas, 429, supergruppa ko'chishi — hammasi "xabar kelmadi" bo'lib qolardi).
+ */
 async function postToGroup(inc) {
-  const chatId = config.adminAlertsChatId;
-  if (!chatId || !config.telegramBotToken) return;
-  const r = await tg('sendMessage', {
-    chat_id: chatId, text: groupText(inc), parse_mode: 'HTML',
+  const r = await sendAlert({
+    text: groupText(inc), parse_mode: 'HTML',
     link_preview_options: { is_disabled: true }, reply_markup: groupKeyboard(inc),
   });
-  if (r?.ok) {
-    await CustomerIncident.updateOne({ _id: inc._id }, { $set: { groupPost: { chatId: String(chatId), messageId: r.result.message_id } } });
-  }
+  await CustomerIncident.updateOne({ _id: inc._id }, { $inc: { groupPostAttempts: 1 }, ...(r.ok ? { $set: { groupPost: { chatId: String(r.chatId), messageId: r.messageId } } } : {}) }).catch(() => {});
+  if (!r.ok) console.error(`[incident] ⚠️ ${inc.orderLabel || inc._id}: admin guruhiga yuborilmadi — ${r.error}`);
+  return r.ok;
 }
 
 async function refreshGroupPost(inc) {
   if (!inc.groupPost?.messageId) return;
-  await tg('editMessageText', {
-    chat_id: inc.groupPost.chatId, message_id: inc.groupPost.messageId, text: groupText(inc), parse_mode: 'HTML',
+  const r = await editAlert(inc.groupPost.chatId, inc.groupPost.messageId, {
+    text: groupText(inc), parse_mode: 'HTML',
     link_preview_options: { is_disabled: true }, reply_markup: groupKeyboard(inc),
   });
+  if (!r.ok) console.error(`[incident] guruhdagi xabar yangilanmadi: ${r.error}`);
+}
+
+/*
+ * Guruhga YETMAGAN so'rovlarni qayta yuboradi (har daqiqada admin monitor tick'idan chaqiriladi).
+ * Sabab tuzalgach (guruh sozlandi, bot qo'shildi, Telegram tiklandi) so'rov o'zi guruhga tushadi.
+ * Faqat kutilayotgan (pending), oxirgi 24 soat, ~60 urinishgacha — abadiy takrorlamaydi.
+ */
+export async function catchUpIncidentPosts(now = new Date()) {
+  const rows = await CustomerIncident.find({
+    status: 'pending',
+    'groupPost.messageId': { $exists: false },
+    createdAt: { $gte: new Date(now.getTime() - 24 * 3600_000) },
+    groupPostAttempts: { $lt: 60 },
+  }).sort({ createdAt: 1 }).limit(10).lean();
+  let sent = 0;
+  for (const inc of rows) {
+    if (await postToGroup(inc)) sent += 1;
+  }
+  return sent;
 }
 
 /* ───────────── 2. Admin qarori ───────────── */
