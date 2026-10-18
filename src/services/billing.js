@@ -76,7 +76,7 @@ export async function getRestaurantDailyBreakdown(restaurantId, dateStr) {
       $match: {
         restaurantId: new Types.ObjectId(String(restaurantId)),
         createdAt: { $gte: start, $lte: end },
-        type: { $in: ['payment_in', 'commission', 'restaurant_due'] },
+        type: { $in: ['payment_in', 'commission', 'restaurant_due', 'bonus_compensation'] },
       },
     },
     {
@@ -95,6 +95,7 @@ export async function getRestaurantDailyBreakdown(restaurantId, dateStr) {
     electronicCommission: 0,
     cashCommissionDue: 0,
     restaurantShare: 0, // elektron to'lovdan restoranga tegishli sof summa
+    bonusCompensation: 0, // LokmaGo sovg'a-bonusi uchun restoranga qoplangan summa
     ordersCount: 0,
   };
 
@@ -113,6 +114,8 @@ export async function getRestaurantDailyBreakdown(restaurantId, dateStr) {
       // Naqd uchun restaurant_due — komissiya QARZI (manfiy), u
       // "restoranga tegishli elektron tushum" emas.
       out.restaurantShare += r.total;
+    } else if (type === 'bonus_compensation') {
+      out.bonusCompensation += r.total;
     }
   }
 
@@ -130,6 +133,7 @@ export async function getRestaurantDailyBreakdown(restaurantId, dateStr) {
     platformCommission: out.platformCommission,
     cashCommissionDue: out.cashCommissionDue,
     restaurantShare: out.restaurantShare,
+    bonusCompensation: out.bonusCompensation,
   };
 }
 
@@ -151,7 +155,7 @@ export async function getDailySettlementAllRestaurants(dateStr) {
     {
       $match: {
         createdAt: { $gte: start, $lte: end },
-        type: { $in: ['payment_in', 'commission', 'restaurant_due'] },
+        type: { $in: ['payment_in', 'commission', 'restaurant_due', 'bonus_compensation'] },
         restaurantId: { $ne: null },
       },
     },
@@ -179,6 +183,7 @@ export async function getDailySettlementAllRestaurants(dateStr) {
         platformCommission: 0,
         cashCommissionDue: 0,
         restaurantShare: 0,
+        bonusCompensation: 0,
         ordersCount: 0,
       });
     }
@@ -198,6 +203,8 @@ export async function getDailySettlementAllRestaurants(dateStr) {
       if (isCash) row.cashCommissionDue += r.total;
     } else if (type === 'restaurant_due' && !isCash) {
       row.restaurantShare += r.total;
+    } else if (type === 'bonus_compensation') {
+      row.bonusCompensation += r.total;
     }
   }
 
@@ -255,6 +262,7 @@ export async function getDailySettlementAllRestaurants(dateStr) {
       platformCommission: row.platformCommission,
       cashCommissionDue: row.cashCommissionDue,
       restaurantShare: row.restaurantShare,
+      bonusCompensation: row.bonusCompensation,
       // Shu kunning o'zgarishi emas — restoranning HOZIRGI umumiy
       // balansi (yuqoridagi izohga qarang)
       netPayable: Math.max(0, r.balance || 0),
@@ -532,6 +540,35 @@ export async function settleOrder(orderId) {
     restaurant.balance = (restaurant.balance || 0) + restaurantShare;
   }
 
+  /*
+   * ═══ LOKMAGO SOVG'A-BONUSI QOPLASH ═══
+   * Restoran buyurtma bilan mijozga BEPUL sovg'a (masalan 1 l Coca-Cola) berdi — uning puli LokmaGo
+   * hisobidan restoranga qoplanadi. Naqd ham, karta ham: har ikkala holatda restoran sovg'ani o'z
+   * zahirasidan bergan, shuning uchun balansi (+) ga o'zgaradi (naqdda — LokmaGo'ga qarzi kamayadi).
+   * Faqat YETKAZILGAN buyurtma uchun (settleOrder shunda chaqiriladi); `already` tekshiruvi tufayli
+   * ikki marta yozilmaydi. Summa buyurtma yaratilgan paytda MUZLATILGAN (qoida keyin o'zgarsa ham).
+   */
+  const bonusCompensation = (order.bonusItems || []).reduce(
+    (s, g) => s + (Number(g.reimburse) || 0) * (Number(g.quantity) || 0), 0);
+  if (bonusCompensation > 0) {
+    await Ledger.create({
+      type: 'bonus_compensation',
+      amount: bonusCompensation,
+      orderId: order._id,
+      restaurantId: restaurant._id,
+      provider: ledgerProvider,
+      isCash,
+      meta: {
+        note: `LokmaGo sovg‘a-bonusi: ${order.bonusItems.map((g) => `${g.quantity}× ${g.itemName}`).join(', ')}`,
+        gifts: order.bonusItems.map((g) => ({
+          ruleId: g.ruleId || null, itemName: g.itemName, quantity: g.quantity,
+          reimburse: g.reimburse, amount: (g.reimburse || 0) * (g.quantity || 0),
+        })),
+      },
+    });
+    restaurant.balance = (restaurant.balance || 0) + bonusCompensation;
+  }
+
   restaurant.totalOrders = (restaurant.totalOrders || 0) + 1;
   await restaurant.save();
 
@@ -547,7 +584,7 @@ export async function settleOrder(orderId) {
     balance: restaurant.balance,
   });
 
-  return { commission, restaurantShare, percent, mode, isCash };
+  return { commission, restaurantShare, percent, mode, isCash, bonusCompensation };
 }
 
 /**
@@ -969,6 +1006,7 @@ export async function getRestaurantSummary(restaurantId, from, to) {
     tushum: byType.payment_in || 0,
     komissiya: byType.commission || 0,
     restoranUlushi: byType.restaurant_due || 0,
+    bonusKompensatsiya: byType.bonus_compensation || 0,
     tolangan: Math.abs(byType.payout || 0),
     qaytarilgan: Math.abs(byType.refund || 0),
     balans: restaurant?.balance || 0,
@@ -1154,7 +1192,7 @@ export async function getRestaurantDailyLedger(restaurantId, from, to) {
     if (!byDay.has(day)) {
       byDay.set(day, {
         day,
-        tushum: 0, komissiya: 0, restoranUlushi: 0, tolangan: 0, qaytarilgan: 0,
+        tushum: 0, komissiya: 0, restoranUlushi: 0, bonusKompensatsiya: 0, tolangan: 0, qaytarilgan: 0,
       });
     }
     const bucket = byDay.get(day);
@@ -1163,6 +1201,7 @@ export async function getRestaurantDailyLedger(restaurantId, from, to) {
     if (r._id.type === 'restaurant_due') bucket.restoranUlushi = r.total;
     if (r._id.type === 'payout') bucket.tolangan = Math.abs(r.total);
     if (r._id.type === 'refund') bucket.qaytarilgan = Math.abs(r.total);
+    if (r._id.type === 'bonus_compensation') bucket.bonusKompensatsiya = r.total;
   }
 
   return [...byDay.values()].sort((a, b) => b.day.localeCompare(a.day));
