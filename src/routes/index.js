@@ -15,7 +15,6 @@ import { agreementController } from '../controllers/agreements.js';
 import { restaurantPanelController } from '../controllers/restaurantPanel.js';
 import { uploadController } from '../controllers/upload.js';
 import { promoModalController } from '../controllers/promoModals.js';
-import { giftBonusController } from '../controllers/giftBonus.js';
 import { referralController } from '../controllers/referralController.js';
 import { addressController } from '../controllers/address.js';
 import { userProfileController } from '../controllers/userProfile.js';
@@ -85,8 +84,6 @@ router.get('/banners', bannerController.list);
 // Reklama oynalari: mijoz ilovasi ochilganda navbat bilan (kuniga bir marta)
 router.get('/promo-modals/active', promoModalController.active);
 router.post('/promo-modals/:id/track', writeLimiter, promoModalController.track);
-// LokmaGo sovg'a-bonusi (masalan 100 000 so'mdan 1 l Coca-Cola): mijoz savati uchun hisob
-router.post('/gift-bonus/quote', auth, writeLimiter, giftBonusController.quote);
 router.get('/restaurants', restaurantController.list);
 router.get('/restaurants/:id', restaurantController.getOne);
 router.get('/restaurants/:id/dishes', restaurantController.getDishes);
@@ -649,10 +646,6 @@ router.patch('/admin/settings', auth, requireRole('admin'), adminController.upda
 // lekin ma'lumot 403 bilan qaytardi (frontend jim yutardi).
 router.get('/admin/revenue', ...AS('revenue'), adminController.revenue);
 router.get('/admin/banners', ...AS('banners'), adminController.banners);
-router.get('/admin/gift-bonuses', ...AS('banners'), giftBonusController.list);
-router.post('/admin/gift-bonuses', auth, requireRole('admin'), giftBonusController.create);
-router.patch('/admin/gift-bonuses/:id', auth, requireRole('admin'), giftBonusController.update);
-router.delete('/admin/gift-bonuses/:id', auth, requireRole('admin'), giftBonusController.remove);
 router.get('/admin/promo-modals', ...AS('banners'), promoModalController.list);
 router.post('/admin/promo-modals', auth, requireRole('admin'), promoModalController.create);
 router.post('/admin/promo-modals/reorder', auth, requireRole('admin'), promoModalController.reorder);

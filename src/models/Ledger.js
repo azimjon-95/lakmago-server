@@ -22,7 +22,6 @@ const ledgerSchema = new Schema(
         'refund',          // mijozga qaytarildi
         'adjustment',      // qo'lda tuzatish (admin)
         'waiter_payout',   // ofitsiantga xizmat haqi to'landi
-        'bonus_compensation', // LokmaGo sovg'a-bonusi: restoran bepul bergan sovg'a puli restoranga qoplandi (+)
       ],
     },
 

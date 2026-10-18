@@ -24,7 +24,6 @@ import { parseReferralCode, attachReferral, rewardReferralIfSubscribed } from '.
 import { config } from '../config/index.js';
 import { verifyItemPrices } from '../services/priceVerification.js';
 import { computeOrderFinance, reconcile, somToTiyin, tiyinToSom } from '../services/orderFinance.js';
-import { resolveGifts } from '../services/giftBonus.js';
 import { activeAgreement } from '../models/CommissionAgreement.js';
 import { COMPLETABLE_STATUSES } from '../services/reminderRules.js';
 import { emitOrderToRestaurant } from '../services/orderSocket.js';
@@ -858,20 +857,6 @@ export const orderController = {
         });
       }
 
-      /*
-       * LokmaGo sovg'a-bonusi (masalan 100 000 so'mdan 1 l Coca-Cola): hisob SERVERDA.
-       * Narxga kirmaydi (mijoz uchun bepul), faqat buyurtmaga yoziladi; restoranga puli yetkazilgach qoplanadi.
-       * Xato bo'lsa buyurtma bonussiz yaratiladi — bonus hech qachon buyurtmani to'xtatmaydi.
-       */
-      const gifts = await resolveGifts({
-        restaurant: rest,
-        userId: req.userId,
-        menuAmount: o.subtotal,
-        paidAmount: Math.max(0, o.subtotal - (promo?.discount || 0) - (o._pickupDiscount || 0)),
-        fulfillment,
-        paymentMethod,
-      });
-
       const doc = await Order.create({
         userId: req.userId,
         restaurantId: o.restaurantId,
@@ -885,7 +870,6 @@ export const orderController = {
         promotionId: o._promo?.promotionId || null,
         promotionName: o._promo?.promotionName || '',
         promotionDiscount: o._promo?.discount || 0,
-        ...(gifts.items.length ? { bonusItems: gifts.items, bonusCost: gifts.cost } : {}),
         pickupDiscount: o._pickupDiscount || 0,
         pickupDiscountPercent: o._pickupPercent || 0,
         total,

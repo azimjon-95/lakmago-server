@@ -145,27 +145,6 @@ const orderSchema = new Schema(
     bonusUsed: { type: Number, default: 0 }, // shu buyurtмада ishlatilган bonus (so'm)
 
     /*
-     * LOKMAGO SOVG'A-BONUSI (models/GiftBonus.js): buyurtma taomlariga qo'shib BEPUL beriladigan narsa
-     * (masalan 1 l Coca-Cola). Narxga/komissiyaga/snapshot'ga KIRMAYDI — mijoz uchun 0 so'm.
-     * Restoran sovg'ani beradi, puli esa LokmaGo tomonidan buyurtma YETKAZILGACH restoranga qoplanadi
-     * (billing.settleOrder → Ledger 'bonus_compensation'). Qoida o'zgarsa ham bu qatorlar o'zgarmaydi.
-     */
-    bonusItems: {
-      type: [new Schema({
-        ruleId: { type: Schema.Types.ObjectId, ref: 'GiftBonus' },
-        name: { type: String, default: '' },
-        itemName: { type: String, required: true },
-        imageUrl: { type: String, default: '' },
-        quantity: { type: Number, default: 1, min: 1 },
-        /** LokmaGo restoranga to'laydigan summa — BITTA dona uchun (so'm), buyurtma yaratilgan paytdagi */
-        reimburse: { type: Number, default: 0, min: 0 },
-      }, { _id: false })],
-      default: undefined,
-    },
-    /** Barcha sovg'alar bo'yicha restoranga qoplanadigan jami (so'm) — limit/byudjet hisobi uchun */
-    bonusCost: { type: Number, default: 0, min: 0 },
-
-    /*
      * OTILGAN KURSLAR — oshxonada tayyorlanishi boshlangan.
      *
      * Buyurtma yaratilganda faqat [1] bo'ladi. Ofitsiant
@@ -403,9 +382,6 @@ orderSchema.index(
     partialFilterExpression: { dailyNumber: { $type: 'number' } },
   },
 );
-
-// Sovg'a-bonus limit/byudjet hisobi: qoida bo'yicha buyurtmalarni tez sanash
-orderSchema.index({ 'bonusItems.ruleId': 1, createdAt: -1 }, { sparse: true });
 
 // BFF ga hodisa: buyurtma QANDAY yo'l bilan o'zgarsa ham avtomatik (models/orderEvents.js)
 orderSchema.plugin(orderEventsPlugin);

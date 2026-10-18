@@ -230,8 +230,6 @@ export async function getOrderTrack(orderId, userId, now = Date.now()) {
         imageUrl: d?.imageUrl || d?.images?.[0] || null,
       };
     }),
-    // LokmaGo sovg'a-bonusi (mijozga bepul): ichki qoplash summasi (reimburse) mijozga yuborilmaydi
-    bonusItems: (o.bonusItems || []).map((g) => ({ itemName: g.itemName, quantity: g.quantity || 1, imageUrl: g.imageUrl || null })),
     subtotal: o.subtotal,
     deliveryFee: o.deliveryFee || 0,
     total: o.total,
