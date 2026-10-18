@@ -226,6 +226,22 @@ export function buildOrderText(order, { actorName = '', assignment = null, tz = 
   }
   if (images?.size) lines.push('<i>Rasmini ko‘rish uchun taom nomini bosing</i>');
 
+  /*
+   * LokmaGo sovg'a-bonusi: taomga QO'SHIB mijozga BEPUL beriladi. Restoran buni unutmasligi va
+   * "puli kim to'laydi" deb so'ramasligi uchun alohida va aniq yoziladi.
+   */
+  if (order.bonusItems?.length) {
+    lines.push('');
+    lines.push('🎁 <b>SOVG‘A — mijozga BEPUL qo‘shib bering:</b>');
+    for (const g of order.bonusItems) {
+      lines.push(`   <b>${Number(g.quantity) || 1}× ${esc(g.itemName)}</b>`);
+    }
+    const cost = order.bonusItems.reduce((s, g) => s + (Number(g.reimburse) || 0) * (Number(g.quantity) || 0), 0);
+    lines.push(cost > 0
+      ? `   <i>Puli LokmaGo tomonidan qoplanadi: ${som(cost)} so‘m (buyurtma yetkazilgach hisobingizga qo‘shiladi)</i>`
+      : '   <i>LokmaGo aksiyasi — mijozdan pul olinmaydi</i>');
+  }
+
   lines.push('');
   lines.push(`🍽 Taomlar: ${som(order.subtotal)} so‘m`);
   if (order.deliveryFee > 0) lines.push(`🚴 Yetkazish: ${som(order.deliveryFee)} so‘m`);

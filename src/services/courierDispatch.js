@@ -53,11 +53,15 @@ export async function createShareLink(orderId) {
    * sahifasida taomlar bir uzun qator bo'lib chiqardi — nechta
    * nima kelayotganini ajratib bo'lmasdi.
    */
-  const items = (order.items || []).map((i) => ({
-    name: i.name,
-    quantity: i.quantity,
-    total: (i.unitPrice || 0) * (i.quantity || 1),
-  }));
+  const items = [
+    ...(order.items || []).map((i) => ({
+      name: i.name,
+      quantity: i.quantity,
+      total: (i.unitPrice || 0) * (i.quantity || 1),
+    })),
+    // LokmaGo sovg'asi (masalan Coca-Cola): kuryer ham olib ketayotganini bilsin (narxi 0)
+    ...(order.bonusItems || []).map((g) => ({ name: `🎁 ${g.itemName} (sovg‘a)`, quantity: g.quantity || 1, total: 0 })),
+  ];
   const itemsSummary = items.map((i) => `${i.quantity}x ${i.name}`).join(', ');
 
   const customerName = [user.firstName, user.lastName].filter(Boolean).join(' ')
