@@ -24,6 +24,7 @@ import { parseReferralCode, attachReferral, rewardReferralIfSubscribed } from '.
 import { config } from '../config/index.js';
 import { verifyItemPrices } from '../services/priceVerification.js';
 import { computeOrderFinance, reconcile, somToTiyin, tiyinToSom } from '../services/orderFinance.js';
+import { resolveGifts } from '../services/giftBonus.js';
 import { activeAgreement } from '../models/CommissionAgreement.js';
 import { COMPLETABLE_STATUSES } from '../services/reminderRules.js';
 import { emitOrderToRestaurant } from '../services/orderSocket.js';
@@ -857,6 +858,32 @@ export const orderController = {
         });
       }
 
+      /*
+       * LokmaGo sovg'a-bonusi (masalan 100 000 so'mdan 1 l Coca-Cola): hisob SERVERDA.
+       * Narxga kirmaydi (mijoz uchun bepul), faqat buyurtmaga yoziladi; restoranga puli yetkazilgach qoplanadi.
+       * Xato bo'lsa buyurtma bonussiz yaratiladi — bonus hech qachon buyurtmani to'xtatmaydi.
+       */
+      /*
+       * Diqqat: bu IKKINCHI sikl (buyurtma yaratish). `rest` va `promo` faqat birinchi (tekshiruv) siklida
+       * e'lon qilingan — bu yerda restoran `restMap`da, aksiya chegirmasi `o._promo` ichida.
+       * Butun blok try/catch ichida: bonus (argumentlarni tuzishdagi xato ham) buyurtmani HECH QACHON to'xtatmaydi.
+       */
+      let gifts = { items: [], cost: 0 };
+      try {
+        gifts = await resolveGifts({
+          restaurant: restMap.get(String(o.restaurantId)) || { _id: o.restaurantId },
+          userId: req.userId,
+          // DIQQAT: bu yerda `o.subtotal` moliya bosqichidan keyin allaqachon CHEGIRMALARDAN KEYINGI summaga
+          // qayta yozilgan. Asl (serverda tekshirilgan) menyu narxi — `o._foodBaseSom`.
+          menuAmount: o._foodBaseSom ?? o.subtotal,
+          paidAmount: Math.max(0, (o._foodBaseSom ?? o.subtotal) - (o._promo?.discount || 0) - (o._pickupDiscount || 0)),
+          fulfillment,
+          paymentMethod,
+        });
+      } catch (e) {
+        console.error('[giftBonus] buyurtma bonussiz davom etadi:', e.message);
+      }
+
       const doc = await Order.create({
         userId: req.userId,
         restaurantId: o.restaurantId,
@@ -870,6 +897,7 @@ export const orderController = {
         promotionId: o._promo?.promotionId || null,
         promotionName: o._promo?.promotionName || '',
         promotionDiscount: o._promo?.discount || 0,
+        ...(gifts.items.length ? { bonusItems: gifts.items, bonusCost: gifts.cost } : {}),
         pickupDiscount: o._pickupDiscount || 0,
         pickupDiscountPercent: o._pickupPercent || 0,
         total,
