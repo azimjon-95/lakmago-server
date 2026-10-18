@@ -863,14 +863,26 @@ export const orderController = {
        * Narxga kirmaydi (mijoz uchun bepul), faqat buyurtmaga yoziladi; restoranga puli yetkazilgach qoplanadi.
        * Xato bo'lsa buyurtma bonussiz yaratiladi — bonus hech qachon buyurtmani to'xtatmaydi.
        */
-      const gifts = await resolveGifts({
-        restaurant: rest,
-        userId: req.userId,
-        menuAmount: o.subtotal,
-        paidAmount: Math.max(0, o.subtotal - (promo?.discount || 0) - (o._pickupDiscount || 0)),
-        fulfillment,
-        paymentMethod,
-      });
+      /*
+       * Diqqat: bu IKKINCHI sikl (buyurtma yaratish). `rest` va `promo` faqat birinchi (tekshiruv) siklida
+       * e'lon qilingan — bu yerda restoran `restMap`da, aksiya chegirmasi `o._promo` ichida.
+       * Butun blok try/catch ichida: bonus (argumentlarni tuzishdagi xato ham) buyurtmani HECH QACHON to'xtatmaydi.
+       */
+      let gifts = { items: [], cost: 0 };
+      try {
+        gifts = await resolveGifts({
+          restaurant: restMap.get(String(o.restaurantId)) || { _id: o.restaurantId },
+          userId: req.userId,
+          // DIQQAT: bu yerda `o.subtotal` moliya bosqichidan keyin allaqachon CHEGIRMALARDAN KEYINGI summaga
+          // qayta yozilgan. Asl (serverda tekshirilgan) menyu narxi — `o._foodBaseSom`.
+          menuAmount: o._foodBaseSom ?? o.subtotal,
+          paidAmount: Math.max(0, (o._foodBaseSom ?? o.subtotal) - (o._promo?.discount || 0) - (o._pickupDiscount || 0)),
+          fulfillment,
+          paymentMethod,
+        });
+      } catch (e) {
+        console.error('[giftBonus] buyurtma bonussiz davom etadi:', e.message);
+      }
 
       const doc = await Order.create({
         userId: req.userId,

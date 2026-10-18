@@ -1,0 +1,1 @@
+{ "root": true, "parserOptions": { "ecmaVersion": 2023, "sourceType": "module" }, "env": { "node": true, "es2022": true }, "rules": { "no-undef": "error" } }
