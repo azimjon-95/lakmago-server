@@ -65,6 +65,8 @@ const incidentSchema = new Schema(
     },
 
     groupPost: { chatId: String, messageId: Number },
+    /** Guruhga yuborishga urinishlar soni (yetkazilmasa tiklash vazifasi ~1 soat urinadi, keyin to'xtaydi) */
+    groupPostAttempts: { type: Number, default: 0 },
   },
   { timestamps: true },
 );

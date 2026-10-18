@@ -732,6 +732,8 @@ export async function tickAdminOrderMonitor() {
     if (!alertsChatId() || !config.telegramBotToken) return;
 
     await catchUpMissingPosts();
+    // Bekor qilish so'rovlari ("mijoz voz kechdi"): guruhga yetmaganlari qayta yuboriladi
+    import('./customerIncidents.js').then((m) => m.catchUpIncidentPosts()).catch((e) => console.error('[adminOrderMonitor] incident catch-up:', e.message));
 
     const posts = await AdminOrderPost.find({
       orphaned: { $ne: true },
@@ -807,4 +809,27 @@ export function warnIfOrderGroupMissing() {
   if (config.telegramBotToken && !alertsChatId()) {
     console.warn('[adminOrderMonitor] ⚠️  ADMIN_ALERTS_CHAT_ID (va SUPPORT_GROUP_CHAT_ID) bo‘sh — yangi mijoz buyurtmalari Telegram admin guruhiga YUBORILMAYDI');
   }
+}
+
+/*
+ * ═══ ADMIN GURUHIGA UMUMIY XABAR (boshqa servislar ham shuni ishlatadi) ═══
+ * Buyurtma monitori bilan BIR XIL ishonchlilik: 429 / guruh supergruppaga ko'chishi / HTML xatosi / yaroqsiz
+ * tugma uchun qayta urinish. Natija har doim aniq: { ok, messageId, chatId } yoki { ok:false, error } —
+ * xato jim yutilmaydi (chaqiruvchi loglaydi). Guruh ID: ADMIN_ALERTS_CHAT_ID, bo'sh bo'lsa SUPPORT_GROUP_CHAT_ID.
+ */
+export async function sendAlert(body) {
+  const chat_id = alertsChatId();
+  if (!config.telegramBotToken) return { ok: false, error: 'TELEGRAM_BOT_TOKEN sozlanmagan' };
+  if (!chat_id) return { ok: false, error: 'ADMIN_ALERTS_CHAT_ID (va SUPPORT_GROUP_CHAT_ID) sozlanmagan' };
+  const r = await tgRetry('sendMessage', { chat_id, ...body });
+  return r?.ok
+    ? { ok: true, messageId: r.result.message_id, chatId: alertsChatId() }
+    : { ok: false, error: r?.description || 'Telegram javob bermadi (tarmoq?)' };
+}
+
+export async function editAlert(chatId, messageId, body) {
+  if (!chatId || !messageId) return { ok: false, error: 'xabar topilmadi' };
+  const r = await tgRetry('editMessageText', { chat_id: chatId, message_id: messageId, ...body });
+  const notModified = r?.error_code === 400 && /message is not modified/i.test(r.description || '');
+  return r?.ok || notModified ? { ok: true } : { ok: false, error: r?.description || 'Telegram javob bermadi (tarmoq?)' };
 }

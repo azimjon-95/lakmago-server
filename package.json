@@ -54,7 +54,8 @@
     "test:promo-modals": "node tests/promo-modals.test.mjs",
     "test:gift-bonus": "node tests/gift-bonus.test.mjs",
     "test:order-gifts": "node tests/order-create-gifts.test.mjs",
-    "test:undef": "npx --yes eslint@8 --no-eslintrc -c .eslintrc.undef.json src"
+    "test:undef": "npx --yes eslint@8 --no-eslintrc -c .eslintrc.undef.json src",
+    "test:incident-group": "node tests/incident-group.test.mjs"
   },
   "dependencies": {
     "@socket.io/redis-adapter": "^8.3.0",
