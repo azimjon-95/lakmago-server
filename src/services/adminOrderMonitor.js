@@ -833,3 +833,6 @@ export async function editAlert(chatId, messageId, body) {
   const notModified = r?.error_code === 400 && /message is not modified/i.test(r.description || '');
   return r?.ok || notModified ? { ok: true } : { ok: false, error: r?.description || 'Telegram javob bermadi (tarmoq?)' };
 }
+
+/** Admin guruhining joriy ID'si (supergruppaga ko'chish hisobga olingan) — boshqa servislar dublikat xabar yubormasligi uchun */
+export const getAlertsChatId = () => alertsChatId();

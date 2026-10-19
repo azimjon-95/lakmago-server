@@ -16,6 +16,7 @@ import { restaurantPanelController } from '../controllers/restaurantPanel.js';
 import { uploadController } from '../controllers/upload.js';
 import { promoModalController } from '../controllers/promoModals.js';
 import { giftBonusController } from '../controllers/giftBonus.js';
+import { backupController } from '../controllers/backup.js';
 import { referralController } from '../controllers/referralController.js';
 import { addressController } from '../controllers/address.js';
 import { userProfileController } from '../controllers/userProfile.js';
@@ -649,6 +650,9 @@ router.patch('/admin/settings', auth, requireRole('admin'), adminController.upda
 // lekin ma'lumot 403 bilan qaytardi (frontend jim yutardi).
 router.get('/admin/revenue', ...AS('revenue'), adminController.revenue);
 router.get('/admin/banners', ...AS('banners'), adminController.banners);
+// Baza zaxirasi: holat va qo'lda ishga tushirish (faqat admin)
+router.get('/admin/backup/status', auth, requireRole('admin'), backupController.status);
+router.post('/admin/backup/run', auth, requireRole('admin'), writeLimiter, backupController.run);
 router.get('/admin/gift-bonuses', ...AS('banners'), giftBonusController.list);
 router.post('/admin/gift-bonuses', auth, requireRole('admin'), giftBonusController.create);
 router.patch('/admin/gift-bonuses/:id', auth, requireRole('admin'), giftBonusController.update);

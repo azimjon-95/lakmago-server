@@ -8,6 +8,7 @@ import mongoose from 'mongoose';
 import { config } from '../config/index.js';
 import { BackupRun } from '../models/BackupRun.js';
 import { tgCall, tgUpload } from './telegramApi.js';
+import { getAlertsChatId, sendAlert } from './adminOrderMonitor.js';
 import { zoneDate, addDaysYmd } from './restaurantTime.js';
 
 /*
@@ -48,6 +49,11 @@ import { zoneDate, addDaysYmd } from './restaurantTime.js';
  *    yiqilsa — guruhga ogohlantirish (eski fayl saqlanadi).
  *  • Server 23:59 da o'chiq bo'lsa — keyingi kuni 00:00–01:00 orasida
  *    o'tkazib yuborilgan zaxira olinadi (catch-up).
+ *  • KECHIKKAN yetib olish: so'nggi muvaffaqiyatli zaxira kechadan eski bo'lsa (server kunlab o'chiq bo'lgan,
+ *    ikkala oyna ham o'tib ketgan) — server ishga tushgan zahoti, kun ichida istalgan vaqtda zaxira olinadi.
+ *  • Guruh supergruppaga aylansa (Telegram yangi ID beradi) — yangi ID ga avtomatik o'tiladi va logga yoziladi.
+ *  • Yakuniy xatoda ogohlantirish ham zaxira guruhiga, ham ADMIN guruhiga (boshqa bo'lsa) yuboriladi.
+ *  • Admin panelda holat va "Hozir zaxira olish" (getBackupStatus / runBackupNow).
  *  • Telegram bot fayl chegarasi 50 MB: JSON undan katta bo'lsa .json.gz
  *    (gzip) yuboriladi; shunda ham sig'masa — xato + ogohlantirish.
  *
@@ -69,6 +75,26 @@ const RETRY_DELAYS_MS = [2 * 60_000, 10 * 60_000, 30 * 60_000]; // 4 urinish jam
 const MAX_DELETE_ATTEMPTS = 5;
 
 export const isBackupEnabled = () => Boolean(config.telegramBotToken && config.backupGroupChatId);
+
+/*
+ * Guruh supergruppaga aylansa Telegram eski ID ga "migrate_to_chat_id" bilan javob beradi. Avval zaxira bunga
+ * umuman e'tibor bermasdi: hamma urinish yiqilar, ogohlantirish ham o'sha eski ID ga ketib YO'QOLARDI —
+ * ya'ni zaxira jimgina to'xtab qolardi. Endi yangi ID ga o'tamiz (jarayon xotirasida; .env ni yangilash logda aytiladi).
+ */
+let chatOverride = null;
+export const backupChatId = () => chatOverride || config.backupGroupChatId;
+export const _resetBackupChat = () => { chatOverride = null; }; // faqat testlar uchun
+
+async function withMigration(fn) {
+  try {
+    return await fn(backupChatId());
+  } catch (e) {
+    if (!e.migrateTo) throw e;
+    chatOverride = String(e.migrateTo);
+    console.error(`[backup] ⚠️ guruh supergruppaga aylangan. Yangi ID: ${chatOverride} — .env da BACKUP_GROUP_CHAT_ID=${chatOverride} deb yangilang.`);
+    return fn(backupChatId());
+  }
+}
 
 const tmpName = (ymd) => path.join(os.tmpdir(), `lokmago-backup-${ymd.replace(/[^\w-]/g, '_')}-${process.pid}.json`);
 const mb = (b) => `${(b / 1024 / 1024).toFixed(b >= 10 * 1024 * 1024 ? 0 : 1)} MB`;
@@ -153,11 +179,12 @@ async function sendFile(jsonPath, { ymd, exp, durationMs }) {
   const caption = `🗄 <b>Baza zaxirasi</b> · ${fmtDate(ymd)}\n`
     + `📦 ${Object.keys(exp.collections).length} collection · ${exp.documents.toLocaleString('ru-RU')} hujjat · ${mb(size)}${gz ? ' (gzip)' : ''}\n`
     + `⏱ ${(durationMs / 1000).toFixed(1)} s`;
-  const msg = await tgUpload(
+  const blob = await toBlob(sendPath);
+  const msg = await withMigration((chat_id) => tgUpload(
     'sendDocument',
-    { chat_id: config.backupGroupChatId, caption, parse_mode: 'HTML', disable_notification: true },
-    { field: 'document', blob: await toBlob(sendPath), filename: fileName },
-  );
+    { chat_id, caption, parse_mode: 'HTML', disable_notification: true },
+    { field: 'document', blob, filename: fileName },
+  ));
   return { messageId: msg.message_id, fileName, gz, sentBytes: size };
 }
 
@@ -173,7 +200,7 @@ async function attempt(run, now) {
     const sentAt = new Date(now.getTime());
     await BackupRun.updateOne({ _id: run._id }, {
       status: 'sent', error: '', nextAttemptAt: null, lockedUntil: null,
-      chatId: String(config.backupGroupChatId), messageId: sent.messageId, fileName: sent.fileName, gzip: sent.gz,
+      chatId: String(backupChatId()), messageId: sent.messageId, fileName: sent.fileName, gzip: sent.gz,
       bytes: exp.bytes, sentBytes: sent.sentBytes, collections: Object.keys(exp.collections).length,
       documents: exp.documents, durationMs, sentAt,
     });
@@ -205,16 +232,23 @@ async function attempt(run, now) {
   }
 }
 
-/** Guruhga ogohlantirish (eski fayl saqlanadi). Best-effort. */
+/** Ogohlantirish (eski fayl saqlanadi). Best-effort: zaxira guruhiga va (boshqa bo'lsa) ADMIN guruhiga ham. */
 async function alertFailure(ymd, reason) {
+  const clean = String(reason).replace(/</g, '&lt;').slice(0, 300);
+  const text = `⚠️ <b>Baza zaxirasi olinmadi</b> · ${fmtDate(ymd)}\nSabab: ${clean}\n\n<i>Oldingi zaxira fayli guruhda saqlanib qoldi. Admin panel → Sozlamalar → "Baza zaxirasi" da holatni ko‘ring.</i>`;
+  let sentTo = null;
   try {
-    await tgCall('sendMessage', {
-      chat_id: config.backupGroupChatId,
-      parse_mode: 'HTML',
-      text: `⚠️ <b>Baza zaxirasi olinmadi</b> · ${fmtDate(ymd)}\nSabab: ${String(reason).replace(/</g, '&lt;').slice(0, 300)}\n\n<i>Oldingi zaxira fayli guruhdan O‘CHIRILMADI.</i>`,
-    });
+    await withMigration((chat_id) => tgCall('sendMessage', { chat_id, parse_mode: 'HTML', text }));
+    sentTo = String(backupChatId());
   } catch (e) {
-    console.error('[backup] ogohlantirish yuborilmadi:', e.message);
+    console.error('[backup] ogohlantirish zaxira guruhiga yuborilmadi:', e.message);
+  }
+  // Zaxira guruhi yetib bormasa ham (ko'chgan/bot chiqarilgan) muammo ADMIN guruhida ko'rinsin
+  try {
+    const adminChat = getAlertsChatId();
+    if (adminChat && String(adminChat) !== sentTo) await sendAlert({ text, parse_mode: 'HTML', disable_notification: false });
+  } catch (e) {
+    console.error('[backup] ogohlantirish admin guruhiga yuborilmadi:', e.message);
   }
 }
 
@@ -295,6 +329,21 @@ export async function backupTick(now = new Date()) {
       if (run) { out.started.push(yesterday); await attempt(run, now); }
     }
 
+    /*
+     * 2b) KECHIKKAN yetib olish. Server 23:59 va 00:00–01:00 oynalarida o'chiq bo'lsa (yoki kunlab ishlamasa),
+     * o'sha kun zaxirasi avval abadiy yo'qolardi. Endi so'nggi muvaffaqiyatli zaxira kechadan eski bo'lsa —
+     * server ishga tushgan zahoti (kun ichida istalgan vaqtda) bugungi kun uchun zaxira olinadi.
+     * Bir kunda BIR marta (ymd UNIQUE): qayta-qayta urinib spam qilmaydi; 23:54 dan keyin kunlik 23:59 ga yo'l beriladi.
+     */
+    if (minutes < BACKUP_MINUTE - 5) {
+      const yesterday = addDaysYmd(ymd, -1);
+      const fresh = await BackupRun.exists({ status: 'sent', ymd: { $gte: yesterday } });
+      if (!fresh) {
+        const run = await claim(ymd, 'late', now);
+        if (run) { out.started.push(ymd); await attempt(run, now); }
+      }
+    }
+
     // 3) Qayta urinishlar va qotib qolgan ("running", lease tugagan) yozuvlar
     const retryable = await BackupRun.find({
       $or: [
@@ -323,8 +372,19 @@ export async function backupTick(now = new Date()) {
  * ('YYYY-MM-DD+manual-HHMMSS'). Muvaffaqiyatli bo'lsa undan OLDINGI zaxiralar
  * odatdagidek 1 daqiqadan keyin o'chiriladi.
  */
+let manualRunning = false;
 export async function runBackupNow(now = new Date()) {
-  if (!isBackupEnabled()) throw new Error('BACKUP_GROUP_CHAT_ID yoki TELEGRAM_BOT_TOKEN sozlanmagan');
+  if (!isBackupEnabled()) throw new Error(`${config.telegramBotToken ? 'BACKUP_GROUP_CHAT_ID' : 'TELEGRAM_BOT_TOKEN'} serverda sozlanmagan`);
+  if (manualRunning) throw new Error('Zaxira allaqachon olinmoqda — bir oz kuting');
+  manualRunning = true;
+  try {
+    return await runBackupNowInner(now);
+  } finally {
+    manualRunning = false;
+  }
+}
+
+async function runBackupNowInner(now) {
   const { ymd } = zoneDate(TZ, now);
   const hms = new Intl.DateTimeFormat('en-GB', { timeZone: TZ, hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' })
     .format(now).replace(/:/g, '');
@@ -342,4 +402,43 @@ export function startBackupScheduler() {
   t.unref?.();
   console.log(`✓ Kunlik baza zaxirasi: har kuni 23:59 (Toshkent) → guruh ${config.backupGroupChatId}`);
   return t;
+}
+
+/**
+ * Admin panel uchun holat: yoqilganmi, qayerga ketadi, so'nggi muvaffaqiyatli zaxira, so'nggi urinishlar va xato sabablari.
+ * Maxfiy ma'lumot (bot tokeni, to'liq guruh ID) QAYTARILMAYDI.
+ */
+export async function getBackupStatus(now = new Date()) {
+  const tokenSet = Boolean(config.telegramBotToken);
+  const chatSet = Boolean(config.backupGroupChatId);
+  const enabled = tokenSet && chatSet;
+  const [recent, lastSent] = await Promise.all([
+    BackupRun.find().sort({ createdAt: -1 }).limit(10).lean(),
+    BackupRun.findOne({ status: 'sent' }).sort({ sentAt: -1 }).lean(),
+  ]);
+  const chat = String(backupChatId() || '');
+  const last = lastSent ? {
+    ymd: lastSent.ymd, sentAt: lastSent.sentAt, documents: lastSent.documents, collections: lastSent.collections,
+    bytes: lastSent.sentBytes || lastSent.bytes, gzip: lastSent.gzip, deleted: Boolean(lastSent.deletedAt),
+  } : null;
+  const ageH = last?.sentAt ? (now.getTime() - new Date(last.sentAt).getTime()) / 3_600_000 : null;
+
+  // Foydalanuvchiga tushunarli "muammo" (bo'sh = hammasi joyida)
+  let problem = '';
+  if (!tokenSet) problem = 'Serverda TELEGRAM_BOT_TOKEN sozlanmagan — zaxira ishlamaydi.';
+  else if (!chatSet) problem = 'Serverda BACKUP_GROUP_CHAT_ID sozlanmagan — zaxira ishlamaydi (.env ga guruh ID sini qo‘shing).';
+  else if (!last) problem = 'Hali birorta muvaffaqiyatli zaxira yo‘q.';
+  else if (ageH > 36) problem = `So‘nggi muvaffaqiyatli zaxira ${Math.floor(ageH / 24)} kun oldin. Quyidagi urinishlardagi xato sababiga qarang.`;
+  const lastFail = recent.find((r) => r.status === 'failed' && r.error);
+
+  return {
+    enabled, tokenSet, chatSet,
+    chat: chat ? `…${chat.slice(-5)}` : '', chatMigrated: Boolean(chatOverride),
+    schedule: 'Har kuni 23:59 (Toshkent vaqti)',
+    last, problem, lastError: lastFail ? lastFail.error : '',
+    recent: recent.map((r) => ({
+      ymd: r.ymd, status: r.status, trigger: r.trigger, attempts: r.attempts, error: r.error || '',
+      at: r.sentAt || r.startedAt, documents: r.documents, bytes: r.sentBytes || r.bytes,
+    })),
+  };
 }

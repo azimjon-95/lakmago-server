@@ -14,7 +14,7 @@ const schema = new Schema(
   {
     // 'YYYY-MM-DD' (Toshkent). Qo'lda ishga tushirilsa: 'YYYY-MM-DD+manual-HHMMSS'
     ymd: { type: String, required: true, unique: true },
-    trigger: { type: String, enum: ['schedule', 'catchup', 'manual'], default: 'schedule' },
+    trigger: { type: String, enum: ['schedule', 'catchup', 'late', 'manual'], default: 'schedule' },
     status: { type: String, enum: ['running', 'sent', 'failed'], default: 'running', index: true },
     attempts: { type: Number, default: 0 },
     nextAttemptAt: { type: Date, default: null },
