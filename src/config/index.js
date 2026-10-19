@@ -24,20 +24,28 @@ const adminOrigins = String(process.env.CORS_ORIGINS ?? process.env.CLIENT_ORIGI
   .map(trim)
   .filter(Boolean);
 
-// 3) Lokal ishlab chiqish (har doim ruxsat)
+// 3) Lokal ishlab chiqish va NATIV ilova (Capacitor) — har doim ruxsat
 const localOrigins = [
-  'https://localhost',
-  'http://localhost',
+  'https://localhost',          // Android Capacitor (androidScheme: https — standart)
+  'http://localhost',           // Android Capacitor (eski: androidScheme: http)
+  'capacitor://localhost',      // iOS Capacitor — WebView shu manbadan so'rov yuboradi (avval ruxsat YO'Q edi)
   'http://localhost:5173',
   'http://localhost:5174',
   'http://127.0.0.1:5173',
   'http://127.0.0.1:5174',
 ];
 
+// 4) Ma'lum production manzillar — .env sozlanmagan bo'lsa ham ishlaydi (aniq mos kelish: sxema + domen)
+const knownOrigins = [
+  'https://lokma.uz',
+  'https://apilokma.poppolizol.uz',
+];
+
 // Umumiy ruxsat ro'yxati
 const corsOrigins = [
   ...(webappOrigin ? [webappOrigin] : []),
   ...adminOrigins,
+  ...knownOrigins,
   ...localOrigins,
 ];
 
