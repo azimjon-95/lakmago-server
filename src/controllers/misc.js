@@ -105,7 +105,7 @@ export const bannerController = {
  * Widget orqali kirganda undefined bilan ustidan yozilib
  * o'chib qolardi (Object.assign undefined'ni ham qo'llaydi).
  */
-async function completeTelegramAuth(tgUser, { platform, deviceId, startParam } = {}) {
+export async function completeTelegramAuth(tgUser, { platform, deviceId, startParam } = {}) {
   const telegramId = String(tgUser.id);
   const profileFields = { lastLoginAt: new Date() };
   if (tgUser.first_name !== undefined) profileFields.firstName = tgUser.first_name;

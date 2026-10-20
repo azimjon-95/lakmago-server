@@ -246,10 +246,32 @@ export async function handleBotUpdate(update) {
 
   // 3) Oddiy xabarlar (/start yoki /start ref_<id>)
   const message = update.message;
+
+  /*
+   * KONTAKT (telefon ulashish): ilovada "Telegram orqali kirish" oqimida mijoz "📱 Raqamni ulashib kirish" ni bosadi
+   * (services/tgLinkLogin.js). Boshqa hech qayerda kontakt qabul qilinmaydi — bizning oqim bo'lmasa e'tiborsiz.
+   */
+  if (message?.contact) {
+    try {
+      const { handleLoginContact } = await import('./tgLinkLogin.js');
+      await handleLoginContact(message);
+    } catch (e) {
+      console.error('[bot] kirish kontakti:', e.message);
+    }
+    return;
+  }
+
   if (!message?.text) return;
 
   // Oddiy matn — baho izohi bo'lishi mumkin
   if (!message.text.startsWith('/')) {
+    // Ilovaga kirish tugmalari ("✅ Raqamsiz kirish" / "❌ Bekor qilish")
+    try {
+      const { handleLoginText } = await import('./tgLinkLogin.js');
+      if (await handleLoginText(message)) return;
+    } catch (e) {
+      console.error('[bot] kirish matni:', e.message);
+    }
     try {
       const { handleAdminPasswordMessage } = await import('./adminOrderMonitor.js');
       if (await handleAdminPasswordMessage(message)) return;
@@ -270,6 +292,18 @@ export async function handleBotUpdate(update) {
     // Referal kodni ajratamiz: "/start ref_123"
     const parts = message.text.split(' ');
     const startParam = parts[1] || '';
+
+    // Ilovaga kirish: /start login_<code> (services/tgLinkLogin.js) — referal oqimiga TEGMAYDI
+    if (startParam.startsWith('login_')) {
+      try {
+        const { handleLoginStart } = await import('./tgLinkLogin.js');
+        await handleLoginStart(message, startParam.slice('login_'.length));
+      } catch (e) {
+        console.error('[bot] kirish havolasi xatosi:', e.message);
+        await sendPlainMessage(telegramId, 'Kechirasiz, texnik nosozlik. Ilovada «Kirish»ni qayta bosing.');
+      }
+      return;
+    }
 
     try {
       const { handleStartCommand } = await import('./referralStart.js');

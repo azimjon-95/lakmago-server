@@ -93,3 +93,21 @@ export const courierLocationLimiter = rateLimit({
   validate: { keyGeneratorIpFallback: false },
   handler: limitHandler,
 });
+
+/** Telegram havolasi orqali kirishni BOSHLASH — IP boshiga 10 daqiqada 20 ta (spam so'rovlar bazani to'ldirmasin). */
+export const tgLinkStartLimiter = rateLimit({
+  windowMs: 10 * 60 * 1000,
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: limitHandler,
+});
+
+/** Kirish holatini SO'RASH (ilova ~1.5 s da so'raydi) — daqiqada 150 ta; oddiy foydalanuvchi hech qachon duch kelmaydi. */
+export const tgLinkPollLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 150,
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: limitHandler,
+});

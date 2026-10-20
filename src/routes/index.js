@@ -17,6 +17,7 @@ import { uploadController } from '../controllers/upload.js';
 import { promoModalController } from '../controllers/promoModals.js';
 import { giftBonusController } from '../controllers/giftBonus.js';
 import { backupController } from '../controllers/backup.js';
+import { tgLinkAuthController } from '../controllers/tgLinkAuth.js';
 import { referralController } from '../controllers/referralController.js';
 import { addressController } from '../controllers/address.js';
 import { userProfileController } from '../controllers/userProfile.js';
@@ -49,7 +50,7 @@ import {
   auth, requireRole, requirePage, waiterAuth, waiterOrRestaurantAuth,
   kioskAuth, requireKioskSection,
 } from '../middleware/auth.js';
-import { loginLimiter, writeLimiter, courierLocationLimiter } from '../middleware/rateLimit.js';
+import { loginLimiter, writeLimiter, courierLocationLimiter, tgLinkStartLimiter, tgLinkPollLimiter } from '../middleware/rateLimit.js';
 import { botBroadcastController } from '../controllers/botBroadcast.js';
 import { adAttachment, adChunkBody, adUploadController } from '../middleware/adUpload.js';
 import { restaurantPinsController } from '../controllers/restaurantPins.js';
@@ -74,6 +75,9 @@ const AS = (page) => [auth, requireRole('admin', 'staff'), requirePage(page)];
 // ===== Autentifikatsiya =====
 router.post('/auth/telegram', loginLimiter, authController.telegram); // mijoz (webapp)
 router.post('/auth/telegram-web', loginLimiter, authController.telegramWeb); // mijoz — browser (Telegram Login Widget)
+// Native ilova/brauzer uchun: Telegram bot havolasi orqali kirish (Login Widget'ga ishonmasdan)
+router.post('/auth/tg-link/start', tgLinkStartLimiter, tgLinkAuthController.start);
+router.post('/auth/tg-link/poll', tgLinkPollLimiter, tgLinkAuthController.poll);
 router.post('/auth/refresh', loginLimiter, authController.refresh);   // mijoz — refresh token rotatsiyasi
 router.post('/auth/logout', authController.logout);                  // mijoz — sessiyani bekor qilish
 router.get('/auth/sessions', auth, authController.listSessions);     // mijoz — faol sessiyalar ro'yxati (3-bosqich: device nazorati)
