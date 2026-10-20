@@ -175,20 +175,15 @@ async function handlePerformTransaction(params) {
   if (!order || order.status !== 'awaiting_payment') throw ERR.CLIENT_NOT_FOUND();
 
   /*
-   * Summani TEKSHIRISH — Paynet amount ni SO'M da yuboradi.
-   * Ichki Transaction / recordSuccess esa tiyin saqlaydi
-   * (boshqa gatewaylar bilan bir xil).
+   * Summani TEKSHIRISH — Paynet PerformTransaction da amount ni
+   * TIYIN da yuboradi. GetInformation esa so'mda qaytariladi
+   * (ekranda ko'rsatish uchun). Ichki yozuv ham tiyinda.
    */
-  const expectedSom = Math.round(order.total);
-  if (Number(amount) !== expectedSom) throw ERR.WRONG_AMOUNT();
-  const expectedTiyin = expectedSom * 100;
+  const expectedTiyin = Math.round(order.total * 100);
+  if (Number(amount) !== expectedTiyin) throw ERR.WRONG_AMOUNT();
 
   /*
-   * Tranzaksiya YOZUVI OLDINDAN — pul "qabul qilindi" deb
-   * belgilashdan OLDIN. Agar keyingi qadam (recordSuccess)
-   * yiqilib qolsa ham, izlar qoladi va keyingi CheckTransaction
-   * yoki qayta ishlov (retryPendingDispatch) buyurtmani
-   * to'g'rilaydi — xuddi Click oqimida bo'lgani kabi.
+   * Tranzaksiya YOZUVI OLDINDAN — ...
    */
   const tx = await Transaction.create({
     provider: 'paynet',
@@ -196,7 +191,7 @@ async function handlePerformTransaction(params) {
     orderId: order._id,
     userId: order.userId,
     amount: expectedTiyin,
-    state: 2,   // to'g'ridan-to'g'ri muvaffaqiyatli — Paynet "prepare" bosqichini talab qilmaydi
+    state: 2,
     performTime: Date.now(),
   });
 
