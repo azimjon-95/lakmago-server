@@ -1,7 +1,7 @@
 import { Schema, model } from 'mongoose';
 
 /**
- * To'lov tranzaksiyasi — Payme va Click uchun umumiy.
+ * To'lov tranzaksiyasi — Payme, Click va Paynet uchun umumiy.
  *
  * Har ikkala tizim webhook orqali ishlaydi: ular bizga so'rov
  * yuboradi, biz javob beramiz. Shuning uchun holatni o'zimiz
@@ -12,7 +12,7 @@ const transactionSchema = new Schema(
     // Qaysi tizim
     provider: {
       type: String,
-      enum: ['payme', 'click'],
+      eenum: ['payme', 'click', 'paynet'],
       required: true,
       index: true,
     },
