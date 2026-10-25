@@ -18,6 +18,7 @@ import { promoModalController } from '../controllers/promoModals.js';
 import { giftBonusController } from '../controllers/giftBonus.js';
 import { backupController } from '../controllers/backup.js';
 import { tgLinkAuthController } from '../controllers/tgLinkAuth.js';
+import { restaurantAppController } from '../controllers/restaurantApp.js';
 import { referralController } from '../controllers/referralController.js';
 import { addressController } from '../controllers/address.js';
 import { userProfileController } from '../controllers/userProfile.js';
@@ -174,6 +175,13 @@ router.patch('/panel/dishes/:id', auth, requireRole('restaurant'), restaurantPan
 router.patch('/panel/dishes/:id/stop', auth, requireRole('restaurant'), restaurantPanelController.toggleStop);
 router.delete('/panel/dishes/:id', auth, requireRole('restaurant'), restaurantPanelController.deleteDish);
 router.get('/panel/orders', auth, requireRole('restaurant'), restaurantPanelController.orders);
+// Restoran ilovasi (admin panel bilan bir xil akkaunt/JWT) — controllers/restaurantApp.js.
+// TARTIB: /orders/history `/orders/:id` dan OLDIN.
+router.get('/panel/orders/history', auth, requireRole('restaurant'), restaurantAppController.history);
+router.get('/panel/stats', auth, requireRole('restaurant'), restaurantAppController.stats);
+router.get('/panel/orders/:id', auth, requireRole('restaurant'), restaurantPanelController.orderDetail);
+router.post('/panel/orders/:id/confirm-delivered', auth, requireRole('restaurant'), writeLimiter, restaurantAppController.confirmDelivered);
+router.post('/panel/session/refresh', auth, requireRole('restaurant'), loginLimiter, restaurantAppController.refreshSession);
 router.patch('/panel/orders/:id/status', auth, requireRole('restaurant'), restaurantPanelController.updateOrderStatus);
 /*
  * ═══ SOZLAMALAR -> TELEGRAM ═══
@@ -194,11 +202,6 @@ router.post('/panel/orders/:id/cancel-request', auth, requireRole('restaurant'),
 router.get('/panel/banner', auth, requireRole('restaurant'), restaurantPanelController.getBanner);
 router.put('/panel/banner', auth, requireRole('restaurant'), restaurantPanelController.setBanner);
 router.delete('/panel/banner', auth, requireRole('restaurant'), restaurantPanelController.deleteBanner);
-
-// Android gateway PIN — restoran o'ziga PIN yaratadi (admin shart emas)
-router.get('/panel/android-pin', ...R, restaurantPanelController.androidGatewayStatus);
-router.post('/panel/android-pin/rotate', ...R, writeLimiter, restaurantPanelController.rotateAndroidPin);
-router.post('/panel/android-pin/disable', ...R, writeLimiter, restaurantPanelController.disableAndroidPin);
 
 // ===== Cloudinary rasm yuklash imzosi =====
 // Faqat kirgan foydalanuvchi (restoran yoki admin) rasm yuklay oladi.

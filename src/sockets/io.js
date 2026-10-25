@@ -1,8 +1,8 @@
 import { Server as HttpServer } from 'http';
+import { restaurantRoomFromToken } from './restaurantSocketAuth.js';
 import { Server as SocketServer } from 'socket.io';
 import { config, isAllowedOrigin } from '../config/index.js';
 import { getRedis } from '../services/cache.js';
-import { verifyAndroidPin } from '../middleware/androidGatewayAuth.js';
 
 let io = null;
 
@@ -77,6 +77,17 @@ export function initSocket(httpServer) {
   setupRedisAdapter();
 
   io.on('connection', (socket) => {
+    /*
+     * Restoran ilovasi: handshake'dagi JWT bo'yicha O'Z restoran xonasiga avtomatik qo'shiladi
+     * (sockets/restaurantSocketAuth.js). Token bo'lmasa yoki yaroqsiz bo'lsa — hech narsa qilinmaydi.
+     */
+    const appToken = socket.handshake?.auth?.token;
+    if (appToken) {
+      restaurantRoomFromToken(appToken).then((room) => {
+        if (room) { socket.join(room); socket.emit('restaurant:joined', { ok: true }); }
+        else socket.emit('restaurant:joined', { ok: false });
+      }).catch(() => {});
+    }
 
     // Mijoz o'z buyurtmasini kuzatish uchun xonaga qo'shiladi
     socket.on('track:order', (orderId) => {
@@ -88,34 +99,6 @@ export function initSocket(httpServer) {
       socket.join(`restaurant:${restaurantId}`);
     });
 
-    /*
-     * ANDROID GATEWAY — yuqoridagi `join:restaurant` dan ATAYLAB
-     * ALOHIDA: u HECH QANDAY tekshiruvsiz — restaurantId'ni bilgan
-     * har qanday client istalgan restoran xonasiga qo'shilib olishi
-     * mumkin (bu — ichki, ishonchli frontendlar uchun mavjud eski
-     * xatti-harakat, shu TZ doirasida O'ZGARTIRILMAYDI).
-     *
-     * Android ilova esa kam ishonchli tashqi kanal (TZ 6-band:
-     * "Bir restoran boshqa restoran ma'lumotlarini ola olmaydi"),
-     * shuning uchun PIN tekshiruvidan o'tgandan KEYIN xuddi
-     * o'sha `restaurant:<id>` xonasiga qo'shiladi — mavjud
-     * order:new/order:update emitlariga HECH QANDAY o'zgartirish
-     * kerak emas (TZ 4-band: "Mavjud Socket.IO mexanizmidan
-     * foydalanish").
-     *
-     * PIN tekshiruvi androidGatewayAuth.js dagi BIR XIL funksiya —
-     * brute-force blok (3 xato → 30 soniya) HTTP kanali bilan
-     * baham ko'riladi.
-     */
-    socket.on('join:android:restaurant', async ({ restaurantId, pincode } = {}, ack) => {
-      const result = await verifyAndroidPin(restaurantId, pincode);
-      if (!result.ok) {
-        if (typeof ack === 'function') ack({ ok: false, ...result.body });
-        return;
-      }
-      socket.join(`restaurant:${result.restaurant._id}`);
-      if (typeof ack === 'function') ack({ ok: true });
-    });
 
     // Admin barcha buyurtmalarni live eshitadi
     // Dine-in sessiyasi — mijoz buyurtma holatini kuzatadi

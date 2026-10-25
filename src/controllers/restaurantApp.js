@@ -1,3 +1,19 @@
+/*
+ * ═══ RESTORAN ILOVASI (Android/iOS) — QO'SHIMCHA PANEL ENDPOINTLARI ═══
+ *
+ * Restoran ilovasi admin panel bilan BIR XIL akkaunt (login + parol, POST /api/auth/login)
+ * va bir xil JWT bilan to'g'ridan-to'g'ri lakmago-serverga ulanadi. Bu yerdagi endpointlar
+ * oddiy `/api/panel/...` marshrutlari (auth + requireRole('restaurant')); restaurantId FAQAT
+ * tokendan olinadi (req.restaurantId), clientdan hech qachon.
+ *
+ *   GET  /api/panel/orders/history              — sahifalangan tarix (cursor)
+ *   GET  /api/panel/stats?from=&to=             — kunlik hisobot (Asia/Tashkent)
+ *   POST /api/panel/orders/:id/confirm-delivered — restoran yetkazilganini tasdiqlaydi (vaqt shartiga ko'ra)
+ *   POST /api/panel/session/refresh             — "sliding" sessiya: ishlatilayotgan ilova 30 kunda chiqib ketmasin
+ *
+ * Avval bular alohida "Android gateway" (PIN, /app/:pincode/...) va BFF servis kaliti orqali
+ * ochilgan edi — gateway butunlay olib tashlandi, biznes mantiq o'zgarishsiz shu yerga ko'chirildi.
+ */
 import { asyncHandler } from '../middleware/error.js';
 import { RESTAURANT_HIDDEN } from '../services/restaurantVisibility.js';
 import { Order } from '../models/Order.js';
@@ -7,10 +23,12 @@ import { confirmEligibility } from '../services/reminderRules.js';
 import { tiyinToSom } from '../services/orderFinance.js';
 import { resolvePeriod, deliveredWindow } from '../services/billingPeriod.js';
 import { zoneDate } from '../services/restaurantTime.js';
+import { User } from '../models/User.js';
+import { signToken } from '../middleware/auth.js';
 
 /*
  * ═══════════════════════════════════════════════════════════
- * ANDROID GATEWAY — TARIX, STATISTIKA, "YETKAZILDI" TASDIQLASH
+ * TARIX, STATISTIKA, "YETKAZILDI" TASDIQLASH (restoran ilovasi va panel)
  * ═══════════════════════════════════════════════════════════
  *
  * `/orders` oxirgi 80 tani beradi (sana filtri ham, sahifalash ham yo'q)
@@ -46,7 +64,7 @@ function dayRange(q) {
   return { period: resolvePeriod(from, to), from, to };
 }
 
-export const gatewayOrdersController = {
+export const restaurantAppController = {
   /*
    * GET /orders/history?from=YYYY-MM-DD&to=YYYY-MM-DD&status=&limit=&cursor=
    *
@@ -246,5 +264,18 @@ export const gatewayOrdersController = {
       .catch(() => {});
 
     return reply(true);
+  }),
+
+  /*
+   * POST /api/panel/session/refresh — joriy (hali yaroqli) token evaziga yangi 30 kunlik token.
+   * Akkaunt bloklangan, o'chirilgan yoki boshqa restoranga ko'chirilgan bo'lsa — 401 (ilova chiqadi).
+   */
+  refreshSession: asyncHandler(async (req, res) => {
+    const user = await User.findById(req.userId).select('role isActive restaurantId').lean();
+    if (!user || !user.isActive || user.role !== 'restaurant' || !user.restaurantId
+      || String(user.restaurantId) !== String(rid(req))) {
+      return res.status(401).json({ error: 'Sessiya yaroqsiz. Qaytadan kiring.', code: 'SESSION_INVALID' });
+    }
+    res.set('Cache-Control', 'no-store').json({ token: signToken(String(user._id), user.role, String(user.restaurantId)) });
   }),
 };

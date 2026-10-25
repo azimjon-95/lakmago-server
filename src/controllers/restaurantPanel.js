@@ -3,7 +3,6 @@ import { isStore } from '../services/storeRules.js';
 import { MARKET_CATEGORY_VALUES, MARKET_UNIT_VALUES } from '../constants/marketCategories.js';
 import { RESTAURANT_HIDDEN } from '../services/restaurantVisibility.js';
 import { z } from 'zod';
-import bcrypt from 'bcryptjs';
 import { cached, KEYS, TTL } from '../services/cache.js';
 import { asyncHandler } from '../middleware/error.js';
 import { Restaurant } from '../models/Restaurant.js';
@@ -82,10 +81,9 @@ export const restaurantPanelController = {
   profile: asyncHandler(async (req, res) => {
     // Shartnoma va moliya ma'lumotlari restoranga BERILMAYDI —
     // komissiya foizi, balans, to'langan summa faqat adminda.
-    // androidGateway.pinHash — hech qachon hech qanday javobda
-    // chiqmasligi kerak, hash bo'lsa ham (TZ: "PIN kod javobda
-    // ochiq ko'rsatilmaydi"). Shu joy Android gateway o'zi ham
-    // ishlatadigan profil bo'lgani uchun ayniqsa muhim.
+    // -androidGateway: olib tashlangan Android gateway'ning eski PIN
+    // ma'lumotlari (ishga tushishda migratsiya o'chiradi) — u tugaguncha
+    // ham hech qachon javobga chiqmasin.
     const restaurant = await Restaurant.findById(rid(req))
       .select('-ownerId -__v -commissionPercent -commissionMode -balance -totalPaidOut -contractNumber -contractDate -androidGateway');
 
@@ -379,7 +377,7 @@ export const restaurantPanelController = {
    * va socket orqali kelgan `order:new`/`order:update` xabari
    * HALI moliyaviy maydonlarni qisqartirilmagan holda o'z ichiga
    * oladi (services/paymentRecord.js, orderFlow.js — bevosita
-   * Mongo hujjatini yuboradi). Shuning uchun Android gateway kabi
+   * Mongo hujjatini yuboradi). Shuning uchun restoran ilovasi kabi
    * kamroq ishonchli kanal socket orqali faqat "buyurtma X
    * o'zgardi" signalini oladi va TAFSILOTNI shu endpointdan,
    * o'zining restaurantId'siga cheklangan holda so'raydi — xuddi
@@ -414,7 +412,7 @@ export const restaurantPanelController = {
       /*
        * XAVFSIZLIK: avval `res.json(order)` — XOM Mongoose hujjati edi:
        *   • finance.lokmaNetCommission va clickFeeAmount (LokmaGo ichki
-       *     ko'rsatkichlari, tiyinda) restoranga/gateway'ga chiqib ketardi;
+       *     ko'rsatkichlari, tiyinda) restoranga/ilovaga chiqib ketardi;
        *   • `userId` populate qilingan BUTUN mijoz hujjati edi (saqlangan
        *     manzillar, kartalar, bonus balansi, sevimlilar).
        * Endi ro'yxat va tafsilot bilan AYNAN bir xil xavfsiz ko'rinish
@@ -616,53 +614,4 @@ export const restaurantPanelController = {
     getIO()?.to('admin').emit('restaurant:update', { _id: String(rid(req)) });
     res.json({ ok: true });
   }),
-
-  /*
-   * ═══ ANDROID GATEWAY PIN — restoran o'ziga PIN yaratadi ═══
-   *
-   * Admin aralashuvisiz: restoran panelga o'zi kirib, Android
-   * ilova uchun 4 xonali PIN oladi va ilovaga shuni kiritadi.
-   * Naqsh KioskToken bilan bir xil (src/controllers/kiosk.js):
-   * PIN faqat SHU javobda ochiq, bazada faqat bcrypt hash qoladi,
-   * qayta ko'rsatib bo'lmaydi — faqat yangisini yaratish mumkin.
-   */
-
-  // GET /api/panel/android-pin — holatni ko'rish (PIN o'zi YO'Q)
-  androidGatewayStatus: asyncHandler(async (req, res) => {
-    const r = await Restaurant.findById(rid(req)).select('androidGateway').lean();
-    const g = r?.androidGateway || {};
-    res.json({
-      enabled: Boolean(g.enabled && g.pinHash),
-      pinSetAt: g.pinSetAt || null,
-      lastAccessAt: g.lastAccessAt || null,
-    });
-  }),
-
-  // POST /api/panel/android-pin/rotate — yangi PIN yaratadi (eskisi bekor bo'ladi)
-  rotateAndroidPin: asyncHandler(async (req, res) => {
-    const pin = String(Math.floor(1000 + Math.random() * 9000));
-    await Restaurant.findByIdAndUpdate(rid(req), {
-      androidGateway: {
-        enabled: true,
-        pinHash: await bcrypt.hash(pin, 10),
-        pinFails: 0,
-        pinBlockedUntil: null,
-        pinSetAt: new Date(),
-        lastAccessAt: null,
-      },
-    });
-    // PIN faqat shu javobda — logda, keyingi hech qanday
-    // so'rovda ko'rinmaydi (bazada hash qoladi)
-    res.json({ pin, enabled: true });
-  }),
-
-  // POST /api/panel/android-pin/disable — Android ilovani butunlay o'chirish
-  disableAndroidPin: asyncHandler(async (req, res) => {
-    await Restaurant.findByIdAndUpdate(rid(req), {
-      'androidGateway.enabled': false,
-      'androidGateway.pinHash': null,
-    });
-    res.json({ ok: true, enabled: false });
-  }),
-
 };

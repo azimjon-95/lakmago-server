@@ -87,9 +87,36 @@ function reminderKeyboard(o) {
   ]] };
 }
 
+/*
+ * Restoran ILOVASIGA ham eslatma (Android/iOS): `restaurant:<id>` xonasiga soket hodisasi.
+ * Ilova uni "Buyurtma yetkazildimi?" bildirishnomasi (✅ Yetkazildi / ⏳ Jarayonda) qilib ko'rsatadi.
+ * Qaytaradi: xonada hech bo'lmasa bitta ulangan ilova bor-yo'qligi (eslatma "yetkazildi" deb hisoblanadimi).
+ */
+export async function notifyRestaurantApp(o, reminderCount) {
+  try {
+    const { getIO } = await import('../sockets/io.js');
+    const io = getIO();
+    if (!io) return false;
+    const room = `restaurant:${o.restaurantId}`;
+    const listeners = await io.in(room).fetchSockets().then((x) => x.length).catch(() => 0);
+    io.to(room).emit('order:delivery-reminder', { orderId: String(o._id), reminderCount });
+    return listeners > 0;
+  } catch {
+    return false;
+  }
+}
+
 async function ask(o, n) {
+  // Ilova — Telegram xodimlari bo'lmasa ham (restoran faqat ilovadan foydalanayotgan bo'lishi mumkin)
+  const appOk = await notifyRestaurantApp(o, n + 1);
   const staff = await activeStaff(o.restaurantId);
-  if (!staff.length) return false;
+  if (!staff.length) {
+    if (!appOk) return false;
+    await Order.updateOne({ _id: o._id, status: o.status }, {
+      $set: { restaurantReminder: { askedCount: n + 1, lastAskedAt: new Date(), forStatus: o.status } },
+    });
+    return true;
+  }
 
   const text = reminderText(o, n);
   const keyboard = reminderKeyboard(o);
@@ -116,7 +143,7 @@ async function ask(o, n) {
     }
     return Boolean(res?.ok);
   }));
-  if (!results.some(Boolean)) return false;
+  if (!results.some(Boolean) && !appOk) return false;
 
   // Holat o'zgargan bo'lsa (orada xodim bosgan) — yozilmaydi
   await Order.updateOne({ _id: o._id, status: o.status }, {

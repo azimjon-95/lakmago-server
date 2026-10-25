@@ -13,7 +13,7 @@
     "bot": "node scripts/bot-tekshir.js",
     "sync:banners": "node scripts/sync-banners.js",
     "seed:catalog": "node scripts/seed-catalog.js",
-    "test": "node tests/webhook-guard.test.mjs && node tests/finance.test.mjs && node tests/refund.test.mjs && node tests/delivery-pricing.test.mjs && node tests/gift-bonus.test.mjs && node tests/order-create-gifts.test.mjs && node tests/cors-origins.test.mjs && node tests/db-backup-resilience.test.mjs && node tests/tg-link-login.test.mjs",
+    "test": "node tests/webhook-guard.test.mjs && node tests/finance.test.mjs && node tests/refund.test.mjs && node tests/delivery-pricing.test.mjs && node tests/gift-bonus.test.mjs && node tests/order-create-gifts.test.mjs && node tests/cors-origins.test.mjs && node tests/db-backup-resilience.test.mjs && node tests/tg-link-login.test.mjs && node tests/restaurant-app.test.mjs",
     "test:flow": "node tests/finance-flow.test.mjs",
     "report:legacy-finance": "node scripts/legacy-finance-report.js",
     "test:tz": "node tests/tz-finance.test.mjs",
@@ -24,7 +24,6 @@
     "test:revenue": "node tests/revenue.test.mjs",
     "test:agreement": "node tests/agreement-chain.test.mjs",
     "test:variants": "node tests/dish-variants.test.mjs",
-    "test:android": "node tests/android-gateway.test.mjs",
     "test:mandatory": "node tests/mandatory-addons.test.mjs",
     "test:pickup": "node tests/pickup-bot.test.mjs",
     "test:fair": "node tests/fair-feed.test.mjs",
@@ -34,8 +33,6 @@
     "test:finance": "node tests/finance-accountant.test.mjs",
     "test:baseprice": "node tests/delivery-baseprice.test.mjs",
     "test:address": "node tests/address-update.test.mjs",
-    "test:bff-events": "node tests/bff-events.test.mjs",
-    "test:gateway": "node tests/gateway-service.test.mjs",
     "test:video-ad": "node tests/video-broadcast.test.mjs",
     "test:support-thread": "node tests/support-group-thread.test.mjs",
     "test:db-backup": "node tests/db-backup.test.mjs",
@@ -59,7 +56,8 @@
     "test:paynet-amount": "node tests/paynet-amount.test.mjs",
     "test:cors": "node tests/cors-origins.test.mjs",
     "test:backup-resilience": "node tests/db-backup-resilience.test.mjs",
-    "test:tg-link": "node tests/tg-link-login.test.mjs"
+    "test:tg-link": "node tests/tg-link-login.test.mjs",
+    "test:restaurant-app": "node tests/restaurant-app.test.mjs"
   },
   "dependencies": {
     "@socket.io/redis-adapter": "^8.3.0",
@@ -81,5 +79,8 @@
     "socket.io": "^4.8.1",
     "web-push": "^3.6.7",
     "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "socket.io-client": "^4.8.4"
   }
 }

@@ -1,9 +1,9 @@
 /*
  * ═══════════════════════════════════════════════════════════
- * BUYURTMANING RESTORANGA / GATEWAY'GA KO'RINADIGAN SHAKLI
+ * BUYURTMANING RESTORANGA (PANEL VA RESTORAN ILOVASI) KO'RINADIGAN SHAKLI
  * ═══════════════════════════════════════════════════════════
  *
- * Restoran paneli (`/api/panel/orders`) VA Android gateway (`/app/...`)
+ * Restoran paneli VA restoran ilovasi (ikkalasi `/api/panel/...`, bir xil JWT)
  * — ikkalasi ham buyurtmani FAQAT shu funksiyalar orqali qaytaradi:
  * ro'yxat, bitta buyurtma, status o'zgartirish, tarix, "Yetkazildi".
  *
@@ -41,7 +41,7 @@ export function restaurantFinanceView(f) {
 }
 
 /*
- * Buyurtmani panelga (va Android gateway'ga) qulay ko'rinishga
+ * Buyurtmani panelga (va restoran ilovasiga) qulay ko'rinishga
  * keltiradi — mijoz ma'lumotini bitta obyektga yig'adi.
  * `orders()` va `orderDetail()` IKKALASI ham shu funksiyadan
  * foydalanadi — mijoz ko'rinishi ikki joyda alohida yozilib,

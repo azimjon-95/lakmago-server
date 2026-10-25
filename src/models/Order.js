@@ -1,5 +1,4 @@
 import { Schema, model } from 'mongoose';
-import { orderEventsPlugin } from './orderEvents.js';
 
 const orderItemSchema = new Schema(
   {
@@ -407,7 +406,5 @@ orderSchema.index(
 // Sovg'a-bonus limit/byudjet hisobi: qoida bo'yicha buyurtmalarni tez sanash
 orderSchema.index({ 'bonusItems.ruleId': 1, createdAt: -1 }, { sparse: true });
 
-// BFF ga hodisa: buyurtma QANDAY yo'l bilan o'zgarsa ham avtomatik (models/orderEvents.js)
-orderSchema.plugin(orderEventsPlugin);
 
 export const Order = model('Order', orderSchema);

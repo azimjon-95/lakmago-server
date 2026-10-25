@@ -3,7 +3,7 @@
  * ESLATMA QOIDALARI — SOF (bazasiz, botsiz, tarmoqsiz)
  * ═══════════════════════════════════════════════════════════
  *
- * restaurantReminders.js (bot eslatmalari) va panel/gateway
+ * restaurantReminders.js (bot va ilova eslatmalari) va panel/restoran ilovasi
  * (`restaurantConfirm`, "Yetkazildi" endpointi) BIR XIL qoidani
  * ishlatishi uchun shu yerda. Avval bu kod restaurantReminders.js
  * ichida edi va u og'ir bog'liqliklarni (bot, deliveryCheck) tortardi.
