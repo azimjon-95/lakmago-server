@@ -10,6 +10,7 @@ import { Dish } from '../models/Dish.js';
 import { Order } from '../models/Order.js';
 import { Banner } from '../models/User.js';
 import { getIO } from '../sockets/io.js';
+import { announceDish } from '../services/dishEvents.js';
 import { changeOrderStatus, OrderFlowError } from '../services/orderFlow.js';
 import { toPanelOrder } from '../services/panelOrderView.js';
 
@@ -197,6 +198,7 @@ export const restaurantPanelController = {
     }
     // Real-time: admin nazorat panelida darhol ko'rinadi
     getIO()?.to('admin').emit('dish:update', { restaurantId: String(rid(req)) });
+    await announceDish(rid(req), dish);      // restoranning boshqa telefonlari va mijozlar ilovasi ham darhol ko'radi
     res.status(201).json(dish);
   }),
 
@@ -315,6 +317,7 @@ export const restaurantPanelController = {
       { new: true },
     );
     if (!dish) return res.status(404).json({ error: 'Taom topilmadi' });
+    await announceDish(rid(req), dish);      // Stop List soni boshqa qurilmalarda ham bir zumda to'g'rilanadi
     res.json(dish);
   }),
 
@@ -322,6 +325,7 @@ export const restaurantPanelController = {
   deleteDish: asyncHandler(async (req, res) => {
     const dish = await Dish.findOneAndDelete({ _id: req.params.id, restaurantId: rid(req) });
     if (!dish) return res.status(404).json({ error: 'Taom topilmadi' });
+    await announceDish(rid(req), dish);
     res.json({ ok: true });
   }),
 
