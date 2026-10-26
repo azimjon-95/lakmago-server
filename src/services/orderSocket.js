@@ -1,5 +1,6 @@
 import { User } from '../models/User.js';
 import { toPanelOrder } from './panelOrderView.js';
+import { pushOrderEvent } from './mobilePush.js';
 
 /*
  * ═══════════════════════════════════════════════════════════
@@ -40,6 +41,9 @@ export async function restaurantOrderView(order) {
  * { _id, status } (panel uni mavjud kartaga birlashtiradi, ro'yxat keyingi yangilanishda to'ladi).
  */
 export async function emitOrderToRestaurant(io, event, order) {
+  // Mobil push soketdan MUSTAQIL: telefon uxlab yotgan / ilova yopiq bo'lsa soket yo'q, push esa keladi.
+  // Bu funksiya faqat 1-QOIDA tekshiruvidan keyin chaqiriladi; push o'zi ham alohida tekshiradi. Kutilmaydi.
+  if (order) pushOrderEvent(event, order);
   if (!io || !order) return;
   const room = `restaurant:${order.restaurantId}`;
   try {

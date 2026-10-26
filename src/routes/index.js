@@ -10,6 +10,7 @@ import { bannerController, authController, orderController } from '../controller
 import { reservationController, paymentController } from '../controllers/services.js';
 import { adminController } from '../controllers/admin.js';
 import { panelAuthController } from '../controllers/panelAuth.js';
+import { mobileDevicesController } from '../controllers/mobileDevices.js';
 import { notificationController } from '../controllers/notifications.js';
 import { agreementController } from '../controllers/agreements.js';
 import { restaurantPanelController } from '../controllers/restaurantPanel.js';
@@ -182,6 +183,10 @@ router.get('/panel/stats', auth, requireRole('restaurant'), restaurantAppControl
 router.get('/panel/orders/:id', auth, requireRole('restaurant'), restaurantPanelController.orderDetail);
 router.post('/panel/orders/:id/confirm-delivered', auth, requireRole('restaurant'), writeLimiter, restaurantAppController.confirmDelivered);
 router.post('/panel/session/refresh', auth, requireRole('restaurant'), loginLimiter, restaurantAppController.refreshSession);
+// Mobil ilova push tokeni (FCM / APNs) — yangi buyurtma telefon qulflangan / ilova yopiq bo'lsa ham keladi
+router.post('/panel/devices', auth, requireRole('restaurant'), mobileDevicesController.register);
+router.delete('/panel/devices', auth, requireRole('restaurant'), mobileDevicesController.unregister);
+router.get('/panel/devices', auth, requireRole('restaurant'), mobileDevicesController.list);
 router.patch('/panel/orders/:id/status', auth, requireRole('restaurant'), restaurantPanelController.updateOrderStatus);
 /*
  * ═══ SOZLAMALAR -> TELEGRAM ═══

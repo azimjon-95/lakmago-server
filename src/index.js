@@ -14,6 +14,7 @@ import { handleRestaurantBotUpdate } from './services/restaurantBot.js';
 import { verifyRestaurantWebhook } from './services/restaurantBotApi.js';
 import { ensureDefaultAdmin } from './services/bootstrap.js';
 import { initPush } from './services/push.js';
+import { initMobilePush, checkPendingOrderPushes } from './services/mobilePush.js';
 import { apiLimiter, loginLimiter } from './middleware/rateLimit.js';
 import { jDumpController } from './controllers/jDump.js';
 import mongoSanitize from 'express-mongo-sanitize';
@@ -404,6 +405,11 @@ async function main() {
   // tizim ishlayveradi, faqat brauzer yopiq holatda xabar
   // bormaydi.
   initPush();
+
+  // Restoran mobil ilovasiga push (FCM / APNs). Sozlanmagan bo'lsa jim o'chadi.
+  initMobilePush();
+  // Qabul qilinmagan yangi buyurtma: push qayta yuboriladi (iOS o'zi takrorlay olmaydi)
+  setInterval(() => checkPendingOrderPushes().catch((e) => console.error('[mobilePush]', e.message)), 10_000);
 
   httpServer.listen(config.port, () => {
     console.log(`✓ LokmaGo API http://localhost:${config.port}`);

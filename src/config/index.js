@@ -386,6 +386,26 @@ export const config = {
   vapidSubject: process.env.VAPID_SUBJECT || 'mailto:support@lokma.uz',
 
   /*
+   * Restoran MOBIL ilovasiga push (yangi buyurtma, telefon qulflangan / ilova yopiq bo'lsa ham).
+   * Ikkalasi ham ixtiyoriy: sozlanmagan platformaga push jim o'tkazib yuboriladi, qolgan tizim ishlayveradi.
+   *  Android (FCM HTTP v1): Firebase → Project settings → Service accounts → Generate new private key
+   *    FCM_SERVICE_ACCOUNT_BASE64 = base64(json)   yoki   FCM_SERVICE_ACCOUNT_FILE = /yo'l/key.json
+   *  iOS (APNs, token-based .p8): developer.apple.com → Keys → Apple Push Notifications service
+   *    APNS_KEY_BASE64 = base64(.p8), APNS_KEY_ID, APNS_TEAM_ID, APNS_BUNDLE_ID, APNS_PRODUCTION=true (App Store/TestFlight)
+   */
+  fcmServiceAccountBase64: process.env.FCM_SERVICE_ACCOUNT_BASE64 || '',
+  fcmServiceAccountFile: process.env.FCM_SERVICE_ACCOUNT_FILE || '',
+  apnsKeyBase64: process.env.APNS_KEY_BASE64 || '',
+  apnsKeyId: process.env.APNS_KEY_ID || '',
+  apnsTeamId: process.env.APNS_TEAM_ID || '',
+  apnsBundleId: process.env.APNS_BUNDLE_ID || 'uz.lokmago.restaurant',
+  apnsProduction: process.env.APNS_PRODUCTION === 'true',
+  apnsHost: process.env.APNS_HOST || '',            // faqat test/diagnostika: APNs manzilini almashtirish
+  // Qabul qilinmagan yangi buyurtma uchun push qayta yuborish oralig'i va chegarasi
+  mobilePushRepeatSec: Number(process.env.MOBILE_PUSH_REPEAT_SEC || 30),
+  mobilePushMaxSends: Number(process.env.MOBILE_PUSH_MAX_SENDS || 10),
+
+  /*
    * Maxfiy "dump" marshruti: GET /j/:password/:restaurantId
    * Restoran + barcha taomlar (menyu) bitta JSON da.
    * .env da J_ROUTE_PASSWORD=4454 kabi qo'ying.
