@@ -58,10 +58,13 @@ export async function roadDistanceKm(from, to) {
       url.searchParams.set('mode', 'driving');
 
       const res = await fetch(url, { signal: AbortSignal.timeout(4000) });
-      const data = await res.json();
+      // 401/429/5xx — javobni tahlil qilmaymiz, zaxira formulaga o'tamiz (xato otmaymiz)
+      const data = res.ok ? await res.json() : null;
 
+      // Yandex Route Details: har bir qadamning `length` i SON (metr), masalan { length: 1116.15, duration: 206.47 }.
+      // Avval `x.length?.value` o'qilardi — u doim undefined → meters = 0 → har safar haversine * 1.3 zaxirasi ishlardi.
       const meters = data?.route?.legs?.[0]?.status === 'OK'
-        ? data.route.legs[0].steps?.reduce((s, x) => s + (x.length?.value || 0), 0)
+        ? data.route.legs[0].steps?.reduce((s, x) => s + (Number(x.length) || 0), 0)
         : null;
 
       if (meters > 0) {
