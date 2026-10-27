@@ -225,6 +225,31 @@ async function deliver(restaurantId, kind, order, sendNo) {
   return out;
 }
 
+/**
+ * Diagnostika: "push ishlayaptimi?" — restoranning HAR BIR telefoniga test xabari yuboradi va provayder javobini aynan
+ * qaytaradi (masalan "APNs 403 InvalidProviderToken", "FCM 401"). Ilovadagi «Push tekshiruvi» shuni chaqiradi: jimgina
+ * ishlamayotgan pushning sababi ko'rinib qoladi. Buyurtmaga, to'lovga tegmaydi.
+ * @returns [{ platform, token: '…abc123', ok, error? }]
+ */
+export async function sendTestPush(restaurantId) {
+  const p = providers();
+  const devices = await MobileDevice.find({ restaurantId }).lean();
+  const out = [];
+  await Promise.all(devices.map(async (d) => {
+    const row = { platform: d.platform, token: `…${String(d.token).slice(-6)}`, ok: false };
+    if (!p[d.platform]) { row.error = d.platform === 'ios' ? 'Serverda APNs sozlanmagan (APNS_KEY_BASE64, APNS_KEY_ID, APNS_TEAM_ID)' : 'Serverda FCM sozlanmagan (FCM_SERVICE_ACCOUNT_BASE64)'; out.push(row); return; }
+    const r = d.platform === 'android'
+      ? await sendFcm(d.token, { data: { type: 'test', title: 'Push ishlayapti ✓', body: 'Ilova yopiq bo\'lsa ham yangi buyurtma shunday keladi' }, android: { priority: 'HIGH', ttl: '60s' } })
+      : await sendApns(d.token, { aps: { alert: { title: 'Push ishlayapti ✓', body: 'Ilova yopiq bo\'lsa ham yangi buyurtma shunday keladi' }, sound: 'order_alert.wav', 'interruption-level': 'time-sensitive' }, type: 'test' },
+        { 'apns-push-type': 'alert', 'apns-priority': '10', 'apns-expiration': String(Math.floor(Date.now() / 1000) + 60) });
+    row.ok = !!r.ok;
+    if (!r.ok) row.error = r.error || 'noma\'lum xato';
+    if (r.dead) { row.error = `${row.error} — token yaroqsiz, o'chirildi (ilova qayta ro'yxatdan o'tadi)`; await MobileDevice.deleteOne({ _id: d._id }); }
+    out.push(row);
+  }));
+  return out;
+}
+
 /* ─────────────── hodisalar ─────────────── */
 
 /**

@@ -27,7 +27,8 @@ bo'lsa OS soketni to'xtatadi → buyurtma faqat ilova **qo'lda ochilganda** kela
 |---|---|
 | `POST /api/panel/devices` `{token, platform: 'android'\|'ios'}` | ro'yxatga olish (204). restaurantId faqat tokendan |
 | `DELETE /api/panel/devices` `{token}` | chiqishda (faqat o'z restoranining tokeni) |
-| `GET /api/panel/devices` | monitoring |
+| `GET /api/panel/devices` | monitoring: `providers` (server FCM/APNs sozlanganmi) va qurilmalar |
+| `POST /api/panel/devices/test` | **diagnostika**: o'z telefonlariga test push, har qurilma uchun natija va provayderning aniq xatosi (10 s da 1 marta). Ilovadagi «Push tekshiruvi» shuni chaqiradi |
 
 ## Sozlash (.env)
 **Android (FCM):** Firebase Console → Project settings → Service accounts → *Generate new private key* →
@@ -40,7 +41,7 @@ bo'lsa OS soketni to'xtatadi → buyurtma faqat ilova **qo'lda ochilganda** kela
 Ishga tushganda logda: `[mobilePush] Android(FCM): yoqilgan · iOS(APNs): yoqilgan (production)`.
 
 ## Testlar
-`npm run test:mobile-push` — 45 tekshiruv: JWT imzolari (haqiqiy kalitlar), FCM v1 yo'li (soxta Google OAuth/FCM),
+`npm run test:mobile-push` — 53 tekshiruv: JWT imzolari (haqiqiy kalitlar), FCM v1 yo'li (soxta Google OAuth/FCM),
 APNs yo'li (lokal HTTP/2 server), qurilma controller'i (izolyatsiya, ko'chish), 1-QOIDA, dublikat, qayta yuborish va to'xtash,
 yaroqsiz tokenlarni tozalash, emitOrderToRestaurant ulanishi (teskari sinov: ulanish olib tashlansa 3 ta tekshiruv yiqiladi).
 **Haqiqiy telefonga yetishi bu test bilan tekshirilmaydi** — qurilmada sinash kerak.

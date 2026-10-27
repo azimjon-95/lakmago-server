@@ -233,6 +233,35 @@ console.log('\n5) Taymer: qabul qilinmaguncha qayta yuboradi, qabul / bekor bila
   q();
 }
 
+// ── 6) Test push (diagnostika) ──
+console.log('\n6) Test push: har telefon uchun natija va sabab; faqat o\'z telefonlari; tez-tez chaqirib bo\'lmaydi');
+{
+  const q = quiet();
+  const R3 = oid();
+  await MobileDevice.create([{ token: TOK('t_and'), platform: 'android', restaurantId: R3 }, { token: TOK('t_ios'), platform: 'ios', restaurantId: R3 }, { token: TOK('t_dead'), platform: 'ios', restaurantId: R3 }]);
+  const seen = [];
+  push._setTransportsForTest({
+    fcm: async (t, m) => { seen.push({ t, m }); return { ok: true }; },
+    apns: async (t, p) => { seen.push({ t, p }); return t === TOK('t_dead') ? { ok: false, dead: true, error: 'APNs 410 Unregistered' } : { ok: true }; },
+  });
+  const r = await call(mobileDevicesController.test, { restaurantId: R3 });
+  q();
+  ok(r.body.registered === 3 && r.body.results.length === 3, 'ro\'yxatdagi 3 telefonning hammasiga test yuborildi');
+  ok(r.body.results.find((x) => x.platform === 'android').ok === true && seen.find((s) => s.m)?.m.data.type === 'test', 'Android: data.type=test (ilova oddiy bildirishnoma ko\'rsatadi)');
+  ok(seen.find((s) => s.p && s.t === TOK('t_ios')).p.aps.alert.title.includes('Push ishlayapti'), 'iOS: ko\'rinadigan ovozli xabar');
+  const dead = r.body.results.find((x) => x.ok === false);   // (test tokenlari bir xil '000000' bilan tugaydi — shu sabab xato qatori bo'yicha topamiz)
+  ok(dead.ok === false && /410/.test(dead.error) && /o'chirildi/.test(dead.error) && !(await MobileDevice.exists({ token: TOK('t_dead') })), 'yaroqsiz token: sabab aytiladi va o\'chiriladi');
+  ok(!seen.some((s) => s.t === TOK('a1') || s.t === TOK('i1')), 'boshqa restoranning telefoniga BORMADI');
+  ok(r.body.results.every((x) => x.token.startsWith('…') && x.token.length === 7), 'token to\'liq ko\'rsatilmaydi');
+  const again = await call(mobileDevicesController.test, { restaurantId: R3 });
+  ok(again.statusCode === 429, '10 soniya ichida qayta chaqirish — 429 (suiiste\'moldan himoya)');
+  push._setTransportsForTest(null);
+  const r2 = quiet(); const p2 = push.initMobilePush(); config.fcmServiceAccountBase64 = ''; config.apnsKeyBase64 = ''; push.initMobilePush(); r2();
+  const R4 = oid(); await MobileDevice.create({ token: TOK('u_ios'), platform: 'ios', restaurantId: R4 });
+  const nc = await call(mobileDevicesController.test, { restaurantId: R4 });
+  ok(nc.body.results[0].ok === false && /APNs sozlanmagan/.test(nc.body.results[0].error) && nc.body.providers.ios === false, 'server sozlanmagan bo\'lsa aynan shu aytiladi: "APNs sozlanmagan"');
+}
+
 push._setTransportsForTest(null); globalThis.fetch = realFetch; h2.close();
 await mongoose.disconnect();
 console.log(fails ? `\n✗ ${fails} ta xato` : '\n✓ hammasi o\'tdi');

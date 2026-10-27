@@ -1,7 +1,9 @@
 import { z } from 'zod';
 import { asyncHandler } from '../middleware/error.js';
 import { MobileDevice } from '../models/MobileDevice.js';
-import { providers } from '../services/mobilePush.js';
+import { providers, sendTestPush } from '../services/mobilePush.js';
+
+const lastTest = new Map();                 // restaurantId → oxirgi test vaqti (suiiste'moldan himoya)
 
 /**
  * Restoran mobil ilovasining push tokeni. restaurantId FAQAT tokendan (requireRole('restaurant')) — bodyda yo'q.
@@ -41,5 +43,15 @@ export const mobileDevicesController = {
         lastSeen: d.lastSeen, lastSentAt: d.lastSentAt, lastError: d.lastError, failCount: d.failCount,
       })),
     });
+  }),
+
+  /** POST /api/panel/devices/test — o'z telefonlariga test push; natija har qurilma uchun alohida (sabab bilan). */
+  test: asyncHandler(async (req, res) => {
+    const key = String(req.restaurantId);
+    const wait = 10_000 - (Date.now() - (lastTest.get(key) || 0));
+    if (wait > 0) return res.status(429).json({ error: `Biroz kuting (${Math.ceil(wait / 1000)} s)` });
+    lastTest.set(key, Date.now());
+    const results = await sendTestPush(req.restaurantId);
+    res.json({ providers: providers(), registered: results.length, results });
   }),
 };

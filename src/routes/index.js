@@ -187,6 +187,7 @@ router.post('/panel/session/refresh', auth, requireRole('restaurant'), loginLimi
 router.post('/panel/devices', auth, requireRole('restaurant'), mobileDevicesController.register);
 router.delete('/panel/devices', auth, requireRole('restaurant'), mobileDevicesController.unregister);
 router.get('/panel/devices', auth, requireRole('restaurant'), mobileDevicesController.list);
+router.post('/panel/devices/test', auth, requireRole('restaurant'), mobileDevicesController.test);
 router.patch('/panel/orders/:id/status', auth, requireRole('restaurant'), restaurantPanelController.updateOrderStatus);
 /*
  * ═══ SOZLAMALAR -> TELEGRAM ═══
