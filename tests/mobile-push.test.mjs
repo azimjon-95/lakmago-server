@@ -103,7 +103,9 @@ globalThis.fetch = async (url, opts) => {
   const u = String(url);
   if (u.startsWith('https://oauth2.googleapis.com/')) { fcmCalls.push({ kind: 'oauth', body: String(opts.body) }); return new Response(JSON.stringify({ access_token: 'AT1', expires_in: 3600 }), { status: 200 }); }
   if (u.startsWith('https://fcm.googleapis.com/')) {
-    const body = JSON.parse(opts.body); fcmCalls.push({ kind: 'send', url: u, auth: opts.headers.authorization, body });
+    const body = JSON.parse(opts.body);
+    if (body.validate_only) { fcmCalls.push({ kind: 'check', body }); return new Response(JSON.stringify({ error: { code: 400, status: 'INVALID_ARGUMENT' } }), { status: 400 }); }   // ishga tushishdagi o'z-o'zini tekshirish
+    fcmCalls.push({ kind: 'send', url: u, auth: opts.headers.authorization, body });
     if (body.message.token.startsWith('dead')) return new Response(JSON.stringify({ error: { code: 404, status: 'NOT_FOUND', details: [{ errorCode: 'UNREGISTERED' }] } }), { status: 404 });
     if (body.message.token.startsWith('flaky')) return new Response(JSON.stringify({ error: { code: 503, status: 'UNAVAILABLE' } }), { status: 503 });
     return new Response('{"name":"projects/p/messages/1"}', { status: 200 });
@@ -260,6 +262,119 @@ console.log('\n6) Test push: har telefon uchun natija va sabab; faqat o\'z telef
   const R4 = oid(); await MobileDevice.create({ token: TOK('u_ios'), platform: 'ios', restaurantId: R4 });
   const nc = await call(mobileDevicesController.test, { restaurantId: R4 });
   ok(nc.body.results[0].ok === false && /APNs sozlanmagan/.test(nc.body.results[0].error) && nc.body.providers.ios === false, 'server sozlanmagan bo\'lsa aynan shu aytiladi: "APNs sozlanmagan"');
+}
+
+// 6-bo'lim «sozlanmagan» holatni tekshirish uchun provayderlarni o'chirgan edi — qayta yoqamiz
+const enableProviders = () => {
+  config.fcmServiceAccountBase64 = Buffer.from(JSON.stringify({ client_email: 'push@p.iam.gserviceaccount.com', project_id: 'p', private_key: rsa.privateKey.export({ type: 'pkcs8', format: 'pem' }) })).toString('base64');
+  config.apnsKeyBase64 = Buffer.from(ec.privateKey.export({ type: 'pkcs8', format: 'pem' })).toString('base64');
+  config.apnsKeyId = 'KEY123'; config.apnsTeamId = 'TEAM1';
+  const r = quiet(); const p = push.initMobilePush(); r(); return p;
+};
+
+// ── 7) Provayder timeout / vaqtinchalik xato ≠ yaroqsiz token ──
+console.log('\n7) Timeout va tarmoq xatosi: token SAQLANADI (faqat provayder aniq tasdiqlasa o\'chadi)');
+{
+  enableProviders();
+  const q = quiet();
+  const R5 = oid(); await MobileDevice.create([{ token: TOK('to_and'), platform: 'android', restaurantId: R5 }, { token: TOK('to_ios'), platform: 'ios', restaurantId: R5 }]);
+  const saveTimeout = config.mobilePushTimeoutMs; config.mobilePushTimeoutMs = 150;
+  const hang = http2.createServer(); hang.on('stream', () => { /* javob BERMAYDI */ });
+  await new Promise((r) => hang.listen(0, '127.0.0.1', r));
+  config.apnsHost = `http://127.0.0.1:${hang.address().port}`;
+  const f0 = globalThis.fetch;
+  globalThis.fetch = async (url, opts) => { if (String(url).includes('fcm.googleapis.com') && !JSON.parse(opts.body).validate_only) { const e = new Error('The operation was aborted due to timeout'); e.name = 'TimeoutError'; throw e; } return f0(url, opts); };
+  push._setTransportsForTest(null);
+  const t0 = Date.now();
+  const r = await push.sendTestPush(R5);
+  q();
+  ok(Date.now() - t0 < 2000, 'APNs javob bermasa ham so\'rov timeout bilan tugaydi (osilib qolmaydi)');
+  ok(r.every((x) => x.ok === false), 'ikkala provayder xato qaytardi (FCM timeout, APNs timeout)');
+  ok(/timeout/i.test(r.find((x) => x.platform === 'ios').error) && /timeout/i.test(r.find((x) => x.platform === 'android').error), 'sabab ko\'rinadi: timeout');
+  ok(await MobileDevice.countDocuments({ restaurantId: R5 }) === 2, 'timeout tokenni O\'CHIRMAYDI (yaroqsiz deb hisoblanmaydi)');
+  const qq = quiet(); await push.onOrderEvent('order:new', { _id: oid(), restaurantId: R5, status: 'pending', total: 5 }); qq();
+  const d = await MobileDevice.findOne({ token: TOK('to_and') });
+  ok(d.failCount === 1 && /timeout|aborted/i.test(d.lastError), 'xato monitoringda: failCount=1, lastError');
+  globalThis.fetch = f0; config.mobilePushTimeoutMs = saveTimeout; hang.close(); config.apnsHost = `http://127.0.0.1:${h2.address().port}`;
+}
+
+// ── 8) Push xatosi buyurtma oqimiga TEGMAYDI ──
+console.log('\n8) Push butunlay ishlamay qolsa ham buyurtma xabari (soket) va buyurtma oqimi buzilmaydi');
+{
+  const q = quiet();
+  const origFind = MobileDevice.find, origCreate = OrderPushState.create;
+  MobileDevice.find = () => { throw new Error('baza o\'chdi'); };
+  OrderPushState.create = async () => { throw new Error('boshqa xato'); };
+  const emitted = []; const io = { to: () => ({ emit: (ev, p) => emitted.push({ ev, id: p._id || p }) }), emit() {} };
+  let threw = false;
+  try { await emitOrderToRestaurant(io, 'order:new', { _id: oid(), restaurantId: R1, status: 'pending', dailyNumber: 9, total: 1, items: [], userId: null }); } catch { threw = true; }
+  await wait(120);
+  MobileDevice.find = origFind; OrderPushState.create = origCreate;
+  q();
+  ok(!threw, 'emitOrderToRestaurant push xatosida ISTISNO otmaydi (buyurtma yaratish oqimi buzilmaydi)');
+  ok(emitted.some((e) => e.ev === 'order:new'), 'Socket.IO hodisasi baribir yuborildi');
+}
+
+// ── 9) Loglarda sir YO'Q ──
+console.log('\n9) Loglar: token, JWT, private key, mijoz ma\'lumoti chiqmaydi');
+{
+  const lines = []; const l = console.log, w = console.warn, e = console.error;
+  const cap = (...a) => lines.push(a.map(String).join(' '));
+  console.log = cap; console.warn = cap; console.error = cap;
+  const SECRET_TOKEN = 'SECRETDEVICETOKEN' + 'f'.repeat(30);
+  const R6 = oid(); await MobileDevice.create([{ token: SECRET_TOKEN, platform: 'android', restaurantId: R6 }, { token: 'dead' + SECRET_TOKEN, platform: 'android', restaurantId: R6 }]);
+  push._setTransportsForTest({ fcm: async (t) => (t.startsWith('dead') ? { ok: false, dead: true, error: 'FCM 404 UNREGISTERED' } : { ok: false, error: 'FCM 503 UNAVAILABLE' }), apns: async () => ({ ok: true }) });
+  await push.onOrderEvent('order:new', { _id: oid(), restaurantId: R6, status: 'pending', dailyNumber: 77, total: 99000, userId: { name: 'Mijoz Familiya', phone: '+998901234567' }, address: 'Chilonzor 5-uy', finance: { net: 1 } });
+  config.fcmServiceAccountBase64 = 'not-base64-@@@'; config.apnsKeyBase64 = Buffer.from('-----BEGIN PRIVATE KEY-----\nTOPSECRETKEYBODY\n').toString('base64'); config.apnsKeyId = 'K'; config.apnsTeamId = 'T';
+  push.initMobilePush(); await wait(100);
+  console.log = l; console.warn = w; console.error = e;
+  const all = lines.join('\n');
+  ok(!all.includes(SECRET_TOKEN) && !all.includes(SECRET_TOKEN.slice(-12)), 'qurilma tokeni logda yo\'q');
+  ok(!/TOPSECRETKEYBODY|BEGIN PRIVATE KEY|not-base64/.test(all), 'private key / sozlama qiymati logda yo\'q (xato matni ham sirni aks ettirmaydi)');
+  ok(!/998901234567|Mijoz Familiya|Chilonzor/.test(all), 'mijozning telefoni, ismi, manzili logda yo\'q');
+  ok(/#77/.test(all), 'faqat buyurtma raqami va natija soni logga yoziladi');
+}
+
+// ── 10) APNs muhiti har qurilma uchun ──
+console.log('\n10) iOS muhiti: development → sandbox, production → production, noma\'lum → APNS_PRODUCTION');
+{
+  const save = config.apnsHost; config.apnsHost = '';
+  const sp = config.apnsProduction;
+  config.apnsProduction = false;
+  ok(push.apnsHostFor('development') === 'https://api.sandbox.push.apple.com' && push.apnsHostFor('production') === 'https://api.push.apple.com', 'development → sandbox, production → production');
+  ok(push.apnsHostFor(null) === 'https://api.sandbox.push.apple.com', 'muhit yo\'q (eski ilova), APNS_PRODUCTION=false → sandbox');
+  config.apnsProduction = true;
+  ok(push.apnsHostFor(null) === 'https://api.push.apple.com' && push.apnsHostFor('development') === 'https://api.sandbox.push.apple.com', 'muhit yo\'q, APNS_PRODUCTION=true → production; lekin development token baribir sandbox');
+  config.apnsProduction = sp; config.apnsHost = save;
+  const R7 = oid();
+  ok((await call(mobileDevicesController.register, { restaurantId: R7, body: { token: TOK('env1'), platform: 'ios', environment: 'development' } })).statusCode === 204
+    && (await MobileDevice.findOne({ token: TOK('env1') })).environment === 'development', 'POST /devices {environment} saqlanadi');
+  ok((await call(mobileDevicesController.register, { restaurantId: R7, body: { token: TOK('env1'), platform: 'ios' } })).statusCode === 204
+    && (await MobileDevice.findOne({ token: TOK('env1') })).environment === 'development', 'environment yubormagan eski ilova mavjud muhitni O\'ZGARTIRMAYDI');
+  ok((await call(mobileDevicesController.register, { restaurantId: R7, body: { token: TOK('env2'), platform: 'ios', environment: 'staging' } })).statusCode === 400, 'noma\'lum muhit rad etiladi (400)');
+  const seen2 = []; push._setTransportsForTest({ apns: async (t, p, h, env) => { seen2.push(env); return { ok: true }; }, fcm: async () => ({ ok: true }) });
+  const qa = quiet(); await push.onOrderEvent('order:new', { _id: oid(), restaurantId: R7, status: 'pending', total: 1 }); qa();
+  ok(seen2.length === 1 && seen2[0] === 'development', 'push qurilmaning o\'z muhiti bilan yuboriladi');
+}
+
+// ── 11) Ishga tushganda provayderni tekshirish ──
+console.log('\n11) Ishga tushganda tekshiruv: noto\'g\'ri kalit logda va GET /devices da ko\'rinadi');
+{
+  push._setTransportsForTest(null);
+  const f1 = globalThis.fetch;
+  enableProviders(); config.apnsKeyBase64 = '';
+  { const r0 = quiet(); push.initMobilePush(); r0(); }
+  globalThis.fetch = async (url, opts) => String(url).includes('oauth2') ? new Response(JSON.stringify({ access_token: 'AT', expires_in: 3600 }), { status: 200 })
+    : String(url).includes('fcm.googleapis.com') ? new Response('{"error":{"code":403,"status":"PERMISSION_DENIED"}}', { status: 403 }) : f1(url, opts);
+  const q = quiet(); const bad = await push.verifyProviders(); q();
+  ok(/xato: FCM 403/.test(bad.android) && bad.ios === 'off', 'FCM 403 (Cloud Messaging API yoqilmagan / noto\'g\'ri loyiha) aniq sabab bilan aytiladi');
+  const listed = await call(mobileDevicesController.list, { restaurantId: R1 });
+  ok(listed.body.check.android === bad.android, 'GET /api/panel/devices `check` shuni qaytaradi');
+  globalThis.fetch = async (url, opts) => String(url).includes('oauth2') ? new Response(JSON.stringify({ access_token: 'AT', expires_in: 3600 }), { status: 200 })
+    : String(url).includes('fcm.googleapis.com') ? new Response('{"error":{"code":400,"status":"INVALID_ARGUMENT"}}', { status: 400 }) : f1(url, opts);
+  const q2 = quiet(); const good = await push.verifyProviders(); q2();
+  ok(good.android === 'ok', 'FCM 400 INVALID_ARGUMENT (soxta token) = autentifikatsiya va loyiha TO\'G\'RI → "ok"');
+  globalThis.fetch = f1;
 }
 
 push._setTransportsForTest(null); globalThis.fetch = realFetch; h2.close();

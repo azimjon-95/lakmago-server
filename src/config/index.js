@@ -402,6 +402,7 @@ export const config = {
   apnsProduction: process.env.APNS_PRODUCTION === 'true',
   apnsHost: process.env.APNS_HOST || '',            // faqat test/diagnostika: APNs manzilini almashtirish
   // Qabul qilinmagan yangi buyurtma uchun push qayta yuborish oralig'i va chegarasi
+  mobilePushTimeoutMs: Number(process.env.MOBILE_PUSH_TIMEOUT_MS || 10000),
   mobilePushRepeatSec: Number(process.env.MOBILE_PUSH_REPEAT_SEC || 30),
   mobilePushMaxSends: Number(process.env.MOBILE_PUSH_MAX_SENDS || 10),
 

@@ -44,7 +44,7 @@ let fcmAccount = null;                 // Firebase service account (client_email
 let fcmAccess = { value: '', exp: 0 };
 let apnsKey = null;                    // .p8 (PEM)
 let apnsJwt = { value: '', at: 0 };
-let apnsSession = null;
+const apnsSessions = new Map();         // host → http2 sessiya (sandbox va production alohida)
 let transports = null;                 // faqat testlar uchun
 
 export function initMobilePush() {
@@ -58,13 +58,44 @@ export function initMobilePush() {
       if (a.client_email && a.private_key && a.project_id) fcmAccount = a;
       else console.warn('[mobilePush] FCM service account to‘liq emas — Android push o‘chiq');
     }
-  } catch (e) { console.warn('[mobilePush] FCM sozlamasi o‘qilmadi:', e.message); }
+  } catch { console.warn('[mobilePush] FCM sozlamasi o‘qilmadi (base64 / JSON formatini tekshiring; sir logga yozilmaydi)'); }
   try {
     if (config.apnsKeyBase64 && config.apnsKeyId && config.apnsTeamId) apnsKey = Buffer.from(config.apnsKeyBase64, 'base64').toString('utf8');
-  } catch (e) { console.warn('[mobilePush] APNs kaliti o‘qilmadi:', e.message); }
-  OrderPushState.init().catch(() => {});          // unique indeks dublikatni ushlashi uchun oldindan quriladi
+  } catch { console.warn('[mobilePush] APNs kaliti o‘qilmadi (base64 formatini tekshiring; sir logga yozilmaydi)'); }
+  OrderPushState.init().catch(() => {});
+  lastCheck = { android: fcmAccount ? 'tekshirilmoqda' : 'off', ios: apnsKey ? 'tekshirilmoqda' : 'off' };
+  if (fcmAccount || apnsKey) verifyProviders().catch(() => {});          // unique indeks dublikatni ushlashi uchun oldindan quriladi
   console.log(`[mobilePush] Android(FCM): ${fcmAccount ? 'yoqilgan' : 'o‘chiq'} · iOS(APNs): ${apnsKey ? (config.apnsProduction ? 'yoqilgan (production)' : 'yoqilgan (sandbox)') : 'o‘chiq'}`);
   return providers();
+}
+
+/**
+ * Sozlamani ISHGA TUSHGANDA tekshiradi (telefonsiz): serverni qayta ishga tushirgach logda ko'rinadi, GET /api/panel/devices ham qaytaradi.
+ *  Android: Google OAuth + FCM `validate_only` (xabar YUBORILMAYDI): 200/400 = kalit va loyiha to'g'ri, 401/403/404 = sozlama xato.
+ *  iOS: .p8 kalit ochiladi va imzo chiqadi (Apple bilan haqiqiy tekshiruv faqat telefon tokeni bilan mumkin — «Test push»).
+ */
+let lastCheck = { android: 'off', ios: 'off' };
+export const providerCheck = () => lastCheck;
+export async function verifyProviders() {
+  const out = { android: 'off', ios: 'off' };
+  if (fcmAccount) {
+    try {
+      const access = await fcmToken();
+      const r = await fetch(`https://fcm.googleapis.com/v1/projects/${fcmAccount.project_id}/messages:send`, {
+        method: 'POST', headers: { authorization: `Bearer ${access}`, 'content-type': 'application/json' },
+        body: JSON.stringify({ validate_only: true, message: { token: 'x'.repeat(40), data: { type: 'check' } } }),
+        signal: AbortSignal.timeout(config.mobilePushTimeoutMs),
+      });
+      out.android = (r.status === 200 || r.status === 400) ? 'ok' : `xato: FCM ${r.status} (kalit/loyiha/Cloud Messaging API'ni tekshiring)`;
+    } catch (e) { out.android = `xato: ${String(e.message || e).slice(0, 120)}`; }
+  } else if (transports?.fcm) out.android = 'test';
+  if (apnsKey) {
+    try { apnsJwt = { value: '', at: 0 }; apnsAuth(); out.ios = 'kalit ochildi (Apple bilan tekshirish: «Test push»)'; }
+    catch { out.ios = 'xato: .p8 kalit ochilmadi (APNS_KEY_BASE64 formatini tekshiring)'; }
+  } else if (transports?.apns) out.ios = 'test';
+  lastCheck = out;
+  console.log(`[mobilePush] tekshiruv: Android=${out.android} · iOS=${out.ios}`);
+  return out;
 }
 
 export const providers = () => ({ android: !!(fcmAccount || transports?.fcm), ios: !!(apnsKey || transports?.apns) });
@@ -83,7 +114,7 @@ async function fcmToken() {
   const r = await fetch(aud, {
     method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({ grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer', assertion }),
-    signal: AbortSignal.timeout(10_000),
+    signal: AbortSignal.timeout(config.mobilePushTimeoutMs),
   });
   const j = await r.json().catch(() => ({}));
   if (!r.ok || !j.access_token) throw new Error(`FCM OAuth ${r.status} ${j.error || ''}`.trim());
@@ -97,7 +128,7 @@ export async function sendFcm(token, message) {
     const access = await fcmToken();
     const r = await fetch(`https://fcm.googleapis.com/v1/projects/${fcmAccount.project_id}/messages:send`, {
       method: 'POST', headers: { authorization: `Bearer ${access}`, 'content-type': 'application/json' },
-      body: JSON.stringify({ message: { token, ...message } }), signal: AbortSignal.timeout(10_000),
+      body: JSON.stringify({ message: { token, ...message } }), signal: AbortSignal.timeout(config.mobilePushTimeoutMs),
     });
     if (r.ok) return { ok: true };
     const j = await r.json().catch(() => ({}));
@@ -117,29 +148,37 @@ function apnsAuth() {
   return apnsJwt.value;
 }
 
-function apnsConn() {
-  if (!apnsSession || apnsSession.closed || apnsSession.destroyed) {
-    const host = config.apnsHost || (config.apnsProduction ? 'https://api.push.apple.com' : 'https://api.sandbox.push.apple.com');
-    apnsSession = http2.connect(host);
-    apnsSession.on('error', () => { apnsSession = null; });
-    apnsSession.on('goaway', () => { apnsSession = null; });
-    apnsSession.unref?.();
-  }
-  return apnsSession;
+/** Qurilma muhiti → APNs manzili. Muhit noma'lum bo'lsa APNS_PRODUCTION. APNS_HOST (faqat test) hammasini almashtiradi. */
+export function apnsHostFor(environment) {
+  if (config.apnsHost) return config.apnsHost;
+  const prod = environment === 'production' || (environment !== 'development' && config.apnsProduction);
+  return prod ? 'https://api.push.apple.com' : 'https://api.sandbox.push.apple.com';
 }
 
-export function sendApns(token, payload, headers) {
-  if (transports?.apns) return transports.apns(token, payload, headers);
+function apnsConn(host) {
+  let session = apnsSessions.get(host);
+  if (!session || session.closed || session.destroyed) {
+    session = http2.connect(host);
+    const drop = () => { if (apnsSessions.get(host) === session) apnsSessions.delete(host); };
+    session.on('error', drop); session.on('goaway', drop); session.on('close', drop);
+    session.unref?.();
+    apnsSessions.set(host, session);
+  }
+  return session;
+}
+
+export function sendApns(token, payload, headers, environment = null) {
+  if (transports?.apns) return transports.apns(token, payload, headers, environment);
   return new Promise((resolve) => {
     let req;
     try {
-      req = apnsConn().request({
+      req = apnsConn(apnsHostFor(environment)).request({
         ':method': 'POST', ':path': `/3/device/${token}`, authorization: `bearer ${apnsAuth()}`,
         'apns-topic': config.apnsBundleId, 'content-type': 'application/json', ...headers,
       });
-    } catch (e) { apnsSession = null; resolve({ ok: false, error: `APNs ${e.message}` }); return; }
+    } catch (e) { apnsSessions.delete(apnsHostFor(environment)); resolve({ ok: false, error: `APNs ${e.message}` }); return; }
     let status = 0; let body = '';
-    req.setTimeout(10_000, () => { req.close(); resolve({ ok: false, error: 'APNs timeout' }); });
+    req.setTimeout(config.mobilePushTimeoutMs, () => { req.close(); resolve({ ok: false, error: 'APNs timeout' }); });
     req.on('response', (h) => { status = h[':status']; });
     req.setEncoding('utf8');
     req.on('data', (c) => { body += c; });
@@ -150,7 +189,7 @@ export function sendApns(token, payload, headers) {
       const dead = status === 410 || ['BadDeviceToken', 'Unregistered', 'DeviceTokenNotForTopic'].includes(reason);
       resolve({ ok: false, dead, error: `APNs ${status} ${reason}`.trim() });
     });
-    req.on('error', (e) => { apnsSession = null; resolve({ ok: false, error: `APNs ${e.message}` }); });
+    req.on('error', (e) => { apnsSessions.delete(apnsHostFor(environment)); resolve({ ok: false, error: `APNs ${e.message}` }); });
     req.end(JSON.stringify(payload));
   });
 }
@@ -207,7 +246,7 @@ async function deliver(restaurantId, kind, order, sendNo) {
     out.total += 1;
     let r;
     if (d.platform === 'android') r = await sendFcm(d.token, androidMessage(kind, order, sendNo));
-    else { const m = iosMessage(kind, order); r = await sendApns(d.token, m.payload, m.headers); }
+    else { const m = iosMessage(kind, order); r = await sendApns(d.token, m.payload, m.headers, d.environment || null); }
     if (r.ok) {
       out.sent += 1;
       await MobileDevice.updateOne({ _id: d._id }, { $set: { lastSentAt: new Date(), lastError: '', failCount: 0 } });
@@ -241,7 +280,7 @@ export async function sendTestPush(restaurantId) {
     const r = d.platform === 'android'
       ? await sendFcm(d.token, { data: { type: 'test', title: 'Push ishlayapti ✓', body: 'Ilova yopiq bo\'lsa ham yangi buyurtma shunday keladi' }, android: { priority: 'HIGH', ttl: '60s' } })
       : await sendApns(d.token, { aps: { alert: { title: 'Push ishlayapti ✓', body: 'Ilova yopiq bo\'lsa ham yangi buyurtma shunday keladi' }, sound: 'order_alert.wav', 'interruption-level': 'time-sensitive' }, type: 'test' },
-        { 'apns-push-type': 'alert', 'apns-priority': '10', 'apns-expiration': String(Math.floor(Date.now() / 1000) + 60) });
+        { 'apns-push-type': 'alert', 'apns-priority': '10', 'apns-expiration': String(Math.floor(Date.now() / 1000) + 60) }, d.environment || null);
     row.ok = !!r.ok;
     if (!r.ok) row.error = r.error || 'noma\'lum xato';
     if (r.dead) { row.error = `${row.error} — token yaroqsiz, o'chirildi (ilova qayta ro'yxatdan o'tadi)`; await MobileDevice.deleteOne({ _id: d._id }); }

@@ -45,3 +45,33 @@ Ishga tushganda logda: `[mobilePush] Android(FCM): yoqilgan · iOS(APNs): yoqilg
 APNs yo'li (lokal HTTP/2 server), qurilma controller'i (izolyatsiya, ko'chish), 1-QOIDA, dublikat, qayta yuborish va to'xtash,
 yaroqsiz tokenlarni tozalash, emitOrderToRestaurant ulanishi (teskari sinov: ulanish olib tashlansa 3 ta tekshiruv yiqiladi).
 **Haqiqiy telefonga yetishi bu test bilan tekshirilmaydi** — qurilmada sinash kerak.
+
+
+## Konfiguratsiyani tekshirish (telefonsiz, production'ga tegmasdan)
+Server ishga tushganda logda:
+```
+[mobilePush] Android(FCM): yoqilgan · iOS(APNs): yoqilgan (production)
+[mobilePush] tekshiruv: Android=ok · iOS=kalit ochildi (Apple bilan tekshirish: «Test push»)
+```
+* **Android**: Google OAuth + FCM `validate_only` (xabar YUBORILMAYDI). `ok` = service account va loyiha to'g'ri.
+  `xato: FCM 403` = Cloud Messaging API (FCM HTTP v1) yoqilmagan yoki kalit boshqa loyihadan; `401` = kalit yaroqsiz; `404` = project_id xato.
+* **iOS**: .p8 ochiladi va imzo chiqadi. Apple bilan haqiqiy tekshiruv faqat telefon tokeni bilan mumkin → ilovada «Push tekshiruvi → Test push».
+* Natija `GET /api/panel/devices` → `check` da ham ko'rinadi. Sir (kalit, token) logga yozilmaydi (testlangan).
+
+**Muhit (iOS):** ilova `POST /api/panel/devices` da `environment: development|production` yuboradi. Xcode build tokeni sandbox APNs'ga,
+TestFlight/App Store tokeni production APNs'ga ketadi — `BadDeviceToken` (sandbox/production mos emas) xatosi tugaydi.
+Muhit yubormagan eski ilova uchun `APNS_PRODUCTION` ishlatiladi (oldingi xatti-harakat).
+
+## Production xavfsizligi
+* Faqat yangi `mobiledevices` va `orderpushstates` kolleksiyalari; mavjud kolleksiyalar, buyurtma, to'lov, komissiya, payout kodi O'ZGARMAGAN.
+  Migratsiya yo'q. `MobileDevice.environment` ixtiyoriy maydon (default null) — orqaga mos.
+* Push xatosi buyurtma oqimiga ta'sir qilmaydi: `emitOrderToRestaurant` push'ni kutmaydi va uning istisnosini yutadi (testlangan: baza xatosida ham soket hodisasi ketadi).
+* `awaiting_payment` buyurtmaga push ketmaydi (1-QOIDA) — push ichida alohida tekshiriladi.
+* Sozlanmagan provayder = jim o'chiq; qolgan tizim ishlayveradi.
+
+## Deploy va rollback (faqat SIZNING tasdig'ingiz bilan)
+1. `git pull` → `npm ci` (yangi kutubxona yo'q; lock o'zgarmagan) → `.env` ga FCM/APNs kalitlarini qo'shing → `pm2 restart lakmago-server`.
+2. Logda yuqoridagi 2 qatorni tekshiring; `GET /api/panel/devices` → `check`.
+3. Ilovada «Push tekshiruvi» → «Test push».
+**Rollback:** `.env` dan `FCM_SERVICE_ACCOUNT_BASE64` va `APNS_KEY_BASE64` ni olib tashlab restart qiling — push butunlay o'chadi, qolgan tizim avvalgidek
+(yoki `git revert <commit>` + restart). Yangi kolleksiyalarni o'chirish shart emas (OrderPushState 2 kundan keyin o'zi tozalanadi).

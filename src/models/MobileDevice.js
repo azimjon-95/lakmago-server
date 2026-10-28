@@ -13,6 +13,8 @@ const mobileDeviceSchema = new Schema(
     platform: { type: String, enum: ['android', 'ios'], required: true },
     restaurantId: { type: Schema.Types.ObjectId, ref: 'Restaurant', required: true, index: true },
     userId: { type: Schema.Types.ObjectId, ref: 'User' },
+    // iOS: Xcode/debug build tokeni 'development' (sandbox APNs), TestFlight/App Store tokeni 'production'. Yo'q bo'lsa — APNS_PRODUCTION.
+    environment: { type: String, enum: ['development', 'production'], default: null },
 
     // Monitoring: oxirgi muvaffaqiyatli yuborish va oxirgi xato (token ishlayaptimi?)
     lastSeen: { type: Date, default: Date.now },

@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { asyncHandler } from '../middleware/error.js';
 import { MobileDevice } from '../models/MobileDevice.js';
-import { providers, sendTestPush } from '../services/mobilePush.js';
+import { providers, providerCheck, sendTestPush } from '../services/mobilePush.js';
 
 const lastTest = new Map();                 // restaurantId → oxirgi test vaqti (suiiste'moldan himoya)
 
@@ -15,13 +15,13 @@ const tokenSchema = z.string().trim().min(20).max(4096);
 
 export const mobileDevicesController = {
   register: asyncHandler(async (req, res) => {
-    const parsed = z.object({ token: tokenSchema, platform: z.enum(['android', 'ios']) }).safeParse(req.body);
+    const parsed = z.object({ token: tokenSchema, platform: z.enum(['android', 'ios']), environment: z.enum(['development', 'production']).optional() }).safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: 'Token yoki platforma noto‘g‘ri' });
-    const { token, platform } = parsed.data;
+    const { token, platform, environment } = parsed.data;
     // Bir token — bitta restoran: telefon boshqa restoranga kirsa yozuv o'shanga ko'chadi.
     await MobileDevice.findOneAndUpdate(
       { token },
-      { $set: { platform, restaurantId: req.restaurantId, userId: req.userId || undefined, lastSeen: new Date(), failCount: 0, lastError: '' } },
+      { $set: { platform, restaurantId: req.restaurantId, userId: req.userId || undefined, lastSeen: new Date(), failCount: 0, lastError: '', ...(environment ? { environment } : {}) } },
       { upsert: true, setDefaultsOnInsert: true },
     );
     res.status(204).end();
@@ -38,8 +38,9 @@ export const mobileDevicesController = {
     const devices = await MobileDevice.find({ restaurantId: req.restaurantId }).sort({ lastSeen: -1 }).lean();
     res.json({
       providers: providers(),
+      check: providerCheck(),
       devices: devices.map((d) => ({
-        platform: d.platform, token: `…${String(d.token).slice(-6)}`,
+        platform: d.platform, environment: d.environment || null, token: `…${String(d.token).slice(-6)}`,
         lastSeen: d.lastSeen, lastSentAt: d.lastSentAt, lastError: d.lastError, failCount: d.failCount,
       })),
     });
