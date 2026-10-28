@@ -78,6 +78,24 @@ export const catalogProductController = {
     res.json(items);
   }),
 
+  /*
+   * GET /api/admin/catalog/counts — kategoriya bo'yicha ANIQ sonlar (admin "Umumiy katalog" kartochkalari uchun).
+   * `list` 500 tadan kesadi, shuning uchun katta katalogda sonlarni undan hisoblab bo'lmaydi. Bu yerda faqat 3 ta
+   * maydon o'qiladi (yengil), kesish yo'q. Natija: { total, counts: [{ category, total, active, withImage }] }.
+   */
+  counts: asyncHandler(async (req, res) => {
+    const rows = await CatalogProduct.find({}).select('category isActive imageUrl').lean();
+    const by = new Map();
+    for (const r of rows) {
+      const c = by.get(r.category) || { category: r.category, total: 0, active: 0, withImage: 0 };
+      c.total += 1;
+      if (r.isActive !== false) c.active += 1;
+      if (r.imageUrl) c.withImage += 1;
+      by.set(r.category, c);
+    }
+    res.set('Cache-Control', 'no-store').json({ total: rows.length, counts: [...by.values()] });
+  }),
+
   // POST /api/admin/catalog
   create: asyncHandler(async (req, res) => {
     const parsed = productSchema.safeParse(req.body);
