@@ -1,5 +1,6 @@
 import { getRedis as realGetRedis } from './cache.js';
 import { CatalogProduct } from '../models/CatalogProduct.js';
+import { metaOf, newSeed, queryPage, validSeed } from './catalogPaging.js';
 
 /*
  * ═══ UMUMIY KATALOG (ADMIN) — REDIS KESHI ═══
@@ -83,6 +84,60 @@ export function createCatalogCache({ getRedis = realGetRedis, model = CatalogPro
     return p;
   }
 
+  const fromDb = (list) => model.find({ category: { $in: list } }).sort(sortOrder).lean();
+
+  /** Redis (yoki isitish/baza) dan kategoriyalar bo'yicha ro'yxatlar. Map(kategoriya → ro'yxat). */
+  async function readLists(r, v, cats) {
+    let raw;
+    try { raw = await r.mget(cats.map((c) => k(v, 'cat', c))); } catch { raw = cats.map(() => null); }
+    const lists = new Map();
+    const missing = [];
+    cats.forEach((c, i) => {
+      if (raw[i]) { try { lists.set(c, JSON.parse(raw[i])); return; } catch { /* buzuq — qayta o'qiladi */ } }
+      missing.push(c);
+    });
+    if (!missing.length) return { lists, source: 'hit' };
+
+    let warmed = false;
+    try { warmed = Boolean(await r.get(k(v, 'warm'))); } catch { /* */ }
+    if (!warmed || missing.length >= 3) {
+      // Kesh sovuq (yoki ko'p yetishmayapti): butun katalog bir so'rovda yuklanadi — keyingi bosishlar tez bo'ladi
+      const all = await warm(r, v);
+      for (const c of missing) lists.set(c, all.byCat.get(c) || []);
+    } else {
+      // Isigan kesh, 1–2 ta kalit yetishmaydi (masalan Redis o'chirgan): faqat o'shalar bazadan
+      const docs = await fromDb(missing);
+      for (const c of missing) {
+        const list = docs.filter((d) => d.category === c);
+        lists.set(c, list);
+        try { await r.set(k(v, 'cat', c), JSON.stringify(list), 'EX', ttl); } catch { /* */ }
+      }
+    }
+    return { lists, source: 'miss' };
+  }
+
+  /*
+   * Jarayon xotirasi: kategoriya → { items, meta } (meta — qidiruv uchun oldindan tekislangan matn). Kesh VERSIYASI
+   * o'zgarsa (har qanday yozuvdan keyin) butunlay tashlanadi — eskirgan ro'yxat HECH QACHON berilmaydi.
+   */
+  let memo = { v: null, lists: new Map() };
+  async function memoLists(cats) {
+    const r = getRedis();
+    const v = r ? await version(r) : null;
+    if (!r || v === null) {
+      const docs = await fromDb(cats);
+      const by = new Map(cats.map((c) => [c, []]));
+      for (const d of docs) by.get(d.category)?.push(d);
+      return { lists: new Map([...by].map(([c, items]) => [c, { items, meta: items.map(metaOf) }])), source: 'off' };
+    }
+    if (memo.v !== v || memo.lists.size > 200) memo = { v, lists: new Map() };
+    const missing = cats.filter((c) => !memo.lists.has(c));
+    if (!missing.length) return { lists: memo.lists, source: 'mem' };
+    const got = await readLists(r, v, missing);
+    for (const [c, items] of got.lists) memo.lists.set(c, { items, meta: items.map(metaOf) });
+    return { lists: memo.lists, source: got.source };
+  }
+
   return {
     /** Kategoriya bo'yicha sonlar. Kesh bo'sh bo'lsa — butun katalog yuklanadi (isitiladi). */
     async counts() {
@@ -104,37 +159,32 @@ export function createCatalogCache({ getRedis = realGetRedis, model = CatalogPro
     async products(cats) {
       const r = getRedis();
       const v = r ? await version(r) : null;
-      const fromDb = (list) => model.find({ category: { $in: list } }).sort(sortOrder).lean();
       if (!r || v === null) {
         const items = await fromDb(cats);
         return { items: orderBy(items, cats), source: 'off' };
       }
-      let raw;
-      try { raw = await r.mget(cats.map((c) => k(v, 'cat', c))); } catch { raw = cats.map(() => null); }
-      const lists = new Map();
-      const missing = [];
-      cats.forEach((c, i) => {
-        if (raw[i]) { try { lists.set(c, JSON.parse(raw[i])); return; } catch { /* buzuq — qayta o'qiladi */ } }
-        missing.push(c);
-      });
-      if (!missing.length) return { items: cats.flatMap((c) => lists.get(c)), source: 'hit' };
+      const { lists, source } = await readLists(r, v, cats);
+      return { items: cats.flatMap((c) => lists.get(c) || []), source };
+    },
 
-      let warmed = false;
-      try { warmed = Boolean(await r.get(k(v, 'warm'))); } catch { /* */ }
-      if (!warmed || missing.length >= 3) {
-        // Kesh sovuq (yoki ko'p yetishmayapti): butun katalog bir so'rovda yuklanadi — keyingi bosishlar tez bo'ladi
-        const all = await warm(r, v);
-        for (const c of missing) lists.set(c, all.byCat.get(c) || []);
-      } else {
-        // Isigan kesh, 1–2 ta kalit yetishmaydi (masalan Redis o'chirgan): faqat o'shalar bazadan
-        const docs = await fromDb(missing);
-        for (const c of missing) {
-          const list = docs.filter((d) => d.category === c);
-          lists.set(c, list);
-          try { await r.set(k(v, 'cat', c), JSON.stringify(list), 'EX', ttl); } catch { /* */ }
-        }
+    /*
+     * SAHIFALASH (admin katalogi): filtr → qidiruv → saralash → bo'lak (limit/offset). Ro'yxatlar jarayon XOTIRASIDA
+     * saqlanadi (kesh versiyasi bo'yicha) — har sahifa so'rovi Redis'ga ham bormaydi, faqat xotirada ishlanadi.
+     * `cats` bo'sh bo'lsa — BUTUN katalog (umumiy qidiruv). Redis yo'q — har so'rovda bazadan (to'g'ri, lekin sekinroq).
+     */
+    async page(params = {}) {
+      const cats = params.cats?.length
+        ? params.cats
+        : (await this.counts()).data.counts.map((c) => c.category);
+      const { lists, source } = await memoLists(cats);
+      const items = []; const metas = [];
+      for (const c of cats) {
+        const l = lists.get(c);
+        if (!l) continue;
+        for (let i = 0; i < l.items.length; i += 1) { items.push(l.items[i]); metas.push(l.meta[i]); }
       }
-      return { items: cats.flatMap((c) => lists.get(c) || []), source: 'miss' };
+      const seed = validSeed(params.seed) || newSeed();
+      return { ...queryPage(items, metas, { ...params, seed }), seed, source };
     },
 
     /** O'zgarishdan keyin chaqiriladi: kesh versiyasi oshadi — eski ma'lumot endi o'qilmaydi. */

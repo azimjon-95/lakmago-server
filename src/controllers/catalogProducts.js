@@ -108,6 +108,29 @@ export const catalogProductController = {
     res.set('Cache-Control', 'no-store').set('X-Catalog-Cache', source).json(data);
   }),
 
+  /*
+   * GET /api/admin/catalog/page — SAHIFALAB berish (admin "Katalog": guruh ichi va qidiruv).
+   *   categories=a,b,c   guruh/kategoriya(lar); bo'sh bo'lsa — butun katalog (umumiy qidiruv)
+   *   q                  qidiruv: nom, tavsif, hajm (butun to'plam bo'yicha)
+   *   status=all|active|inactive · image=all|with|without
+   *   sort=random|name|name_desc|usage|new|relevance  (random — `seed` bilan barqaror; q bor bo'lsa standart relevance)
+   *   seed               tasodifiy tartib kaliti: bir ochilish davomida bir xil (sahifalar takrorlanmaydi), yangisida boshqa
+   *   limit (100, ≤ 200) · offset
+   * Javob: { items, total, offset, limit, hasMore, seed, sort }. Ro'yxatlar Redis keshidan (jarayon xotirasida ishlanadi).
+   */
+  page: asyncHandler(async (req, res) => {
+    const q = String(req.query.q || '').slice(0, 100);
+    const status = ['active', 'inactive'].includes(req.query.status) ? req.query.status : 'all';
+    const image = ['with', 'without'].includes(req.query.image) ? req.query.image : 'all';
+    const out = await catalogCache.page({
+      cats: parseCategories(req.query), q, status, image,
+      sort: String(req.query.sort || ''), seed: String(req.query.seed || ''),
+      limit: req.query.limit, offset: req.query.offset,
+    });
+    const { source, ...body } = out;
+    res.set('Cache-Control', 'no-store').set('X-Catalog-Cache', source).json(body);
+  }),
+
   // POST /api/admin/catalog
   create: asyncHandler(async (req, res) => {
     const parsed = productSchema.safeParse(req.body);

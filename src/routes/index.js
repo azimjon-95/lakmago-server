@@ -512,6 +512,7 @@ router.all(/^\/owner\/wedding\/(.+)$/, auth, requireRole('venue_owner'), wedding
 
 router.get('/admin/catalog', auth, requireRole('admin'), catalogProductController.list);
 router.get('/admin/catalog/counts', auth, requireRole('admin'), catalogProductController.counts);
+router.get('/admin/catalog/page', auth, requireRole('admin'), catalogProductController.page);
 router.post('/admin/catalog', auth, requireRole('admin'), catalogProductController.create);
 router.patch('/admin/catalog/:id', auth, requireRole('admin'), catalogProductController.update);
 router.delete('/admin/catalog/:id', auth, requireRole('admin'), catalogProductController.remove);
