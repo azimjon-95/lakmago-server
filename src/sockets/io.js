@@ -39,8 +39,16 @@ async function setupRedisAdapter() {
     const { createAdapter } = await import('@socket.io/redis-adapter');
     // Pub/Sub uchun ALOHIDA ulanishlar kerak: obuna bo'lgan
     // ulanishda oddiy buyruqlar ishlamaydi (Redis qoidasi)
-    const pubClient = base.duplicate();
-    const subClient = base.duplicate();
+    /*
+     * `duplicate()` asosiy ulanishning `enableOfflineQueue: false` sozlamasini MEROS QILADI (services/cache.js). Nusxa hali
+     * ulanmagan paytda adapter psubscribe yuboradi — buyruq rad etiladi va bu rad etish try/catch DAN TASHQARIDA
+     * (asinxron) bo'lgani uchun Node jarayonni to'xtatardi: REDIS_URL berilgan serverlar ishga tushmay qolardi.
+     * Pub/Sub nusxalari uchun navbat YOQILADI (ulanguncha buyruqlar kutadi) va xatolar yutiladi (jarayon yiqilmasin).
+     */
+    const pubClient = base.duplicate({ enableOfflineQueue: true });
+    const subClient = base.duplicate({ enableOfflineQueue: true });
+    pubClient.on('error', () => {});
+    subClient.on('error', () => {});
     io.adapter(createAdapter(pubClient, subClient));
     console.log('[socket] Redis adapter yoqildi (ko‘p nusxa rejimi)');
   } catch (e) {

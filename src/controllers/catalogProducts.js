@@ -6,6 +6,7 @@ import { Dish } from '../models/Dish.js';
 import { Restaurant } from '../models/Restaurant.js';
 import { CATALOG_CATEGORY_VALUES, DRINKS_CATEGORY, RESTAURANT_VISIBLE_CATEGORIES } from '../constants/catalogCategories.js';
 import { isStore } from '../services/storeRules.js';
+import { catalogCache } from '../services/catalogCache.js';
 import { MARKET_CATEGORIES, MARKET_CATEGORY_VALUES, MARKET_UNIT_VALUES, marketSuggestion } from '../constants/marketCategories.js';
 
 // Qidiruv matni regex'ga xavfsiz (maxsus belgilar ekranlanadi, uzunlik cheklangan)
@@ -55,11 +56,29 @@ function toDishCategory(catalogCategory) {
     : 'magazin_oziq';
 }
 
+/*
+ * `?categories=a,b,c` (yoki `?category=a`) — Redis keshidan TO'LIQ ro'yxat. Faqat xavfsiz, kichik kiritish qabul qilinadi
+ * (≤ 40 ta, har biri ≤ 80 belgi): kesh kaliti foydalanuvchi matnidan tuziladi.
+ */
+function parseCategories(query) {
+  const raw = String(query.categories || query.category || '');
+  const list = [...new Set(raw.split(',').map((s) => s.trim()).filter((s) => s && s.length <= 80))];
+  return list.slice(0, 40);
+}
+
 export const catalogProductController = {
   // ===== ADMIN =====
 
   // GET /api/admin/catalog — admin har doim BARCHA 70 kategoriyani ko'radi
+  // Kategoriya(lar) bo'yicha so'ralsa — Redis keshidan (kesish yo'q); qidiruv (q) va filtrsiz ro'yxat avvalgidek (500 gacha).
   list: asyncHandler(async (req, res) => {
+    const cats = parseCategories(req.query);
+    const hasQ = Boolean(req.query.q && String(req.query.q).trim());
+    if (cats.length && !hasQ) {
+      const { items, source } = await catalogCache.products(cats);
+      res.set('X-Catalog-Cache', source).json(items);
+      return;
+    }
     const filter = {};
     if (req.query.category) filter.category = req.query.category;
     if (req.query.q && String(req.query.q).trim()) {
@@ -84,16 +103,9 @@ export const catalogProductController = {
    * maydon o'qiladi (yengil), kesish yo'q. Natija: { total, counts: [{ category, total, active, withImage }] }.
    */
   counts: asyncHandler(async (req, res) => {
-    const rows = await CatalogProduct.find({}).select('category isActive imageUrl').lean();
-    const by = new Map();
-    for (const r of rows) {
-      const c = by.get(r.category) || { category: r.category, total: 0, active: 0, withImage: 0 };
-      c.total += 1;
-      if (r.isActive !== false) c.active += 1;
-      if (r.imageUrl) c.withImage += 1;
-      by.set(r.category, c);
-    }
-    res.set('Cache-Control', 'no-store').json({ total: rows.length, counts: [...by.values()] });
+    // Kesh bo'sh bo'lsa — butun katalog shu yerda Redis'ga yuklanadi (isitiladi); keyingi kartochka bosishlari tayyor bo'ladi
+    const { data, source } = await catalogCache.counts();
+    res.set('Cache-Control', 'no-store').set('X-Catalog-Cache', source).json(data);
   }),
 
   // POST /api/admin/catalog
@@ -116,6 +128,7 @@ export const catalogProductController = {
     }
 
     const product = await CatalogProduct.create(parsed.data);
+    await catalogCache.invalidate();
     res.status(201).json(product);
   }),
 
@@ -131,6 +144,7 @@ export const catalogProductController = {
     );
     if (!product) return res.status(404).json({ error: 'Mahsulot topilmadi' });
 
+    await catalogCache.invalidate();
     res.json(product);
   }),
 
@@ -140,6 +154,7 @@ export const catalogProductController = {
     if (used > 0) {
       // Ishlatilayotgan bo'lsa o'chirmaymiz — nofaol qilamiz
       await CatalogProduct.findByIdAndUpdate(req.params.id, { isActive: false });
+      await catalogCache.invalidate();
       return res.json({
         deactivated: true,
         message: `${used} ta restoranda ishlatilmoqda — nofaol qilindi`,
@@ -148,6 +163,7 @@ export const catalogProductController = {
 
     const product = await CatalogProduct.findByIdAndDelete(req.params.id);
     if (!product) return res.status(404).json({ error: 'Mahsulot topilmadi' });
+    await catalogCache.invalidate();
     res.json({ deleted: true });
   }),
 
@@ -288,6 +304,7 @@ export const catalogProductController = {
         isAvailable: true,
       });
       await CatalogProduct.findByIdAndUpdate(product._id, { $inc: { usageCount: 1 } });
+    catalogCache.invalidate().catch(() => {});   // admin ro'yxatidagi "N restoranda" yangilansin
       return res.status(201).json(dish);
     }
 
@@ -313,6 +330,7 @@ export const catalogProductController = {
 
     // Mashhurlik hisobi
     await CatalogProduct.findByIdAndUpdate(product._id, { $inc: { usageCount: 1 } });
+    catalogCache.invalidate().catch(() => {});   // admin ro'yxatidagi "N restoranda" yangilansin
 
     res.status(201).json(dish);
   }),
