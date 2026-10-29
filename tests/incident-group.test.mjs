@@ -4,6 +4,8 @@
  */
 import http from 'node:http';
 process.env.JWT_SECRET = process.env.JWT_SECRET || 'x'.repeat(40);
+// Bu test TASDIQ KUTUVCHI rejim uchun (CANCEL_APPROVAL_REQUIRED=true). Standart ("darhol bekor") rejim — tests/incident-post-mode.test.mjs
+process.env.CANCEL_APPROVAL_REQUIRED = 'true';
 const calls = []; let mode = 'ok'; let msgId = 500; let rlOnce = true;
 const server = http.createServer((req, res) => {
   let b = ''; req.on('data', (c) => { b += c; });

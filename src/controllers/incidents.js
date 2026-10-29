@@ -1,6 +1,8 @@
+import { config } from '../config/index.js';
 import { z } from 'zod';
 import { asyncHandler } from '../middleware/error.js';
 import { User } from '../models/User.js';
+import { Order } from '../models/Order.js';
 import { CustomerIncident } from '../models/CustomerIncident.js';
 import {
   REFUSAL_REASONS, IncidentError, createCancelRequest, decideIncident, applyRestrictions,
@@ -20,7 +22,11 @@ const rid = (req) => req.restaurantId;
 
 export const panelIncidentController = {
   // GET /api/panel/refusal-reasons
-  reasons: (_req, res) => res.json(Object.entries(REFUSAL_REASONS).map(([value, label]) => ({ value, label }))),
+  reasons: (_req, res) => res.json({
+    reasons: Object.entries(REFUSAL_REASONS).map(([value, label]) => ({ value, label })),
+    // true — admin tasdig'ini kutadi; false (standart) — darhol bekor qilinadi
+    approvalRequired: config.cancelApprovalRequired,
+  }),
 
   // POST /api/panel/orders/:id/cancel-request  { reasonCode, note }
   request: asyncHandler(async (req, res) => {
@@ -31,7 +37,7 @@ export const panelIncidentController = {
       const { incident, order } = await createCancelRequest({
         orderId: req.params.id, restaurantId: rid(req), reasonCode: body.data.reasonCode, note: body.data.note, requestedBy: 'Restoran paneli',
       });
-      res.status(201).json({ ok: true, incidentId: incident._id, cancelRequest: order.cancelRequest });
+      res.status(201).json({ ok: true, incidentId: incident._id, mode: incident.mode, status: order.status, cancelRequest: order.cancelRequest });
     } catch (e) { return fail(res, e); }
   }),
 };
@@ -45,7 +51,7 @@ export const adminIncidentController = {
       CustomerIncident.find(q).sort({ createdAt: -1 }).limit(Math.min(200, Number(req.query.limit) || 100)).lean(),
       CustomerIncident.countDocuments({ status: 'pending' }),
     ]);
-    res.json({ items, pending });
+    res.json({ items, pending, settings: { approvalRequired: config.cancelApprovalRequired, restrictionsEnabled: config.customerRestrictionsEnabled } });
   }),
 
   // GET /api/admin/incidents/:id
@@ -57,7 +63,7 @@ export const adminIncidentController = {
       inc.userId ? User.findById(inc.userId).select('firstName lastName username phone telegramId status cashDisabled blockInfo').lean() : null,
       inc.userId ? CustomerIncident.find({ userId: inc.userId, _id: { $ne: inc._id } }).sort({ createdAt: -1 }).limit(20).select('status restaurantName reason createdAt orderLabel').lean() : [],
     ]);
-    res.json({ incident: inc, user, history, defaultMessage: defaultCustomerMessage(inc) });
+    res.json({ incident: inc, user, history, defaultMessage: defaultCustomerMessage(inc), settings: { restrictionsEnabled: config.customerRestrictionsEnabled } });
   }),
 
   // POST /api/admin/incidents/:id/decide  { approve, disableCash, block, customerMessage, note }
@@ -87,6 +93,47 @@ export const adminIncidentController = {
     res.set('Content-Type', img.type).set('Cache-Control', 'private, max-age=86400').send(img.buffer);
   }),
 
+  /*
+   * GET /api/admin/cancellation-stats?days=30&min=2 — TAHLIL (jazo emas):
+   * qaysi mijozda buyurtmalar takroran bekor bo'lgan va qaysi sabab bilan
+   * ("javob bermadi", "tasdiqlamadi", "voz kechdi"). Faqat sabab kodi bor
+   * buyurtmalar (constants/rejectReasons.js, refused_*). Qaror admin qo'lida.
+   */
+  cancellationStats: asyncHandler(async (req, res) => {
+    const days = Math.min(180, Math.max(1, Number(req.query.days) || 30));
+    const min = Math.min(20, Math.max(1, Number(req.query.min) || 2));
+    const since = new Date(Date.now() - days * 86_400_000);
+    const rows = await Order.aggregate([
+      { $match: { status: 'cancelled', createdAt: { $gte: since }, userId: { $ne: null }, cancelReasonCode: { $exists: true, $ne: null } } },
+      { $group: { _id: '$userId', cancelled: { $sum: 1 }, codes: { $push: '$cancelReasonCode' }, last: { $max: '$createdAt' }, restaurants: { $addToSet: '$restaurantName' } } },
+      { $match: { cancelled: { $gte: min } } },
+      { $sort: { cancelled: -1, last: -1 } },
+      { $limit: 100 },
+    ]);
+    const ids = rows.map((r) => r._id);
+    const [users, totals] = await Promise.all([
+      User.find({ _id: { $in: ids } }).select('firstName lastName username phone phoneVerified telegramId status cashDisabled').lean(),
+      Order.aggregate([{ $match: { userId: { $in: ids }, createdAt: { $gte: since } } }, { $group: { _id: '$userId', n: { $sum: 1 } } }]),
+    ]);
+    const uMap = new Map(users.map((u) => [String(u._id), u]));
+    const tMap = new Map(totals.map((t) => [String(t._id), t.n]));
+    res.json({
+      days, min,
+      items: rows.map((r) => {
+        const byCode = {};
+        r.codes.forEach((c) => { byCode[c] = (byCode[c] || 0) + 1; });
+        return {
+          user: uMap.get(String(r._id)) || { _id: r._id },
+          cancelled: r.cancelled,
+          totalOrders: tMap.get(String(r._id)) || r.cancelled,
+          byCode,
+          lastAt: r.last,
+          restaurants: (r.restaurants || []).filter(Boolean).slice(0, 5),
+        };
+      }),
+    });
+  }),
+
   // GET /api/admin/restricted-customers
   restricted: asyncHandler(async (_req, res) => {
     const users = await User.find({ $or: [{ 'cashDisabled.active': true }, { status: 'BLOCKED' }] })
@@ -103,6 +150,9 @@ export const adminIncidentController = {
     if (!b.success) return res.status(400).json({ error: 'Ma‘lumot noto‘g‘ri' });
     const by = req.role === 'admin' ? 'Admin' : 'Xodim';
     const { cash, block } = b.data;
+    if ((cash?.active || block?.active) && !config.customerRestrictionsEnabled) {
+      return res.status(403).json({ error: 'Mijoz cheklovlari o‘chirilgan (CUSTOMER_RESTRICTIONS_ENABLED=false)' });
+    }
     const needReason = (x) => x?.active && String(x.reason || '').trim().length < 5;
     if (needReason(cash) || needReason(block)) return res.status(400).json({ error: 'Mijozga ko‘rsatiladigan sababni yozing' });
 

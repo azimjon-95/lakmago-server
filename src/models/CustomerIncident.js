@@ -16,6 +16,12 @@ const incidentSchema = new Schema(
   {
     type: { type: String, enum: ['refused_after_accept'], default: 'refused_after_accept' },
     status: { type: String, enum: ['pending', 'approved', 'rejected'], default: 'pending', index: true },
+    /*
+     * approval — bekor qilish admin tasdig'ini kutadi (CANCEL_APPROVAL_REQUIRED=true);
+     * post     — restoran darhol bekor qildi, admin KEYIN ko'rib chiqadi (standart, TZ).
+     *   post rejimida: approved = "mijoz aybdor deb topildi", rejected = "asossiz".
+     */
+    mode: { type: String, enum: ['approval', 'post'], default: 'approval' },
 
     orderId: { type: Schema.Types.ObjectId, ref: 'Order', required: true, index: true },
     orderLabel: { type: String, default: '' },

@@ -22,6 +22,8 @@ const userSchema = new Schema(
     // ishlatilmaydi — Auth fundamenti uchun tayyorlab qo'yilgan,
     // kelajakda "phone" auth-provayderi qo'shilganda kerak bo'ladi)
     phoneVerified: { type: Boolean, default: false },
+    // Telegram "raqamni ulashish" orqali tasdiqlangan vaqt (services/phoneVerify.js)
+    phoneVerifiedAt: { type: Date },
 
     /*
      * status — YANGI, ACTIVE|BLOCKED|DELETED. Mavjud `isActive`
@@ -184,6 +186,10 @@ userSchema.set('toJSON', {
   virtuals: true,
   transform(_doc, ret) {
     delete ret.passwordHash;
+    // Mijoz cheklovlari o'chirilgan (CUSTOMER_RESTRICTIONS_ENABLED=false) — ilovada naqd qulflanmaydi
+    if (String(process.env.CUSTOMER_RESTRICTIONS_ENABLED ?? 'true').toLowerCase() === 'false' && ret.cashDisabled) {
+      ret.cashDisabled = { ...ret.cashDisabled, active: false };
+    }
     return ret;
   },
 });

@@ -248,15 +248,22 @@ export async function handleBotUpdate(update) {
   const message = update.message;
 
   /*
-   * KONTAKT (telefon ulashish): ilovada "Telegram orqali kirish" oqimida mijoz "📱 Raqamni ulashib kirish" ni bosadi
-   * (services/tgLinkLogin.js). Boshqa hech qayerda kontakt qabul qilinmaydi — bizning oqim bo'lmasa e'tiborsiz.
+   * KONTAKT (telefon ulashish). Ikki oqim, TARTIB MUHIM:
+   *  1) ilovada "Telegram orqali kirish" oqimi (services/tgLinkLogin.js) — faqat shu mijozning KUTAYOTGAN kirish so'rovi bor
+   *     bo'lsa qayta ishlaydi va true qaytaradi;
+   *  2) bo'lmasa — mijoz ilovadan "raqamni ulashish"ga rozilik berdi: telefonni hisobga bog'lash (services/phoneVerify.js;
+   *     faqat O'ZINING raqami qabul qilinadi).
    */
   if (message?.contact) {
     try {
       const { handleLoginContact } = await import('./tgLinkLogin.js');
-      await handleLoginContact(message);
+      const handledByLogin = await handleLoginContact(message);
+      if (!handledByLogin) {
+        const { handleSharedContact } = await import('./phoneVerify.js');
+        await handleSharedContact(message);
+      }
     } catch (e) {
-      console.error('[bot] kirish kontakti:', e.message);
+      console.error('[bot] kontakt xatosi:', e.message);
     }
     return;
   }
