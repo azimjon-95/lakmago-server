@@ -19,6 +19,7 @@ import { promoModalController } from '../controllers/promoModals.js';
 import { giftBonusController } from '../controllers/giftBonus.js';
 import { backupController } from '../controllers/backup.js';
 import { tgLinkAuthController } from '../controllers/tgLinkAuth.js';
+import { demoController } from '../controllers/demo.js';
 import { restaurantAppController } from '../controllers/restaurantApp.js';
 import { referralController } from '../controllers/referralController.js';
 import { addressController } from '../controllers/address.js';
@@ -78,6 +79,9 @@ const AS = (page) => [auth, requireRole('admin', 'staff'), requirePage(page)];
 router.post('/auth/telegram', loginLimiter, authController.telegram); // mijoz (webapp)
 router.post('/auth/telegram-web', loginLimiter, authController.telegramWeb); // mijoz — browser (Telegram Login Widget)
 // Native ilova/brauzer uchun: Telegram bot havolasi orqali kirish (Login Widget'ga ishonmasdan)
+router.get('/app/capabilities', demoController.capabilities);                        // ilova imkoniyatlari (eski serverda 404 → yangi imkoniyatlar yashirin)
+router.post('/auth/demo-login', loginLimiter, demoController.login);               // App Store demo hisobi (DEMO_LOGIN_ENABLED=true bo'lmasa 404)
+router.get('/demo/restaurant', auth, demoController.restaurant);                    // demo foydalanuvchi uchun demo restoran kartochkasi
 router.post('/auth/tg-link/start', tgLinkStartLimiter, tgLinkAuthController.start);
 router.post('/auth/tg-link/poll', tgLinkPollLimiter, tgLinkAuthController.poll);
 router.post('/auth/refresh', loginLimiter, authController.refresh);   // mijoz — refresh token rotatsiyasi
@@ -235,6 +239,7 @@ router.patch('/addresses/:id/default', auth, addressController.setDefault);
  */
 router.get('/users/me', auth, userProfileController.me);
 router.patch('/users/me', auth, userProfileController.updateMe);
+router.delete('/users/me', auth, writeLimiter, userProfileController.deleteMe);   // hisobni o'chirish (App Store 5.1.1(v))
 router.get('/users/me/addresses', auth, userProfileController.listAddresses);
 router.post('/users/me/addresses', auth, userProfileController.createAddress);
 router.patch('/users/me/addresses/:id', auth, userProfileController.updateAddress);

@@ -33,6 +33,16 @@ async function main() {
   // Default admin (dastur egasi) akkauntini yaratish/tekshirish
   await ensureDefaultAdmin();
 
+  /*
+   * App Store tekshiruvi uchun DEMO hisob (DEMO_LOGIN_ENABLED=true bo'lgandagina yaratiladi; aks holda hech narsa qilmaydi).
+   * Xato server ishga tushishini TO'XTATMAYDI — demo shunchaki yopiq qoladi. services/demoAccount.js
+   */
+  {
+    const { ensureDemoData, startDemoSimulator } = await import('./services/demoAccount.js');
+    await ensureDemoData().catch((e) => console.error('[demo] tayyorlab bo‘lmadi (demo yopiq):', e.message));
+    startDemoSimulator();   // demo buyurtma holatlarini yuritadi (demo buyurtma bo'lmasa — bo'sh so'rov)
+  }
+
   const app = express();
   // Nginx orqali ishlaganda (reverse proxy) — haqiqiy protokol/IP ni oladi.
   // Shu tufayli req.protocol 'https' bo'ladi va /diag to'g'ri ko'rsatadi.

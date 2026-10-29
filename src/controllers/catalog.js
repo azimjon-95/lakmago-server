@@ -276,12 +276,14 @@ export const restaurantController = {
         'prepMinutes',
         'shopTypes',
         'reservationEnabled', 'reservationNote',
-        'isFresh', 'isBlocked', 'isActive',   // status filtri uchun quyida kerak
+        'isFresh', 'isBlocked', 'isActive', 'isDemo',   // status filtri uchun quyida kerak
         'createdAt',
       ].join(' '))
       .lean();
     if (!restaurant) return res.status(404).json({ error: 'Restoran topilmadi' });
-    if (restaurant.isBlocked || !restaurant.isActive) {
+    // DEMO restoran (nofaol — ro'yxatlarda ko'rinmaydi) id bo'yicha ochiladi: demo foydalanuvchi uning sahifasi va menyusini ko'radi.
+    // Boshqalar unga buyurtma bera olmaydi (misc.js), ro'yxatlarda esa u umuman yo'q.
+    if (restaurant.isBlocked || (!restaurant.isActive && !restaurant.isDemo)) {
       return res.status(404).json({ error: 'Restoran hozircha mavjud emas' });
     }
     // isBlocked/isActive faqat yuqoridagi tekshiruv uchun kerak edi —
@@ -350,8 +352,8 @@ export const restaurantController = {
     // withCustomerPrices() ichida alohida hisoblanadi; keraksiz
     // maxfiy maydonni so'ramaslik uchun select'dan olib tashlandi)
     const restaurant = await Restaurant.findById(dish.restaurantId)
-      .select('isBlocked isActive name').lean();
-    if (!restaurant || restaurant.isBlocked || !restaurant.isActive) {
+      .select('isBlocked isActive isDemo name').lean();
+    if (!restaurant || restaurant.isBlocked || (!restaurant.isActive && !restaurant.isDemo)) {
       return res.status(404).json({ error: 'Taom mavjud emas' });
     }
     const [priced] = await withCustomerPrices([dish]);
@@ -361,8 +363,8 @@ export const restaurantController = {
   // GET /api/restaurants/:id/dishes
   getDishes: asyncHandler(async (req, res) => {
     if (!isValidId(req.params.id)) return res.json([]);
-    const restaurant = await Restaurant.findById(req.params.id).select('isBlocked isActive kind category').lean();
-    if (!restaurant || restaurant.isBlocked || !restaurant.isActive) {
+    const restaurant = await Restaurant.findById(req.params.id).select('isBlocked isActive isDemo kind category').lean();
+    if (!restaurant || restaurant.isBlocked || (!restaurant.isActive && !restaurant.isDemo)) {
       return res.json([]);
     }
     const dishes = await Dish.find({

@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { asyncHandler } from '../middleware/error.js';
 import { User } from '../models/User.js';
 import { Address } from '../models/Address.js';
+import { deleteAccount } from '../services/accountDeletion.js';
 
 /*
  * PATCH /users/me — QAT'IY WHITELIST. Faqat shu maydonlarga
@@ -36,7 +37,20 @@ export const userProfileController = {
     const user = await User.findById(req.userId);
     if (!user) return res.status(404).json({ error: 'Foydalanuvchi topilmadi' });
     if (user.status === 'BLOCKED') return res.status(403).json(blockedPayload(user));
+    // O'chirilgan hisobning eski tokeni — ilova sessiyani tozalab, mehmon holatiga qaytadi
+    if (user.status === 'DELETED') return res.status(401).json({ error: 'Hisob o‘chirilgan', code: 'ACCOUNT_DELETED' });
     res.json({ user });
+  }),
+
+  // DELETE /api/users/me — hisobni o'chirish (App Store 5.1.1(v)); body: { confirm: true }
+  deleteMe: asyncHandler(async (req, res) => {
+    if (req.body?.confirm !== true) return res.status(400).json({ error: 'Tasdiqlash kerak', code: 'CONFIRM_REQUIRED' });
+    try {
+      res.json(await deleteAccount(req.userId));
+    } catch (e) {
+      if (e.status) return res.status(e.status).json({ error: e.message, code: e.code });
+      throw e;
+    }
   }),
 
   // PATCH /api/users/me
@@ -52,6 +66,7 @@ export const userProfileController = {
     const user = await User.findById(req.userId);
     if (!user) return res.status(404).json({ error: 'Foydalanuvchi topilmadi' });
     if (user.status === 'BLOCKED') return res.status(403).json(blockedPayload(user));
+    if (user.status === 'DELETED') return res.status(401).json({ error: 'Hisob o‘chirilgan', code: 'ACCOUNT_DELETED' });
 
     /*
      * Telefon o'zgarsa phoneVerified qayta false bo'ladi — eski

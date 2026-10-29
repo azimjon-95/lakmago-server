@@ -30,6 +30,7 @@ import { COMPLETABLE_STATUSES } from '../services/reminderRules.js';
 import { emitOrderToRestaurant } from '../services/orderSocket.js';
 import { customerOrderView, attachRestaurantGeo } from '../services/customerOrderView.js';
 import { getOrderTrack } from '../services/orderTrack.js';
+import { DEMO_RESTAURANT_ONLY_MESSAGE } from '../services/demoAccount.js';
 import { confirmOrderDelivered, syncRestaurantBot } from '../services/deliveryCheck.js';
 import { routeBetween } from '../services/routeGeometry.js';
 import { sendRestaurantContact } from '../services/restaurantContact.js';
@@ -126,6 +127,9 @@ export async function completeTelegramAuth(tgUser, { platform, deviceId, startPa
       try { await attachReferral(user, refCode); } catch { /* jim */ }
     }
   } else {
+    // Hisob o'chirilgan edi, lekin cheklovi (naqd o'chirilgan) tufayli telegramId saqlangan — qayta kirish yangi bo'sh
+    // profil sifatida tiklanadi (cheklov saqlanadi). Cheklovsiz o'chirilganlarda telegramId bo'shatilgan — bu yerga kelmaydi.
+    if (user.status === 'DELETED') { user.status = 'ACTIVE'; user.deletedAt = undefined; }
     Object.assign(user, profileFields);
     await user.save();
   }
@@ -388,9 +392,16 @@ export const orderController = {
      *   naqd o'chirilgan — faqat karta bilan oldindan to'lov (barcha restoranlarda).
      * Ilova naqd tugmasini o'chirib ko'rsatadi, lekin server ham tekshiradi.
      */
+    let demoUser = false;   // App Store demo hisobi: sandbox (services/demoAccount.js)
     {
-      const me = await User.findById(req.userId).select('status blockInfo cashDisabled').lean();
+      const me = await User.findById(req.userId).select('status blockInfo cashDisabled isDemo').lean();
       if (me?.status === 'BLOCKED') return res.status(403).json(blockedPayload(me));
+      // O'chirilgan hisobning eski tokeni (JWT statsiz) buyurtma bera olmasin
+      if (me?.status === 'DELETED') return res.status(401).json({ error: 'Hisob o‘chirilgan', code: 'ACCOUNT_DELETED' });
+      demoUser = Boolean(me?.isDemo);
+      if (demoUser && paymentMethod !== 'cash') {
+        return res.status(400).json({ error: 'Demo rejimda faqat naqd to‘lov mavjud', code: 'DEMO_CASH_ONLY' });
+      }
       if (paymentMethod === 'cash' && me?.cashDisabled?.active && config.customerRestrictionsEnabled) {
         return res.status(403).json({
           error: me.cashDisabled.reason
@@ -466,7 +477,7 @@ export const orderController = {
 
     const restIds = orders.map((o) => o.restaurantId);
     const restDocs = await Restaurant.find({ _id: { $in: restIds } })
-      .select('name deliveryFee freeDeliveryThreshold minOrderAmount serviceFeePercent serviceFeeMin serviceFeeMax prepMinutes openTime closeTime timezone workingDays isActive isBlocked isApproved pickupEnabled deliveryEnabled cashEnabled pickupDiscountPercent lat lng delivery')
+      .select('name deliveryFee freeDeliveryThreshold minOrderAmount serviceFeePercent serviceFeeMin serviceFeeMax prepMinutes openTime closeTime timezone workingDays isActive isBlocked isApproved isDemo pickupEnabled deliveryEnabled cashEnabled pickupDiscountPercent lat lng delivery')
       .lean();
     const restMap = new Map(restDocs.map((r) => [String(r._id), r]));
 
@@ -477,7 +488,14 @@ export const orderController = {
       }
 
       // Restoran ishlayaptimi
-      if (rest.isBlocked || !rest.isActive || !rest.isApproved) {
+      // DEMO: demo hisob FAQAT demo restoranga buyurtma beradi; demo restoranga esa boshqa hech kim (haqiqiy dunyoga tegmaydi)
+      if (demoUser && !rest.isDemo) {
+        return res.status(403).json({ error: DEMO_RESTAURANT_ONLY_MESSAGE, code: 'DEMO_RESTAURANT_ONLY' });
+      }
+      if (rest.isDemo && !demoUser) {
+        return res.status(400).json({ error: `${rest.name} hozircha buyurtma qabul qilmayapti`, code: 'RESTAURANT_UNAVAILABLE', restaurantId: String(o.restaurantId) });
+      }
+      if (!rest.isDemo && (rest.isBlocked || !rest.isActive || !rest.isApproved)) {
         return res.status(400).json({
           error: `${rest.name} hozircha buyurtma qabul qilmayapti`,
           code: 'RESTAURANT_UNAVAILABLE',
@@ -495,7 +513,7 @@ export const orderController = {
        * (masalan juma 10:00–02:00, shanba 01:00 ga) to'liq hisob bilan
        * ochiq chiqsa — ruxsat.
        */
-      if (timingMode === 'scheduled' && scheduledDate
+      if (!rest.isDemo && timingMode === 'scheduled' && scheduledDate
           && !isOpenTz({ workingDays: rest.workingDays, timezone: rest.timezone }, scheduledDate)
           && !isOpenTz(rest, scheduledDate)) {
         return res.status(400).json({
@@ -506,7 +524,7 @@ export const orderController = {
         });
       }
 
-      if (timingMode !== 'scheduled' && !isOpenTz(rest)) {
+      if (!rest.isDemo && timingMode !== 'scheduled' && !isOpenTz(rest)) {   // demo restoran doim ochiq
         const dayOff = !isOpenTz({ workingDays: rest.workingDays, timezone: rest.timezone });
         return res.status(400).json({
           error: (dayOff ? `${rest.name} bugun ishlamaydi (dam olish kuni)` : `${rest.name} hozir yopiq`)
@@ -870,7 +888,7 @@ export const orderController = {
        */
       let gifts = { items: [], cost: 0 };
       try {
-        gifts = await resolveGifts({
+        if (!demoUser) gifts = await resolveGifts({
           restaurant: restMap.get(String(o.restaurantId)) || { _id: o.restaurantId },
           userId: req.userId,
           // DIQQAT: bu yerda `o.subtotal` moliya bosqichidan keyin allaqachon CHEGIRMALARDAN KEYINGI summaga
@@ -885,6 +903,7 @@ export const orderController = {
       }
 
       const doc = await Order.create({
+        ...(demoUser ? { isDemo: true } : {}),   // demo buyurtma: hisobotlardan avtomatik chiqariladi (models/plugins/demoScope.js)
         userId: req.userId,
         restaurantId: o.restaurantId,
         restaurantName: o.restaurantName,
@@ -990,7 +1009,8 @@ export const orderController = {
        * ichidagi onPaymentSuccess(). Shuning uchun bu yerda
        * to'xtatish HECH NARSA yo'qotmaydi, faqat kechiktiradi.
        */
-      if (doc.status !== 'awaiting_payment') {
+      // DEMO buyurtma: restoran, admin, bot, monitor va push xabarlari UMUMAN yo'q (haqiqiy dunyoga tegmaydi)
+      if (doc.status !== 'awaiting_payment' && !demoUser) {
       await emitOrderToRestaurant(io, 'order:new', doc);
       io?.to('admin').emit('order:new', doc);
     
@@ -1075,12 +1095,17 @@ export const orderController = {
     }
 
     const io = getIO();
-    if (!restaurantNeverSaw) {
+    if (!restaurantNeverSaw && !order.isDemo) {
       io?.to(`restaurant:${order.restaurantId}`).emit('order:status', {
         orderId: String(order._id), status: 'cancelled',
       });
     }
-    io?.to('admin').emit('order:update', order);
+    if (!order.isDemo) io?.to('admin').emit('order:update', order);
+    if (order.isDemo) {   // demo: faqat mijozga xabar (simulyator ham shunday qiladi), boshqa hech kimga
+      io?.to(`order:${order._id}`).emit('order:status', { orderId: String(order._id), status: 'cancelled' });
+      io?.to(`user:${order.userId}`).emit('order:status', { orderId: String(order._id), status: 'cancelled' });
+      return res.json(customerOrderView(order));
+    }
 
     // Panel bildirishnomasi yopiladi (ovoz to'xtaydi), bot kartasi yangilanadi
     import('../services/notifications.js')

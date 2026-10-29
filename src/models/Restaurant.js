@@ -281,6 +281,8 @@ const restaurantSchema = new Schema(
     reservationNote: { type: String, default: '' },
 
     isFresh: { type: Boolean, default: false }, // "Yangi" belgisi (isNew Mongoose zaxirasi)
+    // DEMO restoran (App Store tekshiruvi). isActive=false — umumiy ro'yxatlarda HECH KIMGA ko'rinmaydi; faqat demo hisob buyurtma bera oladi.
+    isDemo: { type: Boolean, default: undefined },
     isApproved: { type: Boolean, default: true }, // admin qo'shsa darhol faol
     // Restoran vaqtincha yopilgan/ochilgan (STOP butun muassasa uchun — restoran o'zi)
     isActive: { type: Boolean, default: true },

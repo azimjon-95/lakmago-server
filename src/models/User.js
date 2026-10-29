@@ -22,6 +22,10 @@ const userSchema = new Schema(
     // ishlatilmaydi — Auth fundamenti uchun tayyorlab qo'yilgan,
     // kelajakda "phone" auth-provayderi qo'shilganda kerak bo'ladi)
     phoneVerified: { type: Boolean, default: false },
+    // App Store tekshiruvi uchun DEMO hisob (services/demoAccount.js). Faqat demo restoranda sandbox buyurtma beradi.
+    isDemo: { type: Boolean, default: undefined },
+    // Hisob o'chirilgan paytda (DELETED) — vaqt; shaxsiy ma'lumotlar tozalangan (services/accountDeletion.js)
+    deletedAt: { type: Date },
     // Telegram "raqamni ulashish" orqali tasdiqlangan vaqt (services/phoneVerify.js)
     phoneVerifiedAt: { type: Date },
 

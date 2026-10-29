@@ -1,4 +1,5 @@
 import { Schema, model } from 'mongoose';
+import { demoScope } from './plugins/demoScope.js';
 
 const orderItemSchema = new Schema(
   {
@@ -288,6 +289,11 @@ const orderSchema = new Schema(
     // Sabab kodi (no_answer, not_confirmed, out...) — tahlil uchun; constants/rejectReasons.js
     cancelReasonCode: { type: String },
     /*
+     * DEMO buyurtma (App Store tekshiruvi): faqat demo hisob + demo restoran. Maydon FAQAT true bo'lganda yoziladi (eski
+     * buyurtmalarda yo'q). Hisobot/statistika/monitor so'rovlaridan avtomatik chiqariladi — models/plugins/demoScope.js.
+     */
+    isDemo: { type: Boolean, default: undefined, index: { sparse: true } },
+    /*
      * Qabul qilingandan keyin bekor qilish — FAQAT LokmaGo admin tasdig'i bilan
      * (restoran "Mijoz rad etdi" so'rovini yuboradi → admin hal qiladi).
      * Batafsil ma'lumot CustomerIncident'da; bu yerda — panel/bot uchun qisqa holat.
@@ -408,5 +414,7 @@ orderSchema.index(
 // Sovg'a-bonus limit/byudjet hisobi: qoida bo'yicha buyurtmalarni tez sanash
 orderSchema.index({ 'bonusItems.ruleId': 1, createdAt: -1 }, { sparse: true });
 
+
+orderSchema.plugin(demoScope);
 
 export const Order = model('Order', orderSchema);

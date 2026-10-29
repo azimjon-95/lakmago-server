@@ -209,6 +209,18 @@ export const config = {
   customerRestrictionsEnabled: String(process.env.CUSTOMER_RESTRICTIONS_ENABLED ?? 'true').toLowerCase() !== 'false',
 
   /*
+   * ═══ APP STORE TEKSHIRUVI UCHUN DEMO HISOB ═══
+   * DEMO_LOGIN_ENABLED=true bo'lgandagina demo kirish ishlaydi (standart: o'chiq — hech narsa ko'rinmaydi, endpoint 404).
+   * DEMO_LOGIN / DEMO_PASSWORD — faqat shu yerda (kodda emas); parol kamida 10 belgi. O'zgartirsangiz — qayta ishga
+   * tushirganda parol yangilanadi. Tekshiruv tugagach: DEMO_LOGIN_ENABLED=false (yoki parolni almashtiring).
+   * DEMO_SIM_SPEED — demo buyurtma holatlari tezligi (1 = ~100 soniyada yetkaziladi; sinov uchun kattaroq).
+   */
+  demoLoginEnabled: String(process.env.DEMO_LOGIN_ENABLED || '').toLowerCase() === 'true',
+  demoLogin: String(process.env.DEMO_LOGIN || '').trim().toLowerCase(),
+  demoPassword: String(process.env.DEMO_PASSWORD || ''),
+  demoSimSpeed: Math.max(1, Number(process.env.DEMO_SIM_SPEED) || 1),
+
+  /*
    * Admin buyurtma monitoringi — xavfli amallar (yakunlash / bekor qilish)
    * uchun maxsus parol. API parollaridan AJRATILGAN. Bo'sh bo'lsa
    * xavfli tugmalar fail-closed (ishlamaydi).
