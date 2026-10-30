@@ -127,21 +127,41 @@ console.log('\n[6] Qabul qilinmagan buyurtmada "Qabul qilindi" vaqti yo‘q');
   ok(r.steps[0].at === null && !r.steps[0].done && !r.steps[0].active, 'kutilmoqda: hech qaysi qadam bajarilmagan va vaqtsiz');
 }
 
-console.log('\n[7] Yo‘l chizig‘i: Yandex → OSRM → to‘g‘ri chiziq');
+console.log('\n[7] Yo‘l chizig‘i: Google → OSRM → to‘g‘ri chiziq');
 {
   const { routeBetween } = await import('../src/services/routeGeometry.js');
+  const { config } = await import('../src/config/index.js');
   const realFetch = globalThis.fetch;
+  // [lat,lng] nuqtalarini Google "Encoded Polyline" ga o'giradi (sinov uchun)
+  const enc = (pts) => { let pl = 0; let pg = 0; let out = ''; const e = (v) => { let n = v < 0 ? ~(v << 1) : v << 1; let s = ''; while (n >= 0x20) { s += String.fromCharCode((0x20 | (n & 0x1f)) + 63); n >>= 5; } return s + String.fromCharCode(n + 63); }; for (const [la, lo] of pts) { const a = Math.round(la * 1e5); const b = Math.round(lo * 1e5); out += e(a - pl) + e(b - pg); pl = a; pg = b; } return out; };
+  const gPts = [[41.31, 69.24], [41.308, 69.245], [41.306, 69.248], [41.304, 69.25]];
+  let googleCalls = 0;
   globalThis.fetch = async (url) => {
     const u = String(url);
+    if (u.includes('routes.googleapis.com')) { googleCalls++; return { ok: true, json: async () => ({ routes: [{ distanceMeters: 2750, duration: '540s', polyline: { encodedPolyline: enc(gPts) } }] }) }; }
     if (u.includes('router.project-osrm.org')) return { ok: true, json: async () => ({ routes: [{ distance: 2900, duration: 480, geometry: { coordinates: [[69.24, 41.31], [69.245, 41.308], [69.25, 41.304]] } }] }) };
     return { ok: false, json: async () => ({}) };
   };
+  // 1) Google kaliti BOR — Google (tirbandlik hisobga olinadi), nuqtalar [lat,lng] tartibida
+  config.google.apiKey = 'test-key';
   let r = await routeBetween({ lat: 41.31, lng: 69.24 }, { lat: 41.304, lng: 69.25 });
-  ok(r.source === 'osrm' && r.points.length === 3 && r.points[1][0] === 41.308, `OSRM: ko‘chalar bo‘ylab ${r.points.length} nuqta, [lat,lng] tartibida`);
-  ok(r.distanceKm === 2.9 && r.durationMin === 8, 'masofa va vaqt');
+  ok(r.source === 'google' && r.points.length === 4 && r.points[1][0] === 41.308 && r.points[1][1] === 69.245, `Google: ko‘chalar bo‘ylab ${r.points.length} nuqta, [lat,lng] tartibida`);
+  ok(r.distanceKm === 2.75 && r.distanceM === 2750 && r.durationMin === 9 && r.durationS === 540, 'masofa (2.75 km) va vaqt (540 s → 9 daqiqa, yuqoriga yaxlitlanadi)');
+  await routeBetween({ lat: 41.31, lng: 69.24 }, { lat: 41.304, lng: 69.25 });
+  ok(googleCalls === 1, 'kesh: ikkinchi so‘rov Google ga bormadi');
+  // 2) Google ishlamasa (kalit bor, lekin xato) — OSRM
+  const realF = globalThis.fetch;
+  globalThis.fetch = async (url) => (String(url).includes('googleapis.com') ? { ok: false, status: 403, json: async () => ({}) } : realF(url));
+  r = await routeBetween({ lat: 41.32, lng: 69.24 }, { lat: 41.314, lng: 69.25 });
+  ok(r.source === 'osrm' && r.points.length === 3 && r.points[1][0] === 41.308, `Google xato → OSRM: ${r.points.length} nuqta`);
+  ok(r.distanceKm === 2.9 && r.durationMin === 8, 'OSRM: masofa va vaqt');
+  // 3) Kalit yo'q — Google UMUMAN chaqirilmaydi, OSRM
+  config.google.apiKey = ''; googleCalls = 0; globalThis.fetch = realF;
+  r = await routeBetween({ lat: 41.33, lng: 69.24 }, { lat: 41.324, lng: 69.25 });
+  ok(r.source === 'osrm' && googleCalls === 0, 'kalit yo‘q: Google chaqirilmaydi, OSRM');
   globalThis.fetch = async () => { throw new Error('network'); };
   r = await routeBetween({ lat: 41.2, lng: 69.1 }, { lat: 41.21, lng: 69.11 });
-  ok(r.source === 'straight' && r.points.length === 2, 'tarmoq yo‘q — to‘g‘ri chiziq (ilova shunga qarab chizadi)');
+  ok(r.source === 'straight' && r.points.length === 2 && r.distanceKm === null, 'tarmoq yo‘q — to‘g‘ri chiziq (ilova shunga qarab chizadi, soxta raqam YO‘Q)');
   globalThis.fetch = realFetch;
 }
 

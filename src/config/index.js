@@ -383,15 +383,17 @@ export const config = {
    */
   secretsKey: process.env.SECRETS_ENCRYPTION_KEY || '',
 
-  // Yandex Maps — xarita va manzil aniqlash.
-  // Kalitlar developer.tech.yandex.ru dan olinadi (bepul tarif bor).
-  yandex: {
-    // JavaScript API — xarita ko'rsatish
-    mapsKey: process.env.YANDEX_MAPS_KEY || '',
-    // Geocoder API — koordinata ↔ manzil
-    geocoderKey: process.env.YANDEX_GEOCODER_KEY || process.env.YANDEX_MAPS_KEY || '',
-    // Routing API — haqiqiy yo'l masofasi uchun
-    routingKey: process.env.YANDEX_ROUTING_KEY || process.env.YANDEX_GEOCODER_KEY || '',
+  /*
+   * Google Maps — xarita, masofa/vaqt/yo'l chizig'i va manzil aniqlash (services/googleMaps.js).
+   * Ikki ALOHIDA kalit (Google Cloud Console → Credentials):
+   *   apiKey     — SERVER kaliti (IP bo'yicha cheklang): Routes API (+ Directions API zaxira) + Geocoding API.
+   *                Brauzerga HECH QACHON chiqmaydi.
+   *   browserKey — BRAUZER kaliti (HTTP referrer bo'yicha cheklang: lokma.uz va h.k.): FAQAT Maps JavaScript API.
+   *                /api/maps/config orqali mijozga beriladi (mijoz uni VITE_GOOGLE_MAPS_KEY bilan ham berishi mumkin).
+   */
+  google: {
+    apiKey: process.env.GOOGLE_MAPS_API_KEY || '',
+    browserKey: process.env.GOOGLE_MAPS_BROWSER_KEY || '',
   },
   // Mijoz ilovasi manzili — QR havolalari uchun
   customerBaseUrl: process.env.CUSTOMER_BASE_URL || 'https://lokma.uz',

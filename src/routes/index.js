@@ -53,7 +53,7 @@ import {
   auth, requireRole, requirePage, waiterAuth, waiterOrRestaurantAuth,
   kioskAuth, requireKioskSection,
 } from '../middleware/auth.js';
-import { loginLimiter, writeLimiter, courierLocationLimiter, tgLinkStartLimiter, tgLinkPollLimiter } from '../middleware/rateLimit.js';
+import { loginLimiter, writeLimiter, courierLocationLimiter, tgLinkStartLimiter, tgLinkPollLimiter, mapsRouteLimiter } from '../middleware/rateLimit.js';
 import { botBroadcastController } from '../controllers/botBroadcast.js';
 import { adAttachment, adChunkBody, adUploadController } from '../middleware/adUpload.js';
 import { restaurantPinsController } from '../controllers/restaurantPins.js';
@@ -529,6 +529,7 @@ router.post('/panel/catalog/:id/add', auth, requireRole('restaurant'), catalogPr
 router.get('/maps/config', mapsController.config);
 router.get('/maps/geocode', mapsController.geocode);
 router.get('/maps/reverse', mapsController.reverse);
+router.get('/maps/route', mapsRouteLimiter, mapsController.route);   // yo'l chizig'i + km + daqiqa (Google Routes, OSRM zaxira)
 router.get('/maps/delivery-quote', mapsController.deliveryQuote);
 
 // ===== Moliya (admin) =====

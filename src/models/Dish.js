@@ -51,7 +51,7 @@ const dishSchema = new Schema(
     // Tayyorlanish vaqti (daqiqa) — mijozga "nechida tayyor" hisobida ishlatiladi
     prepMinutes: { type: Number, default: 15, min: 1, max: 240 },
 
-    // Taom kategoriyasi — barcha muassasalarga umumiy (Yandex Eda uslubi).
+    // Taom kategoriyasi — barcha muassasalarga umumiy (yetkazish platformalari uslubi).
     // Mijoz shu bo'yicha qidiradi va filtrlaydi.
     category: {
       type: String,
