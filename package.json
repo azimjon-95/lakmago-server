@@ -13,7 +13,7 @@
     "bot": "node scripts/bot-tekshir.js",
     "sync:banners": "node scripts/sync-banners.js",
     "seed:catalog": "node scripts/seed-catalog.js",
-    "test": "node tests/webhook-guard.test.mjs && node tests/finance.test.mjs && node tests/refund.test.mjs && node tests/delivery-pricing.test.mjs && node tests/gift-bonus.test.mjs && node tests/order-create-gifts.test.mjs && node tests/cors-origins.test.mjs && node tests/db-backup-resilience.test.mjs && node tests/tg-link-login.test.mjs && node tests/restaurant-app.test.mjs && node tests/delivery-road-distance.test.mjs && node tests/catalog-counts.test.mjs && node --test tests/catalog-cache.test.mjs && node tests/incident-post-mode.test.mjs && node --test tests/catalog-paging.test.mjs && node tests/demo-account.test.mjs && node tests/google-maps.test.mjs",
+    "test": "node tests/webhook-guard.test.mjs && node tests/finance.test.mjs && node tests/refund.test.mjs && node tests/delivery-pricing.test.mjs && node tests/gift-bonus.test.mjs && node tests/order-create-gifts.test.mjs && node tests/cors-origins.test.mjs && node tests/db-backup-resilience.test.mjs && node tests/tg-link-login.test.mjs && node tests/restaurant-app.test.mjs && node tests/delivery-road-distance.test.mjs && node tests/catalog-counts.test.mjs && node --test tests/catalog-cache.test.mjs && node tests/incident-post-mode.test.mjs && node --test tests/catalog-paging.test.mjs && node tests/demo-account.test.mjs",
     "test:flow": "node tests/finance-flow.test.mjs",
     "report:legacy-finance": "node scripts/legacy-finance-report.js",
     "test:tz": "node tests/tz-finance.test.mjs",
@@ -65,8 +65,7 @@
     "test:catalog-cache": "node --test tests/catalog-cache.test.mjs",
     "test:incident-post": "node tests/incident-post-mode.test.mjs",
     "test:catalog-paging": "node --test tests/catalog-paging.test.mjs",
-    "test:demo": "node tests/demo-account.test.mjs",
-    "test:google-maps": "node tests/google-maps.test.mjs"
+    "test:demo": "node tests/demo-account.test.mjs"
   },
   "dependencies": {
     "@socket.io/redis-adapter": "^8.3.0",

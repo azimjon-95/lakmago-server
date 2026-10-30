@@ -2,7 +2,7 @@
 
 ## To'lov oqimi
 
-Wolt va Uzum Tezkor kabi yetkazish platformalari ishlatadigan model:
+Yandex Eda, Wolt va Uzum Tezkor ishlatadigan model:
 
 ```
 1. Mijoz buyurtma beradi, karta tanlaydi

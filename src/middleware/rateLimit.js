@@ -103,15 +103,6 @@ export const tgLinkStartLimiter = rateLimit({
   handler: limitHandler,
 });
 
-/** Marshrut (Google Routes — har so'rov pullik): bitta IP dan daqiqada 40 ta. Oddiy foydalanuvchi buncha so'ramaydi. */
-export const mapsRouteLimiter = rateLimit({
-  windowMs: 60 * 1000,
-  max: 40,
-  standardHeaders: true,
-  legacyHeaders: false,
-  handler: limitHandler,
-});
-
 /** Kirish holatini SO'RASH (ilova ~1.5 s da so'raydi) — daqiqada 150 ta; oddiy foydalanuvchi hech qachon duch kelmaydi. */
 export const tgLinkPollLimiter = rateLimit({
   windowMs: 60 * 1000,

@@ -1,13 +1,13 @@
-import { googleRoute } from './googleMaps.js';
+import { config } from '../config/index.js';
 
 /**
  * Yetkazish masofasi va narxi.
  *
- * Masofa Google Routes API orqali — haqiqiy yo'l bo'yicha,
+ * Masofa Yandex Routing orqali — haqiqiy yo'l bo'yicha,
  * to'g'ri chiziq emas.
  */
 
-// Google javoblari keshi — bir manzil qayta-qayta so'ralmasin (har so'rov pullik)
+// Yandex javoblari keshi — bir manzil qayta-qayta so'ralmasin
 const routeCache = new Map();
 const CACHE_TTL = 10 * 60_000;   // 10 daqiqa
 const CACHE_MAX = 500;
@@ -19,7 +19,7 @@ function cacheKey(a, b) {
 
 /**
  * Ikki nuqta orasidagi to'g'ri chiziq masofasi (km).
- * Google ishlamasa zaxira sifatida ishlatiladi.
+ * Yandex ishlamasa zaxira sifatida ishlatiladi.
  */
 export function haversineKm(a, b) {
   const R = 6371;
@@ -35,7 +35,7 @@ export function haversineKm(a, b) {
 }
 
 /**
- * Haqiqiy yo'l masofasi — Google Routes API (tirbandliksiz: narx barqaror bo'lsin).
+ * Haqiqiy yo'l masofasi — Yandex Routing.
  *
  * Kalit yo'q yoki xato bo'lsa to'g'ri chiziq masofasiga
  * 1.3 koeffitsient qo'llanadi (shahar yo'llari uchun odatiy).
@@ -45,11 +45,36 @@ export async function roadDistanceKm(from, to) {
   const hit = routeCache.get(key);
   if (hit && Date.now() - hit.at < CACHE_TTL) return hit.km;
 
-  let km;
+  const apiKey = config.yandex?.routingKey || config.yandex?.geocoderKey;
 
-  // 401/403/429/5xx, timeout, buzuq javob — googleRoute xato otmaydi, null qaytaradi → zaxira formulaga o'tamiz
-  const route = await googleRoute(from, to, { traffic: false });
-  if (route?.meters > 0) km = route.meters / 1000;
+  let km;
+  let source = 'estimate';
+
+  if (apiKey) {
+    try {
+      const url = new URL('https://api.routing.yandex.net/v2/route');
+      url.searchParams.set('apikey', apiKey);
+      url.searchParams.set('waypoints', `${from.lat},${from.lng}|${to.lat},${to.lng}`);
+      url.searchParams.set('mode', 'driving');
+
+      const res = await fetch(url, { signal: AbortSignal.timeout(4000) });
+      // 401/429/5xx — javobni tahlil qilmaymiz, zaxira formulaga o'tamiz (xato otmaymiz)
+      const data = res.ok ? await res.json() : null;
+
+      // Yandex Route Details: har bir qadamning `length` i SON (metr), masalan { length: 1116.15, duration: 206.47 }.
+      // Avval `x.length?.value` o'qilardi — u doim undefined → meters = 0 → har safar haversine * 1.3 zaxirasi ishlardi.
+      const meters = data?.route?.legs?.[0]?.status === 'OK'
+        ? data.route.legs[0].steps?.reduce((s, x) => s + (Number(x.length) || 0), 0)
+        : null;
+
+      if (meters > 0) {
+        km = meters / 1000;
+        source = 'yandex';
+      }
+    } catch {
+      /* zaxiraga o'tamiz */
+    }
+  }
 
   if (km == null) {
     // Shahar yo'llari to'g'ri chiziqdan ~30% uzunroq

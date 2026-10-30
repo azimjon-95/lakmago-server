@@ -12,7 +12,7 @@
  *   2. orders hujjati             — addressLat/addressLng
  *   3. deliverySnapshot           — kuryerga ulashilganda
  *   4. Kuryer API javobi          — qabul qilgandan KEYIN
- *   5. Xarita havolasi            — Google (asosiy)/Apple
+ *   5. Xarita havolasi            — Google/Yandex/Apple
  *
  * DIQQAT: `asyncHandler` promise qaytarmaydi, shuning uchun
  * har chaqiruvdan keyin qisqa kutish bor.
@@ -126,13 +126,13 @@ ok(mine?.order?.restaurantLat===41.3111,'restoran nuqtasi ham bor');
 
 /* ═══ 5-BOSQICH: xarita havolasi ═══ */
 console.log('\n[5] Kuryer ilovasi xarita havolasini yasaydi');
-const {googleMapsUrl,appleMapsUrl}=await import('/home/claude/lokma-courier/src/lib/maps.js');
+const {googleMapsUrl,yandexMapsUrl,appleMapsUrl}=await import('/home/claude/lokma-courier/src/lib/maps.js');
 const to={lat:mine.order.lat,lng:mine.order.lng};
 const from={lat:41.29,lng:69.24};   // kuryerning joriy GPS
 const g=googleMapsUrl(to,from);
 ok(g.includes('destination=41.2856%2C69.2034'),`Google: mijoz nuqtasi`);
 ok(g.includes('origin=41.29%2C69.24'),'Google: kuryer joylashuvidan');
-ok(g.includes('travelmode=driving'),'Google: avtomobil yo‘nalishi (navigator)');
+ok(yandexMapsUrl(to,from).includes('41.2856'),'Yandex ishlaydi');
 ok(appleMapsUrl(to,from).includes('daddr=41.2856'),'Apple ishlaydi');
 ok(!g.includes('%D1%83%D0%BB')&&!/Сохил/.test(g),'manzil MATNI ishlatilmadi');
 

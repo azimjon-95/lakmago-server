@@ -1,56 +1,60 @@
 import { asyncHandler } from '../middleware/error.js';
 import { config } from '../config/index.js';
-import { googleGeocode, googleReverse, hasGoogleKey } from '../services/googleMaps.js';
-import { routeBetween } from '../services/routeGeometry.js';
 
 /**
- * Google Maps proksisi (services/googleMaps.js).
+ * Yandex Maps proksisi.
  *
- * SERVER kaliti (Routes/Geocoding) brauzerga chiqmaydi. Brauzerga faqat alohida BRAUZER kaliti beriladi (Maps JavaScript
- * API, HTTP referrer bo'yicha cheklangan) — u baribir sahifada ko'rinadi, shuning uchun server kalitidan ajratilgan.
+ * Kalitlar serverda qoladi — brauzerga chiqmaydi. Bu to'g'ri
+ * yondashuv: kalit ochiq bo'lsa boshqalar ishlatib kvotani
+ * tugatishi mumkin.
  */
-// O'zbekiston va atrofi: marshrut so'rovi tashqariga chiqmasin (har so'rov pullik — suiiste'molga qarshi)
-const inRegion = (lat, lng) => lat >= 36 && lat <= 46.5 && lng >= 54 && lng <= 75.5;
-
 export const mapsController = {
-  // GET /api/maps/config — xarita ishlatish mumkinmi (provider: 'google')
+  // GET /api/maps/config — xarita ishlatish mumkinmi
   config: asyncHandler(async (_req, res) => {
     res.json({
-      provider: 'google',
-      enabled: Boolean(config.google.browserKey),
-      // Maps JavaScript API kaliti — brauzerga berishga majburmiz, lekin Google kabinetida HTTP referrer cheklovi qo'yiladi
-      mapsKey: config.google.browserKey || '',
+      enabled: Boolean(config.yandex.mapsKey),
+      // JS API uchun kalit kerak — uni brauzerga berishga majburmiz,
+      // lekin Yandex kabinetida domen cheklovi qo'yiladi
+      mapsKey: config.yandex.mapsKey || '',
     });
   }),
 
-  // GET /api/maps/geocode?q=...&lang= — manzil bo'yicha qidirish
+  // GET /api/maps/geocode?q=... — manzil bo'yicha qidirish
   geocode: asyncHandler(async (req, res) => {
     const q = String(req.query.q || '').trim();
     if (!q) return res.status(400).json({ error: 'So‘rov bo‘sh' });
-    if (!hasGoogleKey()) return res.status(503).json({ error: 'Xarita sozlanmagan' });
 
-    const found = await googleGeocode(q, req.query.lang);
-    if (found === null) {
-      console.error('[maps] geocode: Google javob bermadi');
-      return res.status(502).json({ error: 'Qidiruv xatosi' });
+    const key = config.yandex.geocoderKey;
+    if (!key) return res.status(503).json({ error: 'Xarita sozlanmagan' });
+
+    try {
+      const url = new URL('https://geocode-maps.yandex.ru/1.x/');
+      url.searchParams.set('apikey', key);
+      url.searchParams.set('geocode', q);
+      url.searchParams.set('format', 'json');
+      url.searchParams.set('lang', 'ru_RU');
+      url.searchParams.set('results', '5');
+      // O'zbekiston bilan cheklaymiz
+      url.searchParams.set('bbox', '55.9,37.1~73.2,45.6');
+      url.searchParams.set('rspn', '1');
+
+      const r = await fetch(url);
+      const data = await r.json();
+
+      const found = data?.response?.GeoObjectCollection?.featureMember || [];
+      res.json(found.map((f) => {
+        const g = f.GeoObject;
+        const [lng, lat] = g.Point.pos.split(' ').map(Number);
+        return {
+          name: g.metaDataProperty?.GeocoderMetaData?.text || g.name,
+          lat,
+          lng,
+        };
+      }));
+    } catch (e) {
+      console.error('[maps] geocode:', e.message);
+      res.status(502).json({ error: 'Qidiruv xatosi' });
     }
-    res.json(found);
-  }),
-
-  /**
-   * GET /api/maps/route?fromLat=&fromLng=&toLat=&toLng=
-   *
-   * Haqiqiy yo'l bo'yicha marshrut: { points: [[lat,lng],…], distanceKm, distanceM, durationMin, durationS, source }.
-   * source: 'google' | 'osrm' | 'straight' (straight — marshrut topilmadi: mijoz soxta chiziq/raqam CHIZMAYDI).
-   * Mijoz brauzeri Google'ning Directions xizmatini O'ZI chaqirmaydi: bitta kalit, kesh, OSRM zaxirasi va narx nazorati serverda.
-   */
-  route: asyncHandler(async (req, res) => {
-    const n = (k) => Number(req.query[k]);
-    const a = { lat: n('fromLat'), lng: n('fromLng') };
-    const b = { lat: n('toLat'), lng: n('toLng') };
-    if (![a.lat, a.lng, b.lat, b.lng].every(Number.isFinite)) return res.status(400).json({ error: 'Koordinata noto‘g‘ri' });
-    if (!inRegion(a.lat, a.lng) || !inRegion(b.lat, b.lng)) return res.status(400).json({ error: 'Koordinata hududdan tashqarida' });
-    res.json(await routeBetween(a, b));
   }),
 
   /**
@@ -99,14 +103,36 @@ export const mapsController = {
     });
   }),
 
-  // GET /api/maps/reverse?lat=&lng=&lang= — koordinatadan manzil: { address, street, city } (kalit yo'q/xato — bo'sh manzil)
+  // GET /api/maps/reverse?lat=&lng= — koordinatadan manzil
   reverse: asyncHandler(async (req, res) => {
     const lat = Number(req.query.lat);
     const lng = Number(req.query.lng);
     if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
       return res.status(400).json({ error: 'Koordinata noto‘g‘ri' });
     }
-    const r = await googleReverse(lat, lng, req.query.lang);
-    res.json(r || { address: '', street: '', city: '' });
+
+    const key = config.yandex.geocoderKey;
+    if (!key) return res.json({ address: '' });
+
+    try {
+      const url = new URL('https://geocode-maps.yandex.ru/1.x/');
+      url.searchParams.set('apikey', key);
+      // Yandex tartibi: uzunlik, kenglik
+      url.searchParams.set('geocode', `${lng},${lat}`);
+      url.searchParams.set('format', 'json');
+      url.searchParams.set('lang', 'ru_RU');
+      url.searchParams.set('results', '1');
+
+      const r = await fetch(url);
+      const data = await r.json();
+      const g = data?.response?.GeoObjectCollection?.featureMember?.[0]?.GeoObject;
+
+      res.json({
+        address: g?.metaDataProperty?.GeocoderMetaData?.text || '',
+      });
+    } catch (e) {
+      console.error('[maps] reverse:', e.message);
+      res.json({ address: '' });
+    }
   }),
 };

@@ -11,7 +11,7 @@ import { tiyinToSom } from './orderFinance.js';
 /**
  * Hisob-kitob tizimi.
  *
- * OQIM (Wolt / Uzum Tezkor kabi yetkazish platformalari modeli):
+ * OQIM (Yandex Eda / Wolt / Uzum Tezkor modeli):
  *
  *   1. Mijoz to'laydi          → pul platformada, jurnalga yoziladi
  *   2. Restoran qabul qiladi   → hech nima o'zgarmaydi
