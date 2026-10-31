@@ -523,6 +523,8 @@ router.patch('/admin/catalog/:id', auth, requireRole('admin'), catalogProductCon
 router.delete('/admin/catalog/:id', auth, requireRole('admin'), catalogProductController.remove);
 
 router.get('/panel/catalog', auth, requireRole('restaurant'), catalogProductController.forRestaurant);
+router.get('/panel/catalog/counts', auth, requireRole('restaurant'), catalogProductController.panelCounts);   // guruhli katalog: sonlar
+router.get('/panel/catalog/page', auth, requireRole('restaurant'), catalogProductController.panelPage);       // guruhli katalog: sahifalab
 router.post('/panel/catalog/:id/add', auth, requireRole('restaurant'), catalogProductController.addToMenu);
 
 // ===== Xarita =====

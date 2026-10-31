@@ -259,6 +259,61 @@ export const catalogProductController = {
     })));
   }),
 
+  /*
+   * ===== RESTORAN / DO'KON: GURUHLI KATALOG (admin bilan bir xil ko'rinish) =====
+   *
+   * Panel ham admin kabi guruh kartochkalari → ichida mahsulotlar ko'rinishida ishlaydi (katalog 16 000+ mahsulot —
+   * bitta kesilgan ro'yxat yetmaydi). Biznes qoidasi O'ZGARMAYDI (forRestaurant bilan bir xil):
+   *   • restoran/kafe/choyxona — FAQAT ichimliklar (RESTAURANT_VISIBLE_CATEGORIES); so'ralgan boshqa kategoriya E'TIBORSIZ;
+   *   • do'kon — barcha kategoriyalar.
+   * Faqat FAOL mahsulotlar. Ro'yxat xotiradagi umumiy keshdan (catalogCache) keladi — hujjatlar O'ZGARTIRILMAYDI
+   * (alreadyAdded/market yangi obyektlarga qo'shiladi), shuning uchun bir restoranning belgisi boshqasiga o'tmaydi.
+   */
+
+  // GET /api/panel/catalog/counts — { scope, counts: [{ category, total, active, withImage }] } (faqat ko'rinadigan, mahsuloti borlari)
+  panelCounts: asyncHandler(async (req, res) => {
+    const restaurant = await Restaurant.findById(req.restaurantId).select('kind category').lean();
+    const shop = isStore(restaurant);
+    const { data } = await catalogCache.counts();          // { total, counts: [{ category, total, active, withImage }] }
+    const all = data?.counts || [];
+    const rows = (shop ? all : all.filter((c) => RESTAURANT_VISIBLE_CATEGORIES.includes(c.category)))
+      .map((c) => ({ category: c.category, total: c.active, active: c.active, withImage: c.withImage }))
+      .filter((c) => c.total > 0);
+    res.set('Cache-Control', 'no-store').json({ scope: shop ? 'shop' : 'restaurant', counts: rows });
+  }),
+
+  // GET /api/panel/catalog/page?categories=a,b&q=&sort=&seed=&limit=&offset= → { items, total, offset, limit, hasMore, seed, sort }
+  panelPage: asyncHandler(async (req, res) => {
+    const restaurant = await Restaurant.findById(req.restaurantId).select('kind category').lean();
+    const shop = isStore(restaurant);
+    let cats = parseCategories(req.query);
+    if (!shop) {
+      // so'ralganlardan faqat RUXSAT ETILGANLARI; bo'sh qolsa — hamma ruxsat etilgan (oziq-ovqat ochilib ketmasin)
+      cats = cats.filter((c) => RESTAURANT_VISIBLE_CATEGORIES.includes(c));
+      if (!cats.length) cats = [...RESTAURANT_VISIBLE_CATEGORIES];
+    }
+    const q = String(req.query.q || '').slice(0, 100);
+    const SORTS = ['random', 'name', 'name_desc', 'usage', 'new', 'relevance'];
+    const sort = SORTS.includes(req.query.sort) ? req.query.sort : (q.trim() ? 'relevance' : 'usage');
+    const out = await catalogCache.page({
+      cats, q, status: 'active', image: 'all', sort, seed: String(req.query.seed || ''),
+      limit: Math.min(Number(req.query.limit) || 40, 100), offset: req.query.offset,
+    });
+    const { source, ...body } = out;
+
+    const ids = body.items.map((p) => p._id);
+    const added = ids.length
+      ? await Dish.find({ restaurantId: req.restaurantId, catalogProductId: { $in: ids } }).select('catalogProductId').lean()
+      : [];
+    const addedIds = new Set(added.map((d) => String(d.catalogProductId)));
+    body.items = body.items.map((p) => ({
+      ...p,
+      alreadyAdded: addedIds.has(String(p._id)),
+      ...(shop ? { market: marketSuggestion(p.category) } : {}),
+    }));
+    res.set('Cache-Control', 'no-store').set('X-Catalog-Cache', source).json(body);
+  }),
+
   // POST /api/panel/catalog/:id/add — katalogdan menyuga qo'shish
   addToMenu: asyncHandler(async (req, res) => {
     const price = Number(req.body.price);
