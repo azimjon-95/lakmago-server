@@ -211,7 +211,29 @@ const meDeleted = await call(userProfileController.me, { userId: String(delUser.
 const ordDeleted = await place(delUser._id, mkBody(REAL, REAL_DISH)); ok(ordDeleted.status === 401 && ordDeleted.body.code === 'ACCOUNT_DELETED', 'o‘chirilgan hisob eski token bilan buyurtma bera OLMAYDI');
 const fresh = await completeTelegramAuth({ id: 555001, first_name: 'Yangi' }, { platform: 'ios' });
 ok(String(fresh.user._id) !== String(delUser._id) && fresh.isNewUser === true && fresh.user.firstName === 'Yangi', 'xuddi shu Telegram bilan qayta kirsa — YANGI bo‘sh hisob (eski ma’lumot tiklanmaydi)');
-let ed = null; try { await deleteAccount(dUser._id); } catch (x) { ed = x; } ok(ed?.status === 403 && ed.code === 'DEMO_ACCOUNT', 'demo hisobni o‘chirib bo‘lmaydi');
+// Demo hisobda o'chirish: ISHLAYDI, lekin hisob boshlang'ich holatga qaytariladi (login/parol saqlanadi)
+{
+  const before = await demo.demoLogin({ login: 'appreview', password: 'YangiParol-98765' });   // faol sessiya
+  await User.updateOne({ _id: dUser._id }, { $set: { firstName: 'O‘zgargan', phone: '+998911111111', bonusBalance: 777 }, $push: { addresses: { title: 'Ish', address: 'Boshqa joy', lat: 41, lng: 69 } } });
+  await place(dUser._id, mkBody(dRest, demoDish));
+  await place(dUser._id, mkBody(dRest, demoDish));   // faol (pending) demo buyurtmalar o'chirishga TO'SQINLIK QILMAYDI
+  const nOrders = await Order.countDocuments({ userId: dUser._id });
+  const r = await deleteAccount(dUser._id);
+  const after = await User.findById(dUser._id).lean();
+  ok(r.ok && r.demo === true && r.reset === true, 'demo hisob: o‘chirish muvaffaqiyatli (demo, reset)');
+  ok(after.status === 'ACTIVE' && after.isDemo === true && after.login === 'appreview' && !!after.passwordHash, 'hisob O‘CHIRILMADI: ACTIVE, isDemo, login va parol saqlangan');
+  ok(after.firstName === 'Demo' && after.lastName === 'Mijoz' && after.phone === '+998900000000' && after.bonusBalance === 0, 'profil boshlang‘ich holatga qaytdi (ism, telefon, bonus)');
+  ok(after.addresses.length === 1 && after.addresses[0].title === 'Uy' && String(after.defaultAddressId) === String(after.addresses[0]._id), 'manzillar boshlang‘ich bitta manzilga qaytdi');
+  ok(nOrders >= 2 && (await Order.countDocuments({ userId: dUser._id })) === 0, `barcha demo buyurtmalar o‘chdi (${nOrders} → 0)`);
+  ok((await Session.countDocuments({ userId: dUser._id, revokedAt: null })) === 0, 'barcha sessiyalar bekor qilindi (qurilmadan chiqarildi)');
+  let relog = null; try { relog = await demo.demoLogin({ login: 'appreview', password: 'YangiParol-98765' }); } catch (x) { relog = x; }
+  ok(relog?.demo === true && relog.token, 'o‘chirgandan keyin shu login/parol bilan QAYTA KIRISH mumkin (keyingi tekshiruv uchun)');
+  const again = await place(dUser._id, mkBody(dRest, demoDish));
+  ok(again.status === 201, 'qayta kirgach buyurtma berish ishlaydi (hisob sog‘lom)');
+  const meDel = await call(userProfileController.me, { userId: String(dUser._id) }); ok(meDel.status === 200 && meDel.body.user.isDemo === true, 'demo hisob /users/me da 401 BERMAYDI (o‘chirilgan emas)');
+  const dup = await deleteAccount(dUser._id); ok(dup.ok === true && dup.demo === true, 'qayta-qayta o‘chirish xavfsiz');
+  const capNow = await call(demoController.capabilities, {}); ok(capNow.body.demoAccountDeletion === true && capNow.body.accountDeletion === true, 'capabilities: demoAccountDeletion=true (ilova demoda ham tugmani ko‘rsatadi)');
+}
 let ea = null; try { await deleteAccount(imposter._id); } catch (x) { ea = x; } ok(ea?.status === 404, 'mavjud bo‘lmagan hisob → 404');
 const adm = await User.create({ firstName: 'Admin', login: 'adm1', passwordHash: User.hashPassword('Parol-12345-x'), role: 'admin' });
 let ep = null; try { await deleteAccount(adm._id); } catch (x) { ep = x; } ok(ep?.status === 403, 'panel hisobi (admin/restoran) ilovadan o‘chirilmaydi');

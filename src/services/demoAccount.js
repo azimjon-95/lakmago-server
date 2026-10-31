@@ -5,6 +5,9 @@ import { Restaurant } from '../models/Restaurant.js';
 import { Dish } from '../models/Dish.js';
 import { Order } from '../models/Order.js';
 import { Session } from '../models/Session.js';
+import { Address } from '../models/Address.js';
+import { SupportChat } from '../models/SupportChat.js';
+import { PushSubscription } from '../models/PushSubscription.js';
 import { getIO } from '../sockets/io.js';
 import { signToken, signAccessToken, generateRefreshToken, hashRefreshToken, refreshTokenExpiry } from '../middleware/auth.js';
 
@@ -29,6 +32,7 @@ export const DEMO_RESTAURANT_ONLY_MESSAGE = 'Demo rejimda buyurtma faqat «Lokma
 const DEMO_PHONE = '+998900000000';
 const DEMO_COORDS = { lat: 41.3115, lng: 69.2410 };
 const DAY_MS = 24 * 60 * 60 * 1000;
+const demoAddress = () => ({ title: 'Uy', labelId: 'home', address: 'Toshkent, Demo ko‘cha 1', street: 'Demo ko‘cha', city: 'Toshkent', ...DEMO_COORDS });
 
 const DEMO_MENU = [
   { section: 'Taomlar', name: 'Lagmon', price: 38000, description: 'Qo‘lda cho‘zilgan lagmon, mol go‘shti va sabzavotlar' },
@@ -98,7 +102,7 @@ export async function ensureDemoData(log = console) {
     user = await User.create({
       isDemo: true, role: 'customer', status: 'ACTIVE', login: config.demoLogin, passwordHash: User.hashPassword(config.demoPassword),
       firstName: 'Demo', lastName: 'Mijoz', phone: DEMO_PHONE, phoneVerified: true, languageCode: 'uz',
-      addresses: [{ title: 'Uy', labelId: 'home', address: 'Toshkent, Demo ko‘cha 1', street: 'Demo ko‘cha', city: 'Toshkent', ...DEMO_COORDS }],
+      addresses: [demoAddress()],
     });
     user.defaultAddressId = user.addresses[0]._id;
     await user.save();
@@ -114,6 +118,34 @@ export async function ensureDemoData(log = console) {
   ready = true;
   log.log?.(`[demo] tayyor: hisob "${config.demoLogin}", restoran "${DEMO_RESTAURANT_NAME}", ${DEMO_MENU.length} ta taom`);
   return { ok: true, userId: String(user._id), restaurantId: String(rest._id) };
+}
+
+/**
+ * Demo hisobda "Akkauntni o'chirish" (App Store 5.1.1(v): tekshiruvchi o'chirishni sinab ko'radi).
+ *
+ * Demo hisob HAQIQATAN o'chirilmaydi — Review Notes dagi login/parol keyingi tekshiruvlarda ham ishlashi kerak. Uning o'rniga
+ * hisob BOSHLANG'ICH holatiga QAYTARILADI (o'chirib, qaytadan yaratilgandek): barcha demo buyurtmalar, manzillar, yozishmalar,
+ * push obunalari o'chadi, profil boshlang'ich qiymatga tushadi, BARCHA sessiyalar bekor qilinadi (chiqib ketadi).
+ * Login/parol saqlanadi — shu bilan qayta kirish mumkin. Faqat isDemo hisob uchun; haqiqiy mijozga tegmaydi.
+ */
+export async function resetDemoAccount(userId) {
+  const user = await User.findOne({ _id: userId, isDemo: true });
+  if (!user) return null;
+  await Order.deleteMany({ userId: user._id, isDemo: true });
+  await Promise.all([
+    Session.updateMany({ userId: user._id, revokedAt: null }, { $set: { revokedAt: new Date() } }),
+    PushSubscription.deleteMany({ userId: user._id }),
+    Address.deleteMany({ userId: user._id }),
+    SupportChat.deleteMany({ userId: user._id }),
+  ]);
+  user.set({
+    firstName: 'Demo', lastName: 'Mijoz', username: '', photoUrl: '', phone: DEMO_PHONE, phoneVerified: true, languageCode: 'uz',
+    favorites: [], cards: [], bonusBalance: 0, status: 'ACTIVE', addresses: [demoAddress()],
+  });
+  await user.save();
+  user.defaultAddressId = user.addresses[0]._id;
+  await user.save();
+  return { reset: true };
 }
 
 const DUMMY_HASH = bcrypt.hashSync('demo-dummy-password', 10);

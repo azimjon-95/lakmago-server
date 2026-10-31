@@ -5,6 +5,7 @@ import { AuthIdentity } from '../models/AuthIdentity.js';
 import { PushSubscription } from '../models/PushSubscription.js';
 import { Address } from '../models/Address.js';
 import { SupportChat } from '../models/SupportChat.js';
+import { resetDemoAccount } from './demoAccount.js';
 
 /*
  * ═══ HISOBNI O'CHIRISH (App Store Guideline 5.1.1(v)) ═══
@@ -21,7 +22,8 @@ import { SupportChat } from '../models/SupportChat.js';
  * ro'yxatdan o'tolmaydi — ularda Telegram bog'lanishi (faqat cheklov uchun) saqlanadi, qayta kirsa cheklov o'z kuchida.
  *
  * Faol buyurtma bor bo'lsa — o'chirib bo'lmaydi (restoran va kuryer buyurtmani bajarayotgan bo'ladi).
- * Demo hisob (App Store) va panel hisoblari (admin/restoran) bu yo'l bilan o'chirilmaydi.
+ * Demo hisob (App Store) — haqiqatan o'chirilmaydi, boshlang'ich holatga QAYTARILADI (services/demoAccount.js resetDemoAccount);
+ * panel hisoblari (admin/restoran) bu yo'l bilan o'chirilmaydi.
  */
 const IN_PROGRESS = ['awaiting_payment', 'pending', 'accepted', 'preparing', 'ready', 'delivering'];
 
@@ -32,7 +34,8 @@ export async function deleteAccount(userId) {
   if (!user) throw fail(404, 'NOT_FOUND', 'Foydalanuvchi topilmadi');
   if (user.status === 'DELETED') return { ok: true, already: true };
   if (user.role && user.role !== 'customer') throw fail(403, 'NOT_ALLOWED', 'Bu hisobni ilovadan o‘chirib bo‘lmaydi');
-  if (user.isDemo) throw fail(403, 'DEMO_ACCOUNT', 'Demo hisobni o‘chirib bo‘lmaydi');
+  // Demo hisob (App Store tekshiruvi): o'chirish ISHLAYDI, lekin hisob boshlang'ich holatga qaytariladi (login/parol saqlanadi)
+  if (user.isDemo) { await resetDemoAccount(user._id); return { ok: true, demo: true, reset: true }; }
 
   // userId filtri bor — standart qamrov bu so'rovni demo buyurtmalardan ham o'tkazadi (ahamiyatsiz, demo bu yerga kelmaydi)
   if (await Order.exists({ userId: user._id, status: { $in: IN_PROGRESS } })) {

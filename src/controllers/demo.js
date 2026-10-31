@@ -10,7 +10,8 @@ import { demoLogin, getDemoRestaurantCard, isDemoReady, isDemoUser } from '../se
  */
 export const demoController = {
   capabilities: (_req, res) => {
-    res.set('Cache-Control', 'no-store').json({ v: 2, demoLogin: isDemoReady(), accountDeletion: true });
+    // demoAccountDeletion: demo hisobda ham o'chirish tugmasi ishlaydi (eski serverda bu maydon YO'Q — ilova tugmani ko'rsatmaydi)
+    res.set('Cache-Control', 'no-store').json({ v: 2, demoLogin: isDemoReady(), accountDeletion: true, demoAccountDeletion: true });
   },
 
   login: asyncHandler(async (req, res) => {
