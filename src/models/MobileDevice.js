@@ -16,6 +16,12 @@ const mobileDeviceSchema = new Schema(
     // iOS: Xcode/debug build tokeni 'development' (sandbox APNs), TestFlight/App Store tokeni 'production'. Yo'q bo'lsa — APNS_PRODUCTION.
     environment: { type: String, enum: ['development', 'production'], default: null },
 
+    // Qurilma haqida (ilova yuboradi; admin panelda «Qurilmalar» ro'yxati)
+    deviceId: { type: String, default: '' },
+    appVersion: { type: String, default: '' },
+    notificationsEnabled: { type: Boolean, default: null },   // OS ruxsati holati (null = noma'lum)
+    soundEnabled: { type: Boolean, default: null },
+
     // Monitoring: oxirgi muvaffaqiyatli yuborish va oxirgi xato (token ishlayaptimi?)
     lastSeen: { type: Date, default: Date.now },
     lastSentAt: { type: Date, default: null },

@@ -5,6 +5,8 @@ import { config } from '../config/index.js';
 import { MobileDevice } from '../models/MobileDevice.js';
 import { OrderPushState } from '../models/OrderPushState.js';
 import { Order } from '../models/Order.js';
+import { NotificationLog } from '../models/NotificationLog.js';
+import { getNotifySettings, DEFAULTS as NOTIFY_DEFAULTS } from './notifySettings.js';
 
 /**
  * ═══════════════════════════════════════════════════════════
@@ -204,11 +206,13 @@ const STATUS_TEXT = {
 };
 
 /** Android: faqat `data` + yuqori ustuvorlik → ilova yopiq bo'lsa ham uyg'onadi va o'zi takrorlanuvchi signal chaladi. */
-export function androidMessage(kind, order, sendNo = 1) {
+export function androidMessage(kind, order, sendNo = 1, opts = NOTIFY_DEFAULTS) {
   const id = String(order._id);
   return {
     data: {
-      type: kind, orderId: id, sendNo: String(sendNo),
+      type: kind, orderId: id, sendNo: String(sendNo), attempt: String(sendNo), notificationId: `${id}:${sendNo}`,
+      sound: opts.sound ? '1' : '0', vibration: opts.vibration ? '1' : '0',      // admin panel: ovoz / tebranish
+
       title: kind === 'order_new' ? '🔔 Yangi buyurtma' : `${label(order)} ${STATUS_TEXT[order.status] || order.status}`,
       body: kind === 'order_new' ? `${label(order)} • ${som(order.total)}` : '',
     },
@@ -217,15 +221,19 @@ export function androidMessage(kind, order, sendNo = 1) {
 }
 
 /** iOS: OS o'zi ko'rsatadigan ovozli, "Time Sensitive" xabar. Bir buyurtmaning xabarlari bitta bo'lib turadi (collapse-id). */
-export function iosMessage(kind, order, now = Date.now()) {
+export function iosMessage(kind, order, now = Date.now(), opts = NOTIFY_DEFAULTS, sendNo = 1) {
   const id = String(order._id);
   const headers = { 'apns-push-type': 'alert', 'apns-collapse-id': `order-${id}`, 'apns-expiration': String(Math.floor(now / 1000) + 600) };
   if (kind === 'order_new') {
     return {
       headers: { ...headers, 'apns-priority': '10' },
       payload: {
-        aps: { alert: { title: '🔔 Yangi buyurtma', body: `${label(order)} • ${som(order.total)} — qabul qilinmagan` }, sound: 'order_alert.wav', 'interruption-level': 'time-sensitive', 'thread-id': 'orders' },
-        type: kind, orderId: id,
+        aps: {
+          alert: { title: '🔔 Yangi buyurtma', body: `${label(order)} • ${som(order.total)} — qabul qilinmagan` },
+          ...(opts.sound ? { sound: opts.soundType === 'default' ? 'default' : 'order_alert.wav' } : {}),   // ovoz o'chiq bo'lsa — ovozsiz banner
+          'interruption-level': 'time-sensitive', 'thread-id': 'orders',
+        },
+        type: kind, orderId: id, attempt: sendNo, notificationId: `${id}:${sendNo}`,
       },
     };
   }
@@ -236,17 +244,31 @@ export function iosMessage(kind, order, now = Date.now()) {
   };
 }
 
+const LOG_TYPE = { order_new: 'NEW_ORDER', order_updated: 'ORDER_UPDATED', order_cancelled: 'ORDER_CANCELLED' };
+/** Jurnal: har yuborish (buyurtma × urinish × qurilma). Best-effort — jurnal xatosi push'ni to'xtatmaydi. Token yozilmaydi. */
+function logSend(restaurantId, kind, order, sendNo, device, r) {
+  const type = LOG_TYPE[kind]; if (!type) return;
+  NotificationLog.updateOne(
+    { orderId: order._id, type, attempt: sendNo || 0, deviceKey: String(device._id) },
+    { $setOnInsert: { notificationId: `${order._id}:${sendNo || 0}`, restaurantId, platform: device.platform, provider: device.platform === 'ios' ? 'apns' : 'fcm', createdAt: new Date() },
+      $set: { status: r.ok ? 'SENT' : 'FAILED', error: r.ok ? '' : String(r.error || '').slice(0, 200), sentAt: new Date() } },
+    { upsert: true },
+  ).catch(() => {});
+}
+
 /** Restoranning barcha telefonlariga yuboradi. Natija: { sent, failed, removed, total }. */
-async function deliver(restaurantId, kind, order, sendNo) {
+async function deliver(restaurantId, kind, order, sendNo, settingsIn) {
   const p = providers();
+  const opts = settingsIn || await getNotifySettings(restaurantId);
   const devices = await MobileDevice.find({ restaurantId }).lean();
   const out = { sent: 0, failed: 0, removed: 0, total: 0 };
   await Promise.all(devices.map(async (d) => {
     if (!p[d.platform]) return;
     out.total += 1;
     let r;
-    if (d.platform === 'android') r = await sendFcm(d.token, androidMessage(kind, order, sendNo));
-    else { const m = iosMessage(kind, order); r = await sendApns(d.token, m.payload, m.headers, d.environment || null); }
+    if (d.platform === 'android') r = await sendFcm(d.token, androidMessage(kind, order, sendNo, opts));
+    else { const m = iosMessage(kind, order, Date.now(), opts, sendNo); r = await sendApns(d.token, m.payload, m.headers, d.environment || null); }
+    logSend(restaurantId, kind, order, sendNo, d, r);
     if (r.ok) {
       out.sent += 1;
       await MobileDevice.updateOne({ _id: d._id }, { $set: { lastSentAt: new Date(), lastError: '', failCount: 0 } });
@@ -304,14 +326,16 @@ export async function onOrderEvent(event, order) {
 
   if (event === 'order:new') {
     if (status !== 'pending') return;
-    let state;
+    let state; let cfg = NOTIFY_DEFAULTS;
     try {
-      state = await OrderPushState.create({ orderId: order._id, restaurantId: order.restaurantId, sentCount: 1, lastSentAt: new Date() });
+      cfg = await getNotifySettings(order.restaurantId);
+      state = await OrderPushState.create({ orderId: order._id, restaurantId: order.restaurantId, sentCount: 1, lastSentAt: new Date(),
+        repeat: cfg.repeatEnabled, intervalSec: cfg.explicit ? cfg.repeatIntervalSec : null, maxSends: cfg.explicit ? cfg.repeatLimit : null });
     } catch (e) {
       if (e?.code === 11000) return;            // shu buyurtma uchun "yangi" allaqachon yuborilgan (retry / ikki emit)
       throw e;
     }
-    const r = await deliver(order.restaurantId, 'order_new', order, 1);
+    const r = await deliver(order.restaurantId, 'order_new', order, 1, cfg);
     await OrderPushState.updateOne({ _id: state._id }, { $inc: { delivered: r.sent, failed: r.failed } });
     return;
   }
@@ -336,10 +360,12 @@ export async function checkPendingOrderPushes(now = Date.now()) {
   if (!anyEnabled()) return 0;
   const repeatMs = Math.max(10, config.mobilePushRepeatSec) * 1000;
   const max = Math.max(1, config.mobilePushMaxSends);
-  const due = await OrderPushState.find({ done: false, lastSentAt: { $lte: new Date(now - repeatMs) } }).limit(100).lean();
+  const early = await OrderPushState.find({ done: false, repeat: { $ne: false }, lastSentAt: { $lte: new Date(now - 10_000) } }).limit(200).lean();
+  const due = early.filter((s) => now - new Date(s.lastSentAt).getTime() >= (s.intervalSec ? s.intervalSec * 1000 : repeatMs));
   let sent = 0;
   for (const s of due) {
-    if (s.sentCount >= max) { await OrderPushState.updateOne({ _id: s._id }, { $set: { done: true } }); continue; }
+    const limit = s.maxSends || max;
+    if (s.sentCount >= limit) { await OrderPushState.updateOne({ _id: s._id }, { $set: { done: true } }); continue; }
     const claimed = await OrderPushState.findOneAndUpdate(
       { _id: s._id, done: false, sentCount: s.sentCount },
       { $inc: { sentCount: 1 }, $set: { lastSentAt: new Date(now) } },
@@ -348,10 +374,10 @@ export async function checkPendingOrderPushes(now = Date.now()) {
     if (!claimed) continue;                      // boshqa nusxa ulgurdi
     const order = await Order.findById(s.orderId).select('status restaurantId dailyNumber total').lean();
     if (!order || order.status !== 'pending') { await OrderPushState.updateOne({ _id: s._id }, { $set: { done: true } }); continue; }
-    const r = await deliver(order.restaurantId, 'order_new', order, claimed.sentCount);
+    const r = await deliver(order.restaurantId, 'order_new', order, claimed.sentCount, await getNotifySettings(order.restaurantId));
     await OrderPushState.updateOne({ _id: s._id }, {
       $inc: { delivered: r.sent, failed: r.failed },
-      ...(claimed.sentCount >= max ? { $set: { done: true } } : {}),
+      ...(claimed.sentCount >= limit ? { $set: { done: true } } : {}),
     });
     sent += 1;
   }

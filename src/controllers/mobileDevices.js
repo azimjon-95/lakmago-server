@@ -15,13 +15,17 @@ const tokenSchema = z.string().trim().min(20).max(4096);
 
 export const mobileDevicesController = {
   register: asyncHandler(async (req, res) => {
-    const parsed = z.object({ token: tokenSchema, platform: z.enum(['android', 'ios']), environment: z.enum(['development', 'production']).optional() }).safeParse(req.body);
+    const parsed = z.object({ token: tokenSchema, platform: z.enum(['android', 'ios']), environment: z.enum(['development', 'production']).optional(),
+      deviceId: z.string().trim().max(64).optional(), appVersion: z.string().trim().max(32).optional(),
+      notificationsEnabled: z.boolean().optional(), soundEnabled: z.boolean().optional() }).safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: 'Token yoki platforma noto‘g‘ri' });
-    const { token, platform, environment } = parsed.data;
+    const { token, platform, environment, deviceId, appVersion, notificationsEnabled, soundEnabled } = parsed.data;
     // Bir token — bitta restoran: telefon boshqa restoranga kirsa yozuv o'shanga ko'chadi.
     await MobileDevice.findOneAndUpdate(
       { token },
-      { $set: { platform, restaurantId: req.restaurantId, userId: req.userId || undefined, lastSeen: new Date(), failCount: 0, lastError: '', ...(environment ? { environment } : {}) } },
+      { $set: { platform, restaurantId: req.restaurantId, userId: req.userId || undefined, lastSeen: new Date(), failCount: 0, lastError: '', ...(environment ? { environment } : {}),
+        ...(deviceId !== undefined ? { deviceId } : {}), ...(appVersion !== undefined ? { appVersion } : {}),
+        ...(notificationsEnabled !== undefined ? { notificationsEnabled } : {}), ...(soundEnabled !== undefined ? { soundEnabled } : {}) } },
       { upsert: true, setDefaultsOnInsert: true },
     );
     res.status(204).end();
@@ -40,7 +44,8 @@ export const mobileDevicesController = {
       providers: providers(),
       check: providerCheck(),
       devices: devices.map((d) => ({
-        platform: d.platform, environment: d.environment || null, token: `…${String(d.token).slice(-6)}`,
+        platform: d.platform, environment: d.environment || null, appVersion: d.appVersion || '', deviceId: d.deviceId || '',
+        notificationsEnabled: d.notificationsEnabled ?? null, soundEnabled: d.soundEnabled ?? null, token: `…${String(d.token).slice(-6)}`,
         lastSeen: d.lastSeen, lastSentAt: d.lastSentAt, lastError: d.lastError, failCount: d.failCount,
       })),
     });

@@ -11,6 +11,7 @@ import { reservationController, paymentController } from '../controllers/service
 import { adminController } from '../controllers/admin.js';
 import { panelAuthController } from '../controllers/panelAuth.js';
 import { mobileDevicesController } from '../controllers/mobileDevices.js';
+import { notifySettingsController } from '../controllers/notifySettings.js';
 import { notificationController } from '../controllers/notifications.js';
 import { agreementController } from '../controllers/agreements.js';
 import { restaurantPanelController } from '../controllers/restaurantPanel.js';
@@ -192,6 +193,10 @@ router.post('/panel/devices', auth, requireRole('restaurant'), mobileDevicesCont
 router.delete('/panel/devices', auth, requireRole('restaurant'), mobileDevicesController.unregister);
 router.get('/panel/devices', auth, requireRole('restaurant'), mobileDevicesController.list);
 router.post('/panel/devices/test', auth, requireRole('restaurant'), mobileDevicesController.test);
+router.post('/panel/devices/ack', auth, requireRole('restaurant'), notifySettingsController.ack);
+router.get('/panel/notification-settings', auth, requireRole('restaurant'), notifySettingsController.get);
+router.put('/panel/notification-settings', auth, requireRole('restaurant'), notifySettingsController.update);
+router.get('/panel/notifications/recent', auth, requireRole('restaurant'), notifySettingsController.recent);
 router.patch('/panel/orders/:id/status', auth, requireRole('restaurant'), restaurantPanelController.updateOrderStatus);
 /*
  * ═══ SOZLAMALAR -> TELEGRAM ═══

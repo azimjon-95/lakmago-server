@@ -75,3 +75,19 @@ Muhit yubormagan eski ilova uchun `APNS_PRODUCTION` ishlatiladi (oldingi xatti-h
 3. Ilovada «Push tekshiruvi» → «Test push».
 **Rollback:** `.env` dan `FCM_SERVICE_ACCOUNT_BASE64` va `APNS_KEY_BASE64` ni olib tashlab restart qiling — push butunlay o'chadi, qolgan tizim avvalgidek
 (yoki `git revert <commit>` + restart). Yangi kolleksiyalarni o'chirish shart emas (OrderPushState 2 kundan keyin o'zi tozalanadi).
+
+
+## Bildirishnoma sozlamalari, jurnal va yetib borish tasdig'i
+| | |
+|---|---|
+| `GET/PUT /api/panel/notification-settings` | `sound`, `vibration`, `repeatEnabled`, `repeatIntervalSec` (**30/60/90**), `repeatLimit` (1–20), `soundType` (`custom`/`default`). Qisman yangilash; noma'lum maydon → 400 (restaurantId JWT'dan) |
+| `GET /api/panel/notifications/recent?limit=50` | oxirgi yuborishlar: holat (`SENT` → `RECEIVED` → `OPENED` / `FAILED`), urinish, platforma, sabab. Token va mijoz ma'lumoti YO'Q |
+| `POST /api/panel/devices/ack` `{token, orderId, attempt, event: received\|opened}` | ilova: «push yetib keldi» (Android) / «bildirishnoma bosildi» (iOS, Android). Faqat o'z restoranining qurilmasi; holat pasaymaydi |
+| `POST /api/panel/devices` (+ ixtiyoriy `deviceId`, `appVersion`, `notificationsEnabled`, `soundEnabled`) | admin panel «Qurilmalar»da ko'rinadi; eski ilova yubormasa mavjud qiymat saqlanadi |
+
+* Yangi kolleksiyalar: `notifysettings` (restoran boshiga 1 ta; yozuv yo'q = hozirgi xatti-harakat), `notificationlogs` (TTL 7 kun, `orderId+type+attempt+deviceKey` unikal).
+  Mavjud kolleksiyalarga tegilmagan; migratsiya yo'q.
+* **Sozlama buyurtma kelgan paytda «muzlatiladi»** (`OrderPushState.intervalSec/maxSends/repeat`): admin keyin o'zgartirsa, ketayotgan buyurtma eski qoida bilan tugaydi.
+  Sozlama yozilmagan restoran uchun `MOBILE_PUSH_REPEAT_SEC` / `MOBILE_PUSH_MAX_SENDS` (.env) ishlayveradi.
+* Har urinish `notificationId = orderId:attempt` bilan; `Android data`: `sound`, `vibration`, `attempt`; iOS: `aps.sound` (ovoz o'chiq bo'lsa umuman yo'q), `attempt`.
+* Redis/BullMQ qo'shilmadi: holat va navbat Mongo'da (`OrderPushState`, atomik «egallash»), server qayta ishga tushsa tiklanadi, bir nechta nusxa takror yubormaydi.

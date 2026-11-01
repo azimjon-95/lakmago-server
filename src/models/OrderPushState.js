@@ -12,6 +12,10 @@ const orderPushStateSchema = new Schema(
     orderId: { type: Schema.Types.ObjectId, ref: 'Order', required: true, unique: true },
     restaurantId: { type: Schema.Types.ObjectId, ref: 'Restaurant', required: true, index: true },
     sentCount: { type: Number, default: 0 },
+    // Buyurtma kelgan paytdagi sozlama (keyin o'zgarsa, ketayotgan buyurtmaga ta'sir qilmaydi)
+    repeat: { type: Boolean, default: true },
+    intervalSec: { type: Number, default: null },
+    maxSends: { type: Number, default: null },
     lastSentAt: { type: Date, default: null },
     done: { type: Boolean, default: false, index: true },
     // monitoring
