@@ -7,10 +7,13 @@ import { tgCall } from './telegramApi.js';
  * MIJOZ YORDAM XABARLARI — TELEGRAM GURUHGA (MIJOZ BO'YICHA BITTA POST)
  * ═══════════════════════════════════════════════════════════
  *
- * Har bir MIJOZ uchun guruhda BITTA post — sessiya (suhbat) YOPILGUNCHA.
- * Mijoz qayta-qayta yozsa ham, admin javob bergandan KEYIN yana yozsa ham
- * yangi xabar yaratilmaydi: o'sha post editMessageText bilan tahrirlanadi va
- * yangi satr pastdan qo'shiladi. Boshqa mijoz yozsa — alohida post.
+ * Har bir MIJOZ uchun guruhda BITTA post — sessiya (suhbat) YOPILGUNCHA, doim eng PASTDA.
+ * Mijoz qayta-qayta yozsa ham, admin javob bergandan KEYIN yana yozsa ham alohida
+ * "yangi xabar" bildirishnomasi chiqmaydi: yig'ma post (eski satrlar + yangi satr)
+ * guruhga YANGI xabar sifatida PASTGA yuboriladi (Telegram buni tovush bilan
+ * bildiradi), tepadagi eskisi esa O'CHIRILADI ("uchib ketadi"). Natijada guruhda
+ * bu mijoz uchun doim bitta post bor — oxirgi holatda, eng pastda.
+ * Boshqa mijoz yozsa — alohida post (ular bir-biriga tegmaydi).
  *
  *   🆘 Yangi mijoz xabari
  *
@@ -31,14 +34,17 @@ import { tgCall } from './telegramApi.js';
  *  • post Telegram chegarasiga (4096) yaqinlashsa — davomi yangi postda;
  *  • (ixtiyoriy) SUPPORT_GROUP_THREAD_MINUTES > 0 bo'lsa va mijoz shuncha jim tursa.
  *
- * ESLATMA: Telegram TAHRIRLANGAN xabar uchun bildirishnoma BERMAYDI. Shuning uchun
- * mijozning HAR KEYINGI xabari postni yangilash bilan birga shu postga JAVOB sifatida
- * qisqa "🔔 Ism: «matn»" xabari bo'lib ham yuboriladi (tovush bilan) — aks holda adminlar
- * birinchi xabardan keyingilarini umuman sezmasdi. Real-time signal admin panelda ham
- * (support:message).
+ * ESLATMA: Telegram TAHRIRLANGAN xabar uchun bildirishnoma BERMAYDI, YANGI xabar uchun beradi.
+ * Shuning uchun mijozning keyingi xabari postni tahrirlamaydi — yangi yig'ma post yuboradi
+ * (bildirishnoma o'zi keladi), eskisini o'chiradi. Alohida "🔔 Ism: «matn»" xabari YO'Q.
+ * Eskisini o'chirib bo'lmasa (48 soatdan eski) — u qisqa "↩️ pastga o'tdi" belgisiga
+ * almashtiriladi (takror ko'rinmasin). Yangisini yuborib bo'lmasa — xabar yo'qolmasligi
+ * uchun eski post joyida tahrirlanadi. Admin javobi (✅✅) va yopish (🔒) — joriy postni
+ * tahrirlaydi (ular yangi bildirishnoma talab qilmaydi). Real-time signal admin panelda
+ * ham (support:message).
  *
  * ─── BOT GURUHDA HECH NARSA QILMAYDI ───
- * Faqat yozadi va o'z postlarini tahrirlaydi; guruhdan HECH NARSA o'qimaydi.
+ * Faqat yozadi, o'z postlarini tahrirlaydi va eskirgan postini o'chiradi; guruhdan HECH NARSA o'qimaydi.
  * Tugma oddiy `url` (bosilganda botga so'rov kelmaydi); guruh xabarlari
  * services/telegram.js da e'tiborsiz qoldiriladi.
  *
@@ -191,23 +197,27 @@ async function sendNew(chatId, customer, post) {
   return res.message_id;
 }
 
-const SNIPPET = 400;
+const STUB_TEXT = '↩️ <i>Suhbat yangilandi — pastdagi xabarga qarang</i>';
 
-async function notifyFollowUp(chatId, customer, postMessageId, text) {
-  const name = [customer.firstName, customer.lastName].filter(Boolean).join(' ').trim() || 'Mijoz';
-  const snippet = text.length > SNIPPET ? `${text.slice(0, SNIPPET)}…` : text;
+/*
+ * Pastga ko'chirilgan eski post: o'chiriladi. O'chirib bo'lmasa (Telegram: 48 soatdan eski) — qisqa belgiga
+ * almashtiriladi (tugmasiz), shunda guruhda bir xil post ikki marta turmaydi. Post allaqachon yo'q bo'lsa
+ * (adminlar o'chirgan) — hech narsa qilinmaydi. Hech qachon xato otmaydi: yangi post allaqachon yuborilgan.
+ */
+async function retirePost(chatId, messageId) {
   try {
-    await call('sendMessage', {
-      chat_id: chatId,
-      text: `🔔 <b>${esc(name)}</b>: «${esc(snippet)}»`,
-      parse_mode: 'HTML',
-      link_preview_options: { is_disabled: true },
-      // Postga javob — adminlar suhbatni ko'radi; post o'chirilgan bo'lsa ham xabar yetadi
-      reply_parameters: { message_id: postMessageId, allow_sending_without_reply: true },
-      reply_markup: keyboard(customer?._id),
-    });
+    await call('deleteMessage', { chat_id: chatId, message_id: messageId });
+    return 'deleted';
   } catch (e) {
-    console.error(`[supportGroup] bildirishnoma yuborilmadi: ${e.message}`);
+    const d = e.description || e.message || '';
+    if (/message to delete not found|message identifier is not specified/i.test(d)) return 'gone';
+    try {
+      await call('editMessageText', { chat_id: chatId, message_id: messageId, text: STUB_TEXT, parse_mode: 'HTML', link_preview_options: { is_disabled: true } });
+      return 'stubbed';
+    } catch (e2) {
+      if (!isNotModified(e2)) console.warn(`[supportGroup] eski postni o‘chirib/almashtirib bo‘lmadi (${d || e.message}): ${e2.message}`);
+      return 'left';
+    }
   }
 }
 
@@ -231,36 +241,38 @@ async function threaded(customer, rawText) {
     // repliedAt: ESKI maydon — satrlarga ko'chirildi, qayta hisoblanmasin
     const next = { ...prev, lines, repliedAt: null };
     if (buildPostText(customer, next).length <= MAX_POST) {
+      let newId;
       try {
-        await call('editMessageText', {
-          chat_id: chatId,
-          message_id: prev.messageId,
-          text: buildPostText(customer, next),
-          parse_mode: 'HTML',
-          link_preview_options: { is_disabled: true },
-          reply_markup: keyboard(customer._id),
-        });
+        // 1) yig'ma post PASTGA yangi xabar bo'lib yuboriladi (Telegram bildirishnomasi o'zi keladi)
+        newId = await sendNew(chatId, customer, next);
       } catch (e) {
         /*
-         * "o'zgarmadi" — xato emas. Boshqa xato (post guruhdan o'chirilgan,
-         * tahrirlab bo'lmaydi, tarmoq) — mijoz xabari BARIBIR adminlarga
-         * yetishi kerak: yangi post yuboriladi.
+         * Yangi post yuborilmadi (tarmoq, 429...) — mijoz xabari BARIBIR yo'qolmasin: eski post joyida
+         * tahrirlanadi (jim, lekin satr saqlanadi). Tahrir ham o'tmasa — yuqoriga otiladi (loglanadi).
          */
-        if (!isNotModified(e)) {
-          console.warn(`[supportGroup] tahrirlab bo‘lmadi (${e.message}) — yangi post`);
-          return startNew();
+        console.warn(`[supportGroup] pastga yuborib bo‘lmadi (${e.message}) — eski post joyida yangilanadi`);
+        try {
+          await call('editMessageText', {
+            chat_id: chatId, message_id: prev.messageId, text: buildPostText(customer, next),
+            parse_mode: 'HTML', link_preview_options: { is_disabled: true }, reply_markup: keyboard(customer._id),
+          });
+        } catch (e2) {
+          if (!isNotModified(e2)) throw e2;
         }
+        await SupportChat.updateOne({ _id: customer._id }, { $set: { 'groupPost.lines': lines, 'groupPost.lastLineAt': now, 'groupPost.repliedAt': null } });
+        return { mode: 'edited', messageId: prev.messageId };
       }
-      await SupportChat.updateOne({ _id: customer._id }, { $set: { 'groupPost.lines': lines, 'groupPost.lastLineAt': now, 'groupPost.repliedAt': null } });
-      /*
-       * TELEGRAM TAHRIR UCHUN BILDIRISHNOMA BERMAYDI — post jim yangilanardi va adminlar
-       * mijozning keyingi xabarlarini UMUMAN sezmasdi. Shuning uchun har keyingi xabar
-       * shu postga JAVOB sifatida qisqa xabar bo'lib ham yuboriladi (tovush bilan).
-       */
-      await notifyFollowUp(chatId, customer, prev.messageId, text);
-      return { mode: 'edited', messageId: prev.messageId };
+      // 2) bazada joriy post yangisiga almashadi (admin javobi/yopish shu postni tahrirlaydi)
+      const post = {
+        chatId: groupChatId(), messageId: newId, lines, continued: Boolean(prev.continued),
+        startedAt: prev.startedAt || now, lastLineAt: now, closedAt: null, repliedAt: null, repliedBy: '',
+      };
+      await SupportChat.updateOne({ _id: customer._id }, { $set: { groupPost: post } });
+      // 3) tepadagi eskisi "uchib ketadi"
+      await retirePost(chatId, prev.messageId);
+      return { mode: 'moved', messageId: newId, previousMessageId: prev.messageId };
     }
-    full = true; // post to'ldi — davomi yangi postda
+    full = true; // post to'ldi — davomi yangi postda (eskisi tarix sifatida qoladi)
   }
   return startNew();
 
