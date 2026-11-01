@@ -4,8 +4,9 @@
  * npm run test:support-delivery
  *
  * Telegram qoidasi: faqat sendMessage (yangi xabar) bildirishnoma beradi;
- * editMessageText (tahrir) — JIM. Adminlar xabarni ko'rishi uchun har mijoz xabari
- * kamida bitta NOTIFYING chaqiruv (sendMessage) hosil qilishi kerak.
+ * editMessageText (tahrir) — JIM. Shuning uchun mijozning HAR keyingi xabari yig'ma postni
+ * tahrirlamaydi: u PASTGA yangi xabar bo'lib yuboriladi (bildirishnoma o'zi keladi), eskisi
+ * o'chiriladi. Alohida "🔔" xabari yo'q.
  */
 import http from 'node:http';
 process.env.JWT_SECRET = process.env.JWT_SECRET || 'x'.repeat(40);
@@ -63,13 +64,16 @@ const c1 = mkChat(1);
 await notifySupportGroup(c1, 'Salom, buyurtmam kech qoldi');
 ok(loud().length === 1, 'yangi post — adminlarga BILDIRISHNOMA bilan keldi');
 
-console.log('\n[2] Mijoz yana yozdi (post tahrirlanadi — Telegram bunda JIM)');
+console.log('\n[2] Mijoz yana yozdi — yig‘ma post PASTGA yangi xabar bo‘lib yuboriladi (bildirishnoma o‘zi keladi), eskisi o‘chadi');
 reset();
+const firstId = store.get(c1._id).groupPost.messageId;
 await notifySupportGroup(c1, 'Iltimos tezroq');
-ok(edits().length === 1, 'post yangilandi (tahrir)');
-ok(loud().length >= 1, 'ADMINLARGA BILDIRISHNOMA ham keldi (tahrir jim bo‘lgani uchun alohida xabar)');
-ok(loud().some((c) => /Iltimos tezroq/.test(c.data.text)), 'bildirishnomada mijozning yangi matni bor');
-ok(loud().every((c) => c.data.reply_parameters?.message_id || c.data.reply_to_message_id), 'bildirishnoma mijoz postiga JAVOB sifatida (suhbat bir joyda)');
+const dels = calls.filter((c) => c.method === 'deleteMessage');
+ok(edits().length === 0 && sends().length === 1 && dels.length === 1, 'yangi yig‘ma post yuborildi, joyida tahrir YO‘Q, eskisi o‘chirildi');
+ok(dels[0].data.message_id === firstId && dels[0].data.chat_id === '-100111', 'aynan tepadagi (eski) post o‘chirildi');
+ok(loud().length === 1 && loud()[0].data.reply_parameters === undefined && !/🔔/.test(loud()[0].data.text), 'ADMINLARGA BILDIRISHNOMA bilan keldi (alohida "🔔" xabar YO‘Q)');
+ok(/Salom, buyurtmam kech qoldi/.test(loud()[0].data.text) && /Iltimos tezroq/.test(loud()[0].data.text), 'yig‘ma postda eski va yangi xabar BIRGA');
+ok(store.get(c1._id).groupPost.messageId !== firstId, 'bazada joriy post yangisiga almashdi');
 
 console.log('\n[3] Admin javob berdi, mijoz yana yozdi — eski postga tahrir: ham bildirishnoma kerak');
 reset();
