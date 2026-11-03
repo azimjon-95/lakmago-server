@@ -23,6 +23,15 @@ const ledgerSchema = new Schema(
         'adjustment',      // qo'lda tuzatish (admin)
         'waiter_payout',   // ofitsiantga xizmat haqi to'landi
         'bonus_compensation', // LokmaGo sovg'a-bonusi: restoran bepul bergan sovg'a puli restoranga qoplandi (+)
+        /*
+         * LOKMAGO KURYERI balansi (courierId bilan). Balans = Σ amount:
+         * musbat — LokmaGo kuryerga qarzdor, manfiy — kuryer LokmaGo'ga qarzdor (qo'lidagi naqd).
+         */
+        'courier_cash',       // naqd buyurtma: kuryer mijozdan jami summani oldi (−, bu pul LokmaGo'niki)
+        'courier_earning',    // kuryer ulushi: yetkazish × (1 − LokmaGo foizi) (+)
+        'courier_handover',   // kuryer naqdni LokmaGo'ga topshirdi (+, admin yozadi)
+        'courier_payout',     // LokmaGo kuryerga ulushini to'ladi (−, admin yozadi)
+        'courier_adjustment', // qo'lda tuzatish (±, admin, sabab majburiy)
       ],
     },
 
@@ -32,6 +41,7 @@ const ledgerSchema = new Schema(
     // Kim bilan bog'liq
     orderId: { type: Schema.Types.ObjectId, ref: 'Order', index: true },
     waiterId: { type: Schema.Types.ObjectId, ref: 'Waiter', default: null, index: true },
+    courierId: { type: Schema.Types.ObjectId, ref: 'Courier', default: null, index: true },
     restaurantId: { type: Schema.Types.ObjectId, ref: 'Restaurant', index: true },
     userId: { type: Schema.Types.ObjectId, ref: 'User', index: true },
 

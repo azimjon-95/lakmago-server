@@ -135,6 +135,15 @@ const orderSchema = new Schema(
       deliveryPayout: Number,
       deliveryFeeAbsorbedByLokma: Boolean,
 
+      // Kim yetkazadi (services/deliveryParty.js). Eski snapshot'larda yo'q → restoran kuryeri deb hisoblanadi.
+      courierParty: { type: String, enum: ['restaurant', 'lokma', null], default: undefined },
+      nominalDeliveryFee: Number,          // haqiqiy yetkazish narxi (tekinda mijoz 0 to'laydi)
+      freeDeliveryByLokma: Boolean,
+      courierCommissionPercent: Number,    // LokmaGo foizi (muzlatilgan)
+      courierPayout: Number,               // LokmaGo kuryeri ulushi
+      lokmaDeliveryCommission: Number,     // LokmaGo'ning yetkazishdan foizi
+      deliverySubsidy: Number,             // tekin yetkazishda LokmaGo kuryerga o'z hisobidan to'laydigan pul
+
       // Audit izi
       commissionAgreementId: { type: Schema.Types.ObjectId, ref: 'CommissionAgreement', default: null },
       agreementEffectiveFrom: Date,
@@ -222,6 +231,25 @@ const orderSchema = new Schema(
     // ===== YETKAZISH TURI =====
     // 'delivery' — kuryer yetkazadi, 'pickup' — mijoz o'zi olib ketadi
     fulfillment: { type: String, enum: ['delivery', 'pickup', 'dinein'], default: 'delivery', index: true },
+
+    /*
+     * ═══ KIM YETKAZADI (2026-11) ═══
+     * district      — restoran tumani (buyurtma paytida muzlatiladi): LokmaGo kuryerlari shu bo'yicha ko'radi.
+     * courierParty  — 'restaurant' (o'z kuryeri) | 'lokma' (LokmaGo kuryeri) | null ('both' rejimida restoran hali tanlamagan)
+     * lokmaCourier  — LokmaGo kuryeri yo'li: umumiy qutiga tushdi → kim ulgursa oldi → restorandan oldi → topshirdi.
+     * Hisob: finance.courierParty bilan bir xil (services/deliveryParty.js). Holat o'zgarishi: services/courierPool.js
+     */
+    district: { type: String, default: null, index: true },
+    courierParty: { type: String, enum: ['restaurant', 'lokma', null], default: null },
+    lokmaCourier: {
+      courierId: { type: Schema.Types.ObjectId, ref: 'Courier', default: null, index: true },
+      poolAt: { type: Date, default: null },
+      claimedAt: { type: Date, default: null },
+      pickedUpAt: { type: Date, default: null },
+      deliveredAt: { type: Date, default: null },
+      releasedCount: { type: Number, default: 0 },
+      settledAt: { type: Date, default: null },
+    },
 
     // ===== DINE-IN =====
     // Buyurtma manbai: QR (mijoz o'zi) yoki WAITER (ofitsiant)
@@ -413,6 +441,8 @@ orderSchema.index(
 
 // Sovg'a-bonus limit/byudjet hisobi: qoida bo'yicha buyurtmalarni tez sanash
 orderSchema.index({ 'bonusItems.ruleId': 1, createdAt: -1 }, { sparse: true });
+// LokmaGo kuryerlari umumiy qutisi: party=lokma, kuryer yo'q, faol holat, tuman bo'yicha (services/courierPool.js)
+orderSchema.index({ courierParty: 1, 'lokmaCourier.courierId': 1, status: 1, district: 1 });
 
 
 orderSchema.plugin(demoScope);

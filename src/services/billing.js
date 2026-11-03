@@ -413,6 +413,15 @@ export async function settleOrder(orderId) {
   // Naqd buyurtma — yakunlangan bo'lsa avtomatik "to'langan" (komissiya hisobidan MUSTAQIL)
   await finalizeCashPayment(order._id).catch((e) => console.error('[billing] finalizeCashPayment:', e.message));
 
+  /*
+   * LokmaGo kuryeri balansi — restoran hisobidan MUSTAQIL (o'z takror-himoyasi bor: lokmaCourier.settledAt).
+   * "Yetkazildi"ning BARCHA yo'llari (kuryer, mijoz "Oldim", avtomatik yakunlash) shu funksiyadan o'tadi.
+   */
+  if (order.courierParty === 'lokma') {
+    const { settleCourier } = await import('./courierPool.js');
+    await settleCourier(order._id).catch((e) => console.error('[billing] settleCourier:', e.message));
+  }
+
   // Takroriy hisob-kitobdan himoya
   const already = await Ledger.findOne({ orderId: order._id, type: 'restaurant_due' });
   if (already) return null;
@@ -478,7 +487,12 @@ export async function settleOrder(orderId) {
     };
   }
 
-  const isCash = order.paymentMethod === 'cash';
+  /*
+   * RESTORAN naqdni o'zi oldimi. LokmaGo kuryeri yetkazgan naqd buyurtmada pulni KURYER olgan (uning balansiga yoziladi),
+   * restoranga taom ulushini LokmaGo to'laydi — restoran uchun bu KARTA buyurtmasidek (ulush +, komissiya qarzi emas).
+   * Hisobotlar Ledger.isCash bo'yicha ajratadi, shuning uchun bu yerda aynan RESTORAN nuqtai nazari yoziladi.
+   */
+  const isCash = order.paymentMethod === 'cash' && order.courierParty !== 'lokma';
   /*
    * "Moliya" hisobotida Click/Paynet alohida ko'rsatilishi kerak
    * (TZ talabi). Order.paymentMethod allaqachon aniq qiymatga

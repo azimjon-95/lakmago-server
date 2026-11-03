@@ -124,16 +124,35 @@ const STATUS_TEXT = {
  */
 const ADMIN_CANCEL_FROM = ['accepted', 'preparing', 'ready', 'delivering'];
 
-export async function changeOrderStatus({ orderId, restaurantId, status, actorName = '', cancelReason, cancelReasonCode, approvedByAdmin = false }) {
+/*
+ * courierId — LokmaGo kuryeri (kuryer ilovasi: "Oldim" → 'delivering', "Topshirdim" → 'delivered'). Shu buyurtmaga AYNAN
+ * shu kuryer biriktirilgan bo'lishi shart (filtrda ham). Kuryer yetkazib berish buyurtmasini yakunlay oladi — restoran
+ * esa yo'q (restoran yakunlasa taom yetkazilmasdan komissiya hisoblanib ketardi).
+ */
+export async function changeOrderStatus({ orderId, restaurantId, status, actorName = '', cancelReason, cancelReasonCode, approvedByAdmin = false, courierId = null }) {
   if (!RESTAURANT_STATUSES.includes(status)) {
     throw new OrderFlowError('INVALID_STATUS', 'Noto‘g‘ri status');
   }
 
   const before = await Order.findOne({ _id: orderId, restaurantId })
-    .select('status fulfillment').lean();
+    .select('status fulfillment courierParty lokmaCourier').lean();
   if (!before) throw new OrderFlowError('NOT_FOUND', 'Buyurtma topilmadi');
 
-  const pickupOnly = PICKUP_ONLY_STATUSES.has(status);
+  const byCourier = Boolean(courierId);
+  if (byCourier) {
+    if (!['delivering', 'delivered'].includes(status)) throw new OrderFlowError('INVALID_STATUS', 'Kuryer faqat "oldim" va "topshirdim" ni belgilaydi');
+    if (before.courierParty !== 'lokma' || String(before.lokmaCourier?.courierId || '') !== String(courierId)) {
+      throw new OrderFlowError('NOT_YOURS', 'Bu buyurtma sizga biriktirilmagan');
+    }
+  } else if (status === 'delivering' && before.courierParty === 'lokma') {
+    /*
+     * XATO OLDI OLINDI: LokmaGo kuryeri buyurtmasini restoran "Yo'lda" qilsa, buyurtma qutidan (accepted|preparing|ready)
+     * chiqib ketardi va hech bir kuryer uni ololmay qolardi. "Yo'lda" — kuryer taomni olganda o'zi belgilaydi.
+     */
+    throw new OrderFlowError('COURIER_PICKUP', 'LokmaGo kuryeri taomni olganda «Yo‘lda» holati o‘zi qo‘yiladi');
+  }
+
+  const pickupOnly = PICKUP_ONLY_STATUSES.has(status) && !byCourier;
   if (pickupOnly && before.fulfillment !== 'pickup') {
     throw new OrderFlowError(
       'WRONG_STATE',
@@ -169,6 +188,8 @@ export async function changeOrderStatus({ orderId, restaurantId, status, actorNa
   if (status === 'delivering') update.deliveringAt = new Date();
   if (status === 'cancelled') update.cancelledAt = new Date();
   if (status === 'delivered') update.deliveredAt = new Date();
+  if (byCourier && status === 'delivering') update['lokmaCourier.pickedUpAt'] = new Date();
+  if (byCourier && status === 'delivered') update['lokmaCourier.deliveredAt'] = new Date();
   /*
    * Rad etish sababi status bilan BITTA atomik yozuvda — avval
    * alohida updateOne bilan keyin yozilardi va xodimlarning
@@ -195,7 +216,11 @@ export async function changeOrderStatus({ orderId, restaurantId, status, actorNa
   const order = await Order.findOneAndUpdate(
     // pickupOnly: turi ham filtrda — tekshiruv bilan yozuv orasida
     // hech narsa o'zgarib qololmaydi
-    { _id: orderId, restaurantId, status: { $in: allowedFrom }, ...(pickupOnly ? { fulfillment: 'pickup' } : {}) },
+    {
+      _id: orderId, restaurantId, status: { $in: allowedFrom },
+      ...(pickupOnly ? { fulfillment: 'pickup' } : {}),
+      ...(byCourier ? { 'lokmaCourier.courierId': before.lokmaCourier.courierId } : {}),
+    },
     update,
     { new: true },
   ).populate('userId');
@@ -215,6 +240,10 @@ export async function changeOrderStatus({ orderId, restaurantId, status, actorNa
 
   await runSideEffects(order, status);
   broadcast(order);
+  // LokmaGo kuryerlari: qutiga tushish/chiqish, biriktirilgan kuryerga xabar
+  if (order.courierParty === 'lokma') {
+    import('./courierPool.js').then((m) => m.onOrderStatusChanged(order, status)).catch(() => {});
+  }
 
   /*
    * ═══ TELEGRAM XABARLARINI YANGILASH ═══

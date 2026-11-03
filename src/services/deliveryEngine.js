@@ -1,4 +1,5 @@
 import { config } from '../config/index.js';
+import { applyLokmaFreeDelivery } from './deliveryParty.js';
 
 /**
  * Yetkazish masofasi va narxi.
@@ -224,6 +225,15 @@ export function calcDeliveryPrice(distanceKm, restaurant, subtotal = 0) {
  * @param {object} customer - { lat, lng }
  */
 export async function quoteDelivery(restaurant, customer, subtotal = 0) {
+  /*
+   * LokmaGo tekin yetkazishi (admin, faqat 'lokma' rejimida) — BITTA joyda qo'llanadi: buyurtma yaratish (misc.js) ham,
+   * mijozga narx ko'rsatish (maps.js) ham shu funksiyadan o'tadi → mijoz ko'rgan va to'lagan narx doim bir xil.
+   * Natijada `nominalPrice` (haqiqiy narx, kuryer ulushi uchun) va `freeByLokma` qo'shiladi.
+   */
+  return applyLokmaFreeDelivery(await quoteDeliveryBase(restaurant, customer, subtotal), restaurant);
+}
+
+async function quoteDeliveryBase(restaurant, customer, subtotal = 0) {
   /*
    * Koordinata yo'q — masofani hisoblab bo'lmaydi. Buyurtmani
    * RAD ETMAYMIZ: narx baribir bitta, masofa faqat radius uchun

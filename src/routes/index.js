@@ -38,7 +38,11 @@ import { settlementController } from '../controllers/settlement.js';
 import { expenseController } from '../controllers/expense.js';
 import { staffController } from '../controllers/staff.js';
 import { panelAdsController, adminAdsController, publicAdsController } from '../controllers/ads.js';
-import { courierAdminController, courierRegistryController, courierPortalController } from '../controllers/courier.js';
+import { courierAdminController, courierPortalController } from '../controllers/courier.js';
+import {
+  districtsController, courierAppController, adminCourierController, adminRestaurantDeliveryController, panelDeliveryController,
+} from '../controllers/delivery.js';
+import { courierAuth } from '../middleware/courierAuth.js';
 import { mapsController } from '../controllers/maps.js';
 import { catalogProductController } from '../controllers/catalogProducts.js';
 import { menuTransferController } from '../controllers/menuTransfer.js';
@@ -383,10 +387,41 @@ router.get('/panel/orders/:id/dispatch-status', ...R, courierAdminController.dis
  * admin panelidagi "Kuryerlar" sahifasi bu bilan ishlaydi, lekin
  * yuqoridagi ulashish oqimi bilan bog'liq EMAS).
  */
-router.get('/admin/couriers', ...AS('couriers'), courierRegistryController.list);
-router.post('/admin/couriers', ...AS('couriers'), courierRegistryController.create);
-router.patch('/admin/couriers/:id', ...AS('couriers'), courierRegistryController.update);
-router.delete('/admin/couriers/:id', ...AS('couriers'), courierRegistryController.remove);
+router.get('/admin/couriers', ...AS('couriers'), adminCourierController.list);
+router.post('/admin/couriers', ...AS('couriers'), adminCourierController.create);
+router.patch('/admin/couriers/:id', ...AS('couriers'), adminCourierController.update);
+router.delete('/admin/couriers/:id', ...AS('couriers'), adminCourierController.remove);
+
+/*
+ * ═══ LOKMAGO KURYERLARI va YETKAZISH REJIMI (2026-11) ═══ — controllers/delivery.js, services/courierPool.js
+ * Ruxsat: pulga ta'sir qiladiganlar (rejim, foiz, tekin yetkazish, global sozlama) — FAQAT bosh admin (A);
+ * kuryer kassasi (naqd topshirish/to'lov/tuzatish) — moliya bo'limi ('billing'); kuryerlar va quti — 'couriers'.
+ */
+router.get('/districts', districtsController.list);
+router.get('/admin/couriers/:id/ledger', ...AS('couriers'), adminCourierController.ledger);
+router.post('/admin/couriers/:id/ledger', ...AS('billing'), writeLimiter, adminCourierController.addLedger);
+router.get('/admin/courier-pool', ...AS('couriers'), adminCourierController.pool);
+router.post('/admin/orders/:id/courier-assign', ...AS('couriers'), adminCourierController.assign);
+router.post('/admin/orders/:id/courier-release', ...AS('couriers'), adminCourierController.release);
+router.get('/admin/courier-settings', ...A, adminCourierController.getSettings);
+router.patch('/admin/courier-settings', ...A, adminCourierController.updateSettings);
+router.patch('/admin/restaurants/:id/courier-settings', ...A, adminRestaurantDeliveryController.updateCourierSettings);
+router.patch('/admin/restaurants/:id/district', ...AS('restaurants'), adminRestaurantDeliveryController.updateDistrict);
+router.get('/panel/courier-settings', ...R, panelDeliveryController.info);
+router.post('/panel/orders/:id/courier-party', ...R, writeLimiter, panelDeliveryController.setParty);
+
+// Kuryer ilovasi (telefon + PIN → token). Kuryer TZ: COURIER-APP-TZ.md
+router.post('/courier/auth/login', loginLimiter, courierAppController.login);
+router.get('/courier/me', courierAuth, courierAppController.me);
+router.patch('/courier/me', courierAuth, writeLimiter, courierAppController.updateMe);
+router.get('/courier/pool', courierAuth, courierAppController.pool);
+router.get('/courier/orders/active', courierAuth, courierAppController.active);
+router.get('/courier/orders/history', courierAuth, courierAppController.history);
+router.get('/courier/ledger', courierAuth, courierAppController.ledger);
+router.post('/courier/orders/:id/claim', courierAuth, writeLimiter, courierAppController.claim);
+router.post('/courier/orders/:id/release', courierAuth, writeLimiter, courierAppController.release);
+router.post('/courier/orders/:id/pickup', courierAuth, writeLimiter, courierAppController.pickup);
+router.post('/courier/orders/:id/deliver', courierAuth, writeLimiter, courierAppController.deliver);
 
 /*
  * OCHIQ — kuryer sahifasi. Login YO'Q: token o'zi kredensial.

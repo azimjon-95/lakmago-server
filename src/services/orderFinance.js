@@ -217,7 +217,12 @@ export function computeOrderFinance({
  * @returns {{ ok: boolean, diff: number, parts: object }}
  */
 export function reconcile(f) {
-  const sum = f.restaurantPayout + f.lokmaNetCommission + f.clickFeeAmount;
+  /*
+   * courierPayout — LokmaGo kuryeri ulushi (services/deliveryParty.js). Restoran kuryerida va eski snapshot'larda
+   * u 0/yo'q → formula avvalgidek. LokmaGo kuryerida yetkazish puli restoran o'rniga kuryer + LokmaGo o'rtasida bo'linadi.
+   */
+  const courierPayout = Math.round(Number(f.courierPayout) || 0);
+  const sum = f.restaurantPayout + courierPayout + f.lokmaNetCommission + f.clickFeeAmount;
   const diff = f.totalCharged - sum;
 
   return {
@@ -227,6 +232,7 @@ export function reconcile(f) {
       restaurantFoodPayout: f.restaurantFoodPayout,
       restaurantDeliveryPayout: f.restaurantDeliveryPayout,
       restaurantPayout: f.restaurantPayout,
+      courierPayout,
       lokmaNetCommission: f.lokmaNetCommission,
       clickFeeAmount: f.clickFeeAmount,
       totalCharged: f.totalCharged,

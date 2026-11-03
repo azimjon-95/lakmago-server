@@ -50,6 +50,20 @@ const settingsSchema = new Schema(
     //   deduct     → restoran narxidan −5% olamiz (restoran foydasidan)
     //   none       → komissiya yo'q (hozircha 0)
     commissionMode: { type: String, enum: ['markup', 'deduct', 'none'], default: 'none' },
+
+    /*
+     * ===== LOKMAGO KURYERLARI (2026-11) =====
+     *   commissionPercent — LokmaGo'ning har bir yetkazishdan foizi (30 000 so'm, 10% → kuryerga 27 000). Restoranga
+     *                       alohida foiz Restaurant.lokmaCourierPercent bilan beriladi.
+     *   debtLimitSom      — kuryer qo'lidagi naqd (LokmaGo puli) chegarasi: oshsa yangi NAQD buyurtma ololmaydi,
+     *                       avval pulni topshiradi. Kuryerga alohida Courier.debtLimitSom beriladi.
+     *   maxActiveOrders   — kuryer bir vaqtda nechta buyurtmani olib yura oladi.
+     */
+    courier: {
+      commissionPercent: { type: Number, default: 10, min: 0, max: 100 },
+      debtLimitSom: { type: Number, default: 500000, min: 0 },
+      maxActiveOrders: { type: Number, default: 3, min: 1, max: 10 },
+    },
   },
   { timestamps: true },
 );

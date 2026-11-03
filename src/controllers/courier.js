@@ -1,6 +1,5 @@
 import { asyncHandler } from '../middleware/error.js';
 import { z } from 'zod';
-import { Courier } from '../models/Courier.js';
 import { createShareLink, getShareView, acceptShare, deliverShare, buildShareUrls, setCourierProfile, updateCourierLocation } from '../services/courierDispatch.js';
 
 function rid(req) {
@@ -18,38 +17,7 @@ function rid(req) {
  * ro'yxatdan o'tib, admin ularni shu yerda ko'rib "ruxsat"
  * bergandan keyin, bu ro'yxat FAOL ishlatila boshlanadi.
  */
-export const courierRegistryController = {
-  list: asyncHandler(async (_req, res) => {
-    const couriers = await Courier.find().sort({ isActive: -1, name: 1 }).lean();
-    res.json(couriers);
-  }),
-  create: asyncHandler(async (req, res) => {
-    const schema = z.object({
-      name: z.string().min(2).max(80),
-      phone: z.string().optional(),
-      telegramChatId: z.string().min(1),
-      telegramUsername: z.string().optional(),
-    });
-    const parsed = schema.safeParse(req.body);
-    if (!parsed.success) {
-      return res.status(400).json({ error: 'Noto‘g‘ri ma‘lumot', details: parsed.error.flatten() });
-    }
-    const courier = await Courier.create(parsed.data);
-    res.status(201).json(courier);
-  }),
-  update: asyncHandler(async (req, res) => {
-    const allowed = ['name', 'phone', 'telegramChatId', 'telegramUsername', 'isActive'];
-    const update = {};
-    for (const k of allowed) if (k in req.body) update[k] = req.body[k];
-    const courier = await Courier.findByIdAndUpdate(req.params.id, update, { new: true });
-    if (!courier) return res.status(404).json({ error: 'Kuryer topilmadi' });
-    res.json(courier);
-  }),
-  remove: asyncHandler(async (req, res) => {
-    await Courier.findByIdAndDelete(req.params.id);
-    res.json({ ok: true });
-  }),
-};
+// Kuryerlar reyestri (admin) — controllers/delivery.js → adminCourierController (2026-11: validatsiya, xavfsiz o'chirish).
 
 /* ═══════════════════════════════════════════
    RESTORAN — havola yaratish (ulashish uchun)
@@ -66,6 +34,13 @@ export const courierAdminController = {
     const { Order } = await import('../models/Order.js');
     const order = await Order.findOne({ _id: req.params.id, restaurantId: rid(req) }).lean();
     if (!order) return res.status(404).json({ error: 'Buyurtma topilmadi' });
+    /*
+     * LokmaGo kuryeri yetkazadigan buyurtma umumiy qutida — restoran o'z havolasini tarqatsa, bitta buyurtmaga IKKI kuryer
+     * (LokmaGo + restoran) borib qolardi va yetkazish puli noto'g'ri taqsimlanardi.
+     */
+    if (order.courierParty === 'lokma') {
+      return res.status(409).json({ error: 'Bu buyurtmani LokmaGo kuryeri yetkazadi — havola kerak emas', code: 'LOKMA_COURIER' });
+    }
 
     /*
      * Bot va panel BIR XIL havolani ishlatadi: ochiq (hali hech kim
