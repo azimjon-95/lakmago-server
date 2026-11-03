@@ -40,6 +40,7 @@ export async function createShareLink(orderId) {
     .populate('userId', 'firstName lastName username telegramId phone')
     .lean();
   if (!order) throw new Error('Buyurtma topilmadi');
+  if (order.courierParty === 'lokma') throw new Error('Bu buyurtmani LokmaGo kuryeri yetkazadi — havola yaratilmaydi');
 
   const restaurant = order.restaurantId || {};
   const user = order.userId || {};

@@ -461,6 +461,11 @@ async function handleShare(cq, staff, orderId) {
     await answerCallback(cq.id, 'Olib ketish buyurtmasiga kuryer kerak emas', { alert: true });
     return;
   }
+  // LokmaGo kuryeri yetkazadi (umumiy quti) — restoran havolasi ikkinchi kuryerni chaqirib qo'yardi
+  if (order.courierParty === 'lokma') {
+    await answerCallback(cq.id, '🛵 Bu buyurtmani LokmaGo kuryeri yetkazadi — havola kerak emas', { alert: true });
+    return;
+  }
   if (!['accepted', 'preparing', 'ready'].includes(order.status)) {
     await answerCallback(cq.id, 'Bu holatdagi buyurtmani kuryerga ulashib bo‘lmaydi', { alert: true });
     await refreshOrderMessages(orderId);

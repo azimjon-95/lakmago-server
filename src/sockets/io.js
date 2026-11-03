@@ -1,5 +1,6 @@
 import { Server as HttpServer } from 'http';
 import { restaurantRoomFromToken } from './restaurantSocketAuth.js';
+import { canJoinAdmin, canJoinRestaurant, courierRoomsFromToken } from './panelSocketAuth.js';
 import { Server as SocketServer } from 'socket.io';
 import { config, isAllowedOrigin } from '../config/index.js';
 import { getRedis } from '../services/cache.js';
@@ -102,10 +103,28 @@ export function initSocket(httpServer) {
       socket.join(`order:${orderId}`);
     });
 
-    // Restoran o'z buyurtmalarini eshitish uchun
-    socket.on('join:restaurant', (restaurantId) => {
-      socket.join(`restaurant:${restaurantId}`);
+    /*
+     * Restoran o'z buyurtmalarini eshitish uchun — TOKEN BILAN (sockets/panelSocketAuth.js).
+     * Token: hodisa argumentida { restaurantId, token } yoki ulanishdagi `auth.token`. Eski shakl join:restaurant(id) ham
+     * qabul qilinadi, lekin token handshake'da bo'lishi shart. Rad etilsa — `join:denied` (jim tashlab ketilmaydi).
+     */
+    socket.on('join:restaurant', async (arg) => {
+      const restaurantId = typeof arg === 'object' && arg ? String(arg.restaurantId || '') : String(arg || '');
+      const token = (typeof arg === 'object' && arg?.token) || appToken;
+      if (await canJoinRestaurant(token, restaurantId).catch(() => false)) socket.join(`restaurant:${restaurantId}`);
+      else socket.emit('join:denied', { room: 'restaurant' });
     });
+
+    // LokmaGo kuryeri ilovasi: o'z xonasi + ish tumanlari xonalari (yangi buyurtma "qutiga tushdi" hodisalari)
+    const joinCourierRooms = async (token) => {
+      const rooms = await courierRoomsFromToken(token).catch(() => []);
+      for (const r of socket.rooms) if (r.startsWith('courier-district:')) socket.leave(r);   // tuman almashsa eskisidan chiqadi
+      rooms.forEach((r) => socket.join(r));
+      socket.emit('courier:joined', { ok: rooms.length > 0, districts: rooms.filter((r) => r.startsWith('courier-district:')).map((r) => r.slice(17)) });
+    };
+    if (appToken) joinCourierRooms(appToken);
+    // Kuryer tumanlarini o'zgartirgach shuni yuboradi — xonalar bazadan qayta o'qiladi
+    socket.on('courier:refresh-rooms', (arg) => joinCourierRooms((typeof arg === 'object' && arg?.token) || appToken));
 
 
     // Admin barcha buyurtmalarni live eshitadi
@@ -114,8 +133,11 @@ export function initSocket(httpServer) {
       if (sessionId) socket.join(`session:${sessionId}`);
     });
 
-    socket.on('join:admin', () => {
-      socket.join('admin');
+    // Admin barcha buyurtmalarni live eshitadi — FAQAT admin/xodim tokeni bilan (avval tekshiruvsiz edi)
+    socket.on('join:admin', async (arg) => {
+      const token = (typeof arg === 'object' && arg?.token) || appToken;
+      if (await canJoinAdmin(token).catch(() => false)) socket.join('admin');
+      else socket.emit('join:denied', { room: 'admin' });
     });
 
     /*
