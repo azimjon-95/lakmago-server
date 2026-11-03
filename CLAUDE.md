@@ -134,3 +134,14 @@ Token, `initData`, parol, karta ma'lumotlari — hech qachon
 
 Frontend va backend **alohida** deploy qilinadi. Frontend — Vercel,
 backend — VPS (pm2).
+
+## Yetkazish rejimlari va LokmaGo kuryerlari (2026-11)
+
+To'liq hujjat: `docs/YETKAZISH-REJIMLARI.md`, kuryer ilovasi TZ: `docs/KURYER-ILOVASI-TZ.md`.
+
+- Yetkazish pulining taqsimoti FAQAT `services/deliveryParty.js` da (`applyDeliveryParty`). Boshqa joyda qayta hisoblanmaydi.
+  Rekonsiliatsiya: `restaurantPayout + courierPayout + lokmaNetCommission + clickFeeAmount === totalCharged`.
+- Rejim / tekin yetkazish / foiz — FAQAT bosh admin (`A`). Restoran o'zi o'zgartira olmaydi.
+- Quti va kuryer holatlari — `services/courierPool.js`; "oldim/topshirdim" — `changeOrderStatus({ courierId })` orqali (alohida yo'l yozilmaydi).
+- Kuryer balansi saqlanmaydi — yagona manba `Ledger` (courierId). Yozuvlar o'chirilmaydi, faqat teskari tuzatish.
+- Soket xonalari (admin/restoran/kuryer) — faqat token bilan (`sockets/panelSocketAuth.js`).
