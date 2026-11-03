@@ -39,6 +39,8 @@ import { expenseController } from '../controllers/expense.js';
 import { staffController } from '../controllers/staff.js';
 import { panelAdsController, adminAdsController, publicAdsController } from '../controllers/ads.js';
 import { courierAdminController, courierRegistryController, courierPortalController } from '../controllers/courier.js';
+import { courierAppController, courierAccountAdminController } from '../controllers/courierApp.js';
+import { courierAuth } from '../middleware/courierAuth.js';
 import { mapsController } from '../controllers/maps.js';
 import { catalogProductController } from '../controllers/catalogProducts.js';
 import { menuTransferController } from '../controllers/menuTransfer.js';
@@ -54,7 +56,7 @@ import {
   auth, requireRole, requirePage, waiterAuth, waiterOrRestaurantAuth,
   kioskAuth, requireKioskSection,
 } from '../middleware/auth.js';
-import { loginLimiter, writeLimiter, courierLocationLimiter, tgLinkStartLimiter, tgLinkPollLimiter } from '../middleware/rateLimit.js';
+import { loginLimiter, writeLimiter, courierLocationLimiter, courierAppLocationLimiter, tgLinkStartLimiter, tgLinkPollLimiter } from '../middleware/rateLimit.js';
 import { botBroadcastController } from '../controllers/botBroadcast.js';
 import { adAttachment, adChunkBody, adUploadController } from '../middleware/adUpload.js';
 import { restaurantPinsController } from '../controllers/restaurantPins.js';
@@ -399,6 +401,30 @@ router.post('/courier-portal/:token/deliver', writeLimiter, courierPortalControl
 router.post('/courier-portal/:token/profile', writeLimiter, courierPortalController.profile);
 // GPS har ~8 soniyada — umumiy yozish limitidan alohida, yumshoqroq
 router.post('/courier-portal/:token/location', courierLocationLimiter, courierPortalController.location);
+
+/*
+ * KURYER ILOVASI (BOSQICH 2) — login/parol bilan kiradigan ishchi kuryer (mobil ilovadagi «Kuryer» bo'limi).
+ * Bosqich 1 (havola) o'zgarmagan. Kuryer tokeni BOSHQA kalit bilan imzolanadi: mavjud `auth` uni qabul qilmaydi (courierAuth alohida).
+ */
+router.post('/courier-app/login', loginLimiter, courierAppController.login);
+router.get('/courier-app/me', courierAuth, courierAppController.me);
+router.get('/courier-app/shift', courierAuth, courierAppController.shift);
+router.post('/courier-app/shift/start', courierAuth, writeLimiter, courierAppController.shiftStart);
+router.post('/courier-app/shift/end', courierAuth, writeLimiter, courierAppController.shiftEnd);
+router.get('/courier-app/shifts', courierAuth, courierAppController.shifts);
+router.post('/courier-app/location', courierAuth, courierAppLocationLimiter, courierAppController.location);
+router.get('/courier-app/offers', courierAuth, courierAppController.offers);
+router.post('/courier-app/offers/:id/accept', courierAuth, writeLimiter, courierAppController.accept);
+router.get('/courier-app/active', courierAuth, courierAppController.active);
+router.post('/courier-app/active/deliver', courierAuth, writeLimiter, courierAppController.deliver);
+router.get('/courier-app/history', courierAuth, courierAppController.history);
+router.get('/courier-app/stats', courierAuth, courierAppController.stats);
+router.post('/courier-app/devices', courierAuth, writeLimiter, courierAppController.registerDevice);
+router.delete('/courier-app/devices', courierAuth, writeLimiter, courierAppController.unregisterDevice);
+router.post('/courier-app/devices/test', courierAuth, writeLimiter, courierAppController.testPush);
+router.get('/admin/courier-accounts', ...AS('couriers'), courierAccountAdminController.list);
+router.post('/admin/courier-accounts', ...AS('couriers'), courierAccountAdminController.create);
+router.patch('/admin/courier-accounts/:id', ...AS('couriers'), courierAccountAdminController.update);
 
 // Reklama (banner) so'rovlari — restoran paneli
 router.get('/panel/ads', ...R, panelAdsController.list);

@@ -43,6 +43,7 @@
     "test:order-socket": "node tests/order-socket.test.mjs",
     "test:mobile-push": "node tests/mobile-push.test.mjs",
     "test:notify-settings": "node tests/notify-settings.test.mjs",
+    "test:courier-app": "node tests/courier-app.test.mjs",
     "test:dish-realtime": "node tests/dish-realtime.test.mjs",
     "test:customer-ask": "node tests/customer-ask.test.mjs",
     "test:incidents": "node tests/customer-incidents.test.mjs",
