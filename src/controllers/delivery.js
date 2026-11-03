@@ -230,6 +230,8 @@ const courierBody = z.object({
   workDistricts: z.array(z.string()).max(20).optional(),
   vehicle: z.enum(['foot', 'bike', 'moto', 'car', '']).optional(),
   debtLimitSom: z.number().min(0).max(100000000).nullable().optional(),
+  // Eski admin panel (2026-08) "Faol/Nofaol" tugmasi shuni yuboradi — status'ga aylantiriladi (moslik)
+  isActive: z.boolean().optional(),
 }).strict();
 
 async function balancesFor(ids) {
@@ -304,6 +306,7 @@ export const adminCourierController = {
       set.pinHash = hashPin(d.pin);
       inc.tokenVersion = 1;
     }
+    if (!d.status && typeof d.isActive === 'boolean') d.status = d.isActive ? 'active' : 'blocked';
     if (d.status) {
       set.status = d.status;
       set.isActive = d.status === 'active';
