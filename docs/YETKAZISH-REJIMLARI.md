@@ -107,9 +107,15 @@ courierParty = 'lokma', kuryer yo'q, fulfillment = 'delivery', status ∈ {accep
 Ruxsatlar testda haqiqiy middleware zanjiri bilan tekshirilgan (`tests/courier-auth.test.mjs`).
 
 ### Kuryer kirishi
-- Kuryer telefon va PIN bilan kiradi. PIN faqat scrypt hash holida saqlanadi, `1111`/`1234` kabi oddiy PIN rad etiladi.
-- Token tarkibida `tokenVersion` bor: PIN almashsa yoki kuryer bloklansa, eski sessiyalar **darhol** bekor bo'ladi.
-- Kuryer o'chirilmaydi, agar pul yoki buyurtma tarixi bo'lsa — faqat bloklanadi.
+- Kuryer mobil ilovada **login va parol** bilan kiradi (`CourierAccount`, bcrypt; token boshqa kalit bilan imzolanadi).
+- Token tarkibida `tokenVersion` bor: parol almashsa yoki kuryer bloklansa, eski sessiyalar **darhol** bekor bo'ladi.
+- «Ishdaman» = ochiq **smena**; joylashuv har 5 s (Redis, ixtiyoriy) va bazaga siyraklashtirilib (trek).
+
+### Restoranga kuryer biriktirish
+`Restaurant.exclusiveCouriers` (admin: `PUT /admin/restaurants/:id/couriers`). Bo'sh emas bo'lsa — shu restoranning LokmaGo buyurtmalarini **faqat shu kuryerlar** ko'radi va oladi (tumanidan qat'i nazar); boshqa kuryerlarga yopiq (`NOT_YOUR_RESTAURANT`).
+
+### Nazorat
+Trek (`CourierTrackPoint`), voqealar (`CourierEvent`: oldi / taomni oldi / topshirdi + joylashuv + masofa tekshiruvi), jonli ko'rinish va buyurtma izi — `docs/KURYER-ILOVASI-TZ.md` 3-bo'lim.
 
 ## 6. Xavfsizlik tuzatishi: soket xonalari
 - **Avval:** `join:admin` va `join:restaurant` hech qanday tekshiruvsiz ishlardi. Istalgan odam barcha buyurtmalar yangilanishini, mijoz ma'lumotlari bilan birga, eshita olardi.

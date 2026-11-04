@@ -126,7 +126,7 @@ export async function recordLocation(account, raw) {
 /** Ilovadagi taklif ko'rinishi (quti buyurtmasi): MIJOZNING manzili/telefoni YO'Q — faqat tuman. `deliveryFee` = KURYER HAQI. */
 export function poolOfferView(c) {
   return {
-    id: c.id, kind: 'pool', orderCode: c.number ? `#${c.number}` : '', createdAt: c.acceptedAt || c.createdAt, status: c.status,
+    id: c.id, kind: 'pool', orderCode: c.number ? String(c.number) : '', createdAt: c.acceptedAt || c.createdAt, status: c.status,
     restaurantName: c.restaurant.name, restaurantAddress: c.restaurant.address, restaurantLat: c.restaurant.lat, restaurantLng: c.restaurant.lng,
     addressLabel: districtLabel(c.district), itemsSummary: c.itemsSummary, itemsCount: c.itemsCount,
     deliveryFee: c.earningSom, earningSom: c.earningSom, freeDelivery: c.freeDelivery,
@@ -206,7 +206,7 @@ export function activeViewFromOrder(o) {
   const f = o.finance || {};
   const pickedUp = o.status === 'delivering';
   return {
-    id: String(o._id), orderId: String(o._id), kind: 'pool', orderCode: o.dailyNumber ? `#${o.dailyNumber}` : '', assignedAt: o.lokmaCourier?.claimedAt || null, status: o.status,
+    id: String(o._id), orderId: String(o._id), kind: 'pool', orderCode: o.dailyNumber ? String(o.dailyNumber) : '', assignedAt: o.lokmaCourier?.claimedAt || null, status: o.status,
     stage: pickedUp ? 'to_customer' : 'to_restaurant', pickedUp, canPickup: !pickedUp, canDeliver: pickedUp,
     restaurantName: r.name || o.restaurantName || '', restaurantAddress: r.address || '', restaurantPhone: r.phone || '', restaurantLat: r.lat ?? null, restaurantLng: r.lng ?? null,
     customerName: u.firstName || '', customerPhone: o.phone || u.phone || '', addressLabel: o.address || '', addressNote: o.addressNote || '', lat: o.addressLat ?? null, lng: o.addressLng ?? null,
@@ -291,7 +291,7 @@ export async function deliverActive(account, { orderId, location } = {}) {
 /* ───────────── tarix va hisobot ───────────── */
 
 const historyRow = (o) => ({
-  id: String(o._id), orderCode: o.dailyNumber ? `#${o.dailyNumber}` : '', restaurantName: o.restaurantName || '', addressLabel: o.address || '',
+  id: String(o._id), orderCode: o.dailyNumber ? String(o.dailyNumber) : '', restaurantName: o.restaurantName || '', addressLabel: o.address || '',
   deliveryFee: tiyinToSom(o.finance?.courierPayout), collectAmount: o.paymentMethod === 'cash' ? tiyinToSom(o.finance?.totalCharged) : 0, isPaid: o.paymentMethod !== 'cash',
   assignedAt: o.lokmaCourier?.claimedAt || null, deliveredAt: o.deliveredAt || o.lokmaCourier?.deliveredAt || null,
   minutes: o.lokmaCourier?.claimedAt && (o.deliveredAt || o.lokmaCourier?.deliveredAt)

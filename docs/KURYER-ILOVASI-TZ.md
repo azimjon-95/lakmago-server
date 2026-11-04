@@ -1,115 +1,54 @@
-# TZ: LokmaGo kuryer ilovasi
+# TZ: LokmaGo kuryer ilovasi (restoran ilovasi ichidagi «Kuryer» tomoni)
 
-LokmaGo'ning o'z kuryerlari uchun ilova (alohida frontend, masalan `lokma-courier`; Capacitor — iOS/Android).
-Server tomoni tayyor: `src/controllers/delivery.js`, `src/services/courierPool.js`. Tizim mantig'i: `docs/YETKAZISH-REJIMLARI.md`.
+**Yagona ilova** (`lokmago-restaurant-android`: Android + iOS). Ochilganda **«Restoran boshqaruvi» / «Kuryer»** tanlanadi, keyin shu tomonning login/paroli.
+Kuryer akkauntini **admin** yaratadi (`LokmaGo kuryerlari` sahifasi). Server: `controllers/courierApp.js`, `services/courierApp.js`, `services/courierPool.js`, `services/courierTrack.js`.
+Tizim mantig'i: `docs/YETKAZISH-REJIMLARI.md`, API: `docs/COURIER-APP.md`.
 
 ## 1. Asosiy g'oya
+- Restoran buyurtmani **qabul qilgach**, LokmaGo kuryeri yetkazadigan buyurtma **umumiy qutiga** tushadi.
+- **Kim birinchi «Qabul qilish» bossa — o'sha oladi** (server atomik: ikkinchi kuryer «boshqa kuryer oldi» oladi).
+- Kuryer ko'radi: o'z **ish tumanlaridagi** buyurtmalarni **va** o'ziga **biriktirilgan restoranlar**ning buyurtmalarini. Restoranga kuryerlar biriktirilgan bo'lsa (admin), uning buyurtmalarini **faqat shular** ko'radi va oladi (tumanidan qat'i nazar).
+- Qutida **mijoz manzili va telefoni yo'q** — faqat restoran, tuman, taomlar, kuryer haqi, naqd summasi, masofa. To'liq ma'lumot qabul qilgach ochiladi.
 
-- Restoran buyurtmani **qabul qilgach**, buyurtma **umumiy qutiga** tushadi.
-- O'sha tumandagi barcha kuryerlar uni ko'radi, **kim birinchi «Olaman» bossa — o'sha oladi**. Server buni atomik qiladi: ikkinchi kuryer «Bu buyurtmani boshqa kuryer oldi» javobini oladi.
-- Kuryer faqat **o'zi tanlagan tumanlardagi** buyurtmalarni ko'radi. Tumanni istalgan payt o'zgartiradi (masalan bugun Chust tumaniga borib ishlaydi).
-- Qutida **mijozning aniq manzili va telefoni ko'rinmaydi** — faqat restoran, masofa, kuryer haqi va naqd summasi. To'liq ma'lumot buyurtmani olgach ochiladi.
+## 2. Kuryerning kunlik ishi
+1. **«Ishni boshladim»** → smena ochiladi, **joylashuv har 5 soniyada** serverga ketadi (smena ochiq turguncha).
+2. Quti ro'yxati (5 s da yangilanadi + push). **«Qabul qilish»** → faol buyurtma.
+3. **Restoranga boradi** → **«Taomni oldim»** (serverga joylashuv bilan; restorandan uzoq bo'lsa adminga belgilanadi).
+4. **Mijozga olib boradi** → **«Topshirdim»** (mijoz manziliga yaqinligi tekshiriladi; naqd bo'lsa pul olinadi).
+5. **«Ishni yakunladim»** — faqat faol buyurtma bo'lmaganda.
 
-## 2. Ekranlar
+Ekranlarda ko'rinadi: bosqich («Restoranga boring va taomni oling» / «Taom qo'lingizda — mijozga olib boring»), **«Sizning haqingiz»** (kuryer ulushi, masalan 27 000), naqd bo'lsa **«Mijozdan olinadi: X»**, tekin yetkazishda «mijozga tekin».
 
-### 2.1 Kirish
-- **Kiritiladi:** telefon va PIN (4–8 raqam). Kuryerni admin qo'shadi va PIN beradi. Ro'yxatdan o'tish ilovada yo'q.
-- `POST /api/courier/auth/login { phone, pin }` → `{ token, courier }`. Token xavfsiz xotirada saqlanadi (Capacitor Preferences / Keychain).
-- **Xatolar:**
-  - `401 BAD_CREDENTIALS` — «Telefon yoki PIN noto'g'ri»;
-  - `403 COURIER_PENDING` — «Akkaunt hali tasdiqlanmagan»;
-  - `403 COURIER_BLOCKED` — «Akkaunt bloklangan»;
-  - `429` — ko'p urinish, 15 daqiqa kuting.
-- Har qanday so'rovda `401 SESSION_EXPIRED` kelsa (PIN almashgan yoki bloklangan) — tokenni o'chirib, kirish ekraniga qaytish.
+## 3. Nazorat (admin ko'radi)
+- **Jonli xarita** (`GET /admin/courier-accounts/live`): smenadagi kuryerlar, hozirgi joyi, signal (yashil / eskirgan >60 s / yo'q), **qaysi taomni qayerdan qayerga olib ketyapti** (bosqich, maqsadgacha masofa, olingan vaqt, naqd).
+- **Kuryer yo'li** (`/admin/courier-accounts/:id/track`) — bazaga yozilgan nuqtalar (harakatda har ≥15 m, turganda har 60 s; 45 kun saqlanadi).
+- **Buyurtma izi** (`/admin/orders/:id/courier-trace`): olish → taomni oldi → topshirdi, har biri kuryerning o'sha paytdagi joylashuvi va maqsadgacha masofa bilan.
+- **Shubhali voqealar** (`/admin/courier-events`): «oldim» restorandan >250 m, «topshirdim» mijozdan >400 m, joylashuv yo'q/eskirgan. Standart holda **bloklanmaydi** (GPS xato berishi mumkin); `COURIER_ENFORCE_PROXIMITY=1` bo'lsa uzoqdan bosish rad etiladi.
 
-### 2.2 Bosh ekran: «Ishdaman» va quti
-- **Tepada:**
-  - katta **«Ishdaman / Dam olyapman»** almashtirgichi — `PATCH /api/courier/me { isOnline }`. Tuman tanlanmagan bo'lsa server `400 NO_DISTRICTS` qaytaradi → tumanlar ekranini ochish;
-  - tanlangan tumanlar (chiplar) va «O'zgartirish» tugmasi.
-- **Balans kartasi** (`GET /api/courier/me`):
-  - `balanceSom` — musbat bo'lsa «LokmaGo sizga qarz: X so'm», manfiy bo'lsa «Qo'lingizdagi LokmaGo puli: X so'm»;
-  - `cashRoomSom` — «Yana X so'mlik naqd buyurtma olishingiz mumkin». 0 yoki manfiy bo'lsa, ogohlantirish: «Naqdni topshiring».
-- **Quti ro'yxati** (`GET /api/courier/pool`). Har kartada:
-  - restoran nomi va manzili, holat («Tayyorlanmoqda» / «Tayyor»);
-  - restorandan mijozgacha masofa (`distanceKm`, to'g'ri chiziq);
-  - **kuryer haqi** `earningSom` (masalan 27 000 so'm);
-  - to'lov: **naqd X so'm oling** (`cashToCollectSom`) yoki «Karta — to'langan»;
-  - «Tekin yetkazish» belgisi (`freeDelivery`) — mijozdan yetkazish puli olinmaydi, kuryer haqi baribir beriladi;
-  - **«Olaman»** tugmasi.
-- **«Olaman»** — `POST /api/courier/orders/:id/claim`:
-  - `200` → «Faol buyurtmalar» ekraniga;
-  - `409 RACE_LOST` → «Boshqa kuryer ulgurdi», karta ro'yxatdan olib tashlanadi;
-  - `409 ACTIVE_LIMIT` → «Bir vaqtda N tadan ortiq olib bo'lmaydi»;
-  - `409 DEBT_LIMIT` → «Qo'lingizdagi naqd chegaradan oshadi — avval topshiring» (javobda `balanceSom`, `openCashSom`, `limitSom`);
-  - `409 OFFLINE` → «Avval «Ishdaman»ni yoqing»;
-  - `409 WRONG_DISTRICT` → tumanlar o'zgargan, ro'yxatni yangilash.
+## 4. Pul (kuryer ko'radigan)
+- Naqd buyurtma: mijozdan **jami summa** olinadi → kuryer balansidan ayriladi (u pul LokmaGo'niki); kuryer ulushi balansiga qo'shiladi. Qo'lidagi LokmaGo puli chegaradan (standart 500 000) oshsa — yangi **naqd** buyurtma ololmaydi, avval topshiradi.
+- Karta buyurtma: kuryerga faqat ulushi yoziladi.
+- Naqdni topshirish va ulushni to'lash — **admin kassasi** (ilovada tugma yo'q).
 
-### 2.3 Tumanlar
-- Ro'yxat: `GET /api/districts`. U Namangan shahri (3 ta) va 11 ta tumandan iborat, uz/uzc/ru nomlari bilan. Ikki guruhda, belgilash (chip) shaklida ko'rsatiladi.
-- Saqlash: `PATCH /api/courier/me { workDistricts: [...] }`.
-- Saqlangach soketga `courier:refresh-rooms` yuboriladi (yangi tuman hodisalari kelishi uchun) va quti qayta yuklanadi.
-
-### 2.4 Faol buyurtma
-`GET /api/courier/orders/active` — to'liq ma'lumot:
-- **restoran:** nom, manzil, telefon (qo'ng'iroq), xarita/navigatsiya tugmasi;
-- **mijoz:** ism, telefon (qo'ng'iroq), manzil, izoh/mo'ljal, koordinata (navigatsiya);
-- taomlar ro'yxati, jami summa, naqd bo'lsa **«Mijozdan X so'm oling»**.
-
-Holatga qarab tugmalar:
-
-| Holat | Tugma | So'rov |
-|---|---|---|
-| Olindi, restoranda | **«Taomni oldim»** | `POST /orders/:id/pickup` → «Yo'lda» |
-| Olindi, restoranda | «Qaytarish» (faqat olishdan oldin, tasdiq so'raladi) | `POST /orders/:id/release` → qutiga qaytadi |
-| Yo'lda | **«Mijozga topshirdim»** | `POST /orders/:id/deliver` |
-
-- **«Taomni oldim»:** restoran «Tayyor»ni bosmagan bo'lsa ham ishlaydi (taom qo'lda). Bosishdan oldin tasdiq oynasi chiqadi: «Taom qo'lingizdami?».
-- **«Topshirdim»:** naqd bo'lsa tasdiq oynasi — «Mijozdan X so'm oldingizmi?». Javobda yangilangan balans keladi.
-
-### 2.5 Tarix va kassa
-- `GET /api/courier/orders/history?days=30` — yetkazilganlar, har biri bo'yicha haq, jami daromad.
-- `GET /api/courier/ledger` — balans harakatlari:
-  - «Mijozdan naqd olindi» (−);
-  - «Yetkazish ulushi» (+);
-  - «Naqd topshirildi» (+);
-  - «Kuryerga to'landi» (−);
-  - «Tuzatish».
-- Naqdni topshirish va to'lovni **LokmaGo kassasi (admin)** yozadi — ilovada bunday tugma yo'q.
-
-## 3. Real vaqt (Socket.IO)
-
-- **Ulanish:** `io(SOCKET_URL, { auth: { token } })` — server kuryerni avtomatik `courier:<id>` va `courier-district:<tuman>` xonalariga qo'shadi (`courier:joined { ok, districts }`).
-- **Hodisalar:**
-  - `pool:new { orderId }` — qutiga yangi buyurtma: ovoz/tebranish (faqat «Ishdaman» holatida) va ro'yxatni yangilash;
-  - `pool:taken { orderId }` / `pool:removed { orderId }` — kartani ro'yxatdan olib tashlash;
-  - `courier:order { _id, status | released }` — o'z buyurtmasi o'zgardi (restoran «Tayyor» bosdi, bekor qilindi, admin qaytardi) → faol buyurtmani yangilash va xabar ko'rsatish.
-- **Ishonchlilik:** soket uzilsa, quti har 20 soniyada `GET /pool` bilan yangilanadi. Faqat soketga tayanmang.
-
-## 4. Push-bildirishnoma (keyingi bosqich)
-
-Ilova yopiq bo'lsa ham «Qutida yangi buyurtma» kelishi uchun FCM/APNs kerak. Serverda kuryer qurilma tokeni hali yo'q — keyingi bosqich (`docs/MOBIL-PUSH.md` naqshi bo'yicha).
-
-## 5. Qoidalar
-
-- **Pul:** ilova pulni hisoblamaydi — barcha summalar serverdan keladi (`*Som` maydonlar). Hisob mantig'i faqat serverda.
-- **Joylashuv:** kuryerdan joylashuv faqat «Ishdaman» holatida va ruxsat bilan so'raladi. Mijozga kuzatuv xaritasi — keyingi bosqich.
-- **Tillar:** uz (lotin), uzc (kirill), ru — tumanlar nomi serverdan uchala tilda keladi.
-
-## 6. API qisqacha
-
+## 5. Ilova API (`/api/courier-app/*`, kuryer JWT)
 | Usul | Yo'l | Izoh |
 |---|---|---|
-| POST | `/courier/auth/login` | telefon + PIN → token |
-| GET | `/courier/me` | profil, balans, chegara, tumanlar ro'yxati |
-| PATCH | `/courier/me` | `workDistricts`, `isOnline`, `vehicle` |
-| GET | `/courier/pool` | quti (o'z tumanlari, manzilsiz) |
-| GET | `/courier/orders/active` | olingan buyurtmalar (to'liq) |
-| GET | `/courier/orders/history` | tarix va daromad |
-| GET | `/courier/ledger` | balans harakatlari |
-| POST | `/courier/orders/:id/claim` | olish (kim ulgursa) |
-| POST | `/courier/orders/:id/release` | qaytarish (olishdan oldin) |
-| POST | `/courier/orders/:id/pickup` | taomni oldim → yo'lda |
-| POST | `/courier/orders/:id/deliver` | topshirdim → yakunlandi |
-| GET | `/districts` | tumanlar (ochiq) |
+| POST | `/login` | `{login, password}` → token |
+| GET | `/me` | profil, tumanlar, smena, **hamyon** (balans, naqd chegarasi) |
+| PATCH | `/me` | `{workDistricts}` — kuryer o'z tumanlarini o'zgartiradi (ilovada hali tugma yo'q) |
+| GET | `/shift` · POST `/shift/start` · `/shift/end` | smena |
+| POST | `/location` | har ~5 s `{lat,lng,accuracy?,speed?,heading?}`; 204 |
+| GET | `/offers` | quti (o'z tumanlari + biriktirilgan restoranlar), masofa bo'yicha |
+| POST | `/offers/:id/accept` | olish; xatolar: `RACE_LOST`, `ACTIVE_LIMIT`, `DEBT_LIMIT`, `OFFLINE`, `WRONG_DISTRICT`, `NOT_YOUR_RESTAURANT` |
+| GET | `/active` | faol buyurtma: `stage`, `canPickup`, `canDeliver`, mijoz ma'lumoti, `deliveryFee` = kuryer haqi |
+| POST | `/active/pickup` | **«Taomni oldim»** |
+| POST | `/active/deliver` | **«Topshirdim»** |
+| GET | `/history`, `/stats`, `/shifts` | tarix, hisobot (kuryer haqi), smenalar |
+| POST/DELETE | `/devices`, `/devices/test` | push token |
 
-Barcha so'rovlarda `Authorization: Bearer <token>` (login va `/districts` dan tashqari).
+Xato javoblari: `{ error, code, ...qo'shimcha }`. Soket: handshake `auth.token` → `courier:<id>`, `courier-district:<tuman>` xonalari (`pool:new`, `pool:taken`, `courier:order`).
+
+## 6. Hali qilinmagan (keyingi bosqich)
+- Ilovada **tuman tanlash** ekrani (API tayyor: `PATCH /me`, `GET /districts`); hozircha tumanni admin belgilaydi.
+- Bir vaqtda **bir nechta** faol buyurtma (ilova hozircha bittasini ko'rsatadi; `maxActiveOrders` = 1).
+- Ilovadan **hamyon** (balans) ko'rinishi (`GET /me` → `wallet` tayyor).

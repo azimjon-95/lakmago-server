@@ -53,7 +53,7 @@ test('takliflar: smenada emas — bo\'sh; smenada — quti, ilova shaklida; kury
   const offers = await app.listOffers(a._id);
   assert.equal(offers.length, 1);
   const o = offers[0];
-  assert.equal(o.kind, 'pool'); assert.equal(o.orderCode, '#21'); assert.equal(o.restaurantName, 'Osh markazi');
+  assert.equal(o.kind, 'pool'); assert.equal(o.orderCode, '21', 'ilova o\'zi "#" qo\'yadi — serverda faqat raqam'); assert.equal(o.restaurantName, 'Osh markazi');
   assert.equal(o.deliveryFee, 27000, 'ilovadagi "yetkazish haqi" = KURYER ulushi'); assert.equal(o.collectAmount, 133000); assert.equal(o.isPaid, false);
   assert.equal(o.itemsSummary, '2× Osh, 1× Choy'); assert.equal(o.addressLabel, 'Pop tumani');
   assert.ok(o.distanceM > 0 && o.distanceM < 100);
@@ -113,7 +113,7 @@ test('TO\'LIQ OQIM: olish → taomni oldim → topshirdim; smenani faol buyurtma
   assert.equal(w.cashRoomSom, 394000);
 
   const h = await app.history(a._id);
-  assert.equal(h.length, 1); assert.equal(h[0].deliveryFee, 27000); assert.equal(h[0].collectAmount, 133000); assert.equal(h[0].orderCode, '#21');
+  assert.equal(h.length, 1); assert.equal(h[0].deliveryFee, 27000); assert.equal(h[0].collectAmount, 133000); assert.equal(h[0].orderCode, '21');
   const st = await app.stats(a._id);
   assert.equal(st.today.deliveries, 1); assert.equal(st.today.deliveryFees, 27000);
   assert.equal((await app.endShift(a._id)).onShift, false, 'topshirgach smenani yakunlash mumkin');

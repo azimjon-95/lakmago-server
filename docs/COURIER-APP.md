@@ -43,3 +43,11 @@ Bir vaqtda ushlab turish: `COURIER_MAX_ACTIVE` (1).
 1. `.env`: ixtiyoriy `COURIER_JWT_SECRET`, `REDIS_URL` (tavsiya). `git pull` → `pm2 restart lakmago-server`.
 2. Admin: «Kuryer akkauntlari» sahifasida akkaunt yarating (yoki `POST /api/admin/courier-accounts`).
 Rollback: `git revert` + restart — yangi kolleksiyalar va maydon qoladi, hech narsaga ta'sir qilmaydi.
+
+---
+## YANGILANISH (2026-11): LokmaGo umumiy qutisi bilan BIRLASHTIRILDI
+
+Ilova `/api/courier-app/*` bilan ishlashda davom etadi; **takliflar endi umumiy qutidan** (restoran rejimi `lokma`/`both`), havola oqimidagi (Bosqich 1)
+takliflar standart holda **o'chirilgan** (`COURIER_LEGACY_OFFERS=1` bilan yoqiladi — restoranning o'z kuryeri uchun yetkazish puli restoranniki bo'lgani sababli).
+Qo'shildi: `PATCH /me {workDistricts}`, `POST /active/pickup` («Taomni oldim»), `GET /me` → `wallet`, takliflar/faol buyurtmada `stage`, `canPickup`, `canDeliver`,
+`earningSom`, `freeDelivery`; `tokenVersion` (parol almashsa/bloklansa eski sessiyalar darhol tugaydi). To'liq tavsif: `docs/KURYER-ILOVASI-TZ.md`, `docs/YETKAZISH-REJIMLARI.md`.
