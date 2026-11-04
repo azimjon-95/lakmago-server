@@ -18,8 +18,10 @@ export async function courierAuth(req, res, next) {
   try {
     const acc = await CourierAccount.findById(payload.cid).select('name phone vehicle isActive activeShiftId workDistricts debtLimitSom tokenVersion').lean();
     if (!acc) return res.status(401).json({ error: 'Token yaroqsiz' });
-    if (Number(acc.tokenVersion || 0) !== Number(payload.v || 0)) return res.status(401).json({ error: 'Sessiya tugagan. Qayta kiring.', code: 'SESSION_EXPIRED' });
+    // Bloklangan akkaunt — AVVAL: blok tokenVersion'ni ham oshiradi, lekin kuryerga "sessiya tugagan" emas, aniq sabab ko'rsatiladi
     if (!acc.isActive) return res.status(403).json({ error: 'Akkaunt bloklangan. Administrator bilan bog‘laning.' });
+    // Parol almashgan: eski sessiyalar darhol bekor
+    if (Number(acc.tokenVersion || 0) !== Number(payload.v || 0)) return res.status(401).json({ error: 'Sessiya tugagan. Qayta kiring.', code: 'SESSION_EXPIRED' });
     req.courier = acc; req.courierId = String(acc._id);
     next();
   } catch (e) { next(e); }
