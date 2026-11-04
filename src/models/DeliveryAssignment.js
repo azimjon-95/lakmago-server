@@ -17,7 +17,7 @@ import crypto from 'crypto';
  * tekshirib ruxsat beradi, keyin login/parol bilan kiradi. O'sha
  * paytda `assignedCourierId` (pastda, hozir ham bor, lekin
  * hozircha bo'sh qoladi) haqiqiy foydalanishga kiradi, va
- * `models/Courier.js` + `CourierInvite` (shu faylning davomida)
+ * `CourierInvite` (shu faylning davomida). Kuryer akkauntlari (mobil ilova) — `models/CourierAccount.js`
  * to'liq ishga tushadi.
  *
  * "Birinchi qabul qilgan oladi" mantig'i — atomik yozuv,
