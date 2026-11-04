@@ -42,6 +42,8 @@ const deliveryAssignmentSchema = new Schema(
     },
 
     assignedCourierId: { type: Schema.Types.ObjectId, ref: 'Courier', default: null },
+    /** BOSQICH 2: ilovadagi kuryer akkaunti (CourierAccount) qabul qilgan bo'lsa. Havola orqali olinganda null. */
+    assignedAccountId: { type: Schema.Types.ObjectId, ref: 'CourierAccount', default: null, index: true },
 
     /*
      * QABUL QILGAN KURYER — o'zi kiritgan ma'lumot (kuryer sahifasi, qabul qilgach).

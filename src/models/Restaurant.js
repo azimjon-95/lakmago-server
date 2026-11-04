@@ -276,6 +276,12 @@ const restaurantSchema = new Schema(
     courierMode: { type: String, enum: ['own', 'lokma', 'both'], default: 'own' },
     lokmaFreeDelivery: { type: Boolean, default: false },
     lokmaCourierPercent: { type: Number, default: null, min: 0, max: 100 },
+    /*
+     * BIRIKTIRILGAN KURYERLAR (LokmaGo admini): bo'sh emas bo'lsa shu restoranning LokmaGo buyurtmalarini FAQAT shu kuryerlar
+     * ko'radi va oladi (boshqa kuryer — tumani mos bo'lsa ham — yo'q). Biriktirilgan kuryer uchun tuman cheklovi ham yo'q.
+     * Bo'sh — hamma (tumani mos kuryerlar). Faqat 'lokma' / 'both' rejimida ahamiyatli.
+     */
+    exclusiveCouriers: { type: [Schema.Types.ObjectId], ref: 'CourierAccount', default: [] },
     courierSettingsUpdatedAt: { type: Date, default: null },
     courierSettingsUpdatedBy: { type: String, default: '' },
     // Tayyorlash vaqti (daqiqa) — olib ketish uchun "nechida tayyor" hisobi

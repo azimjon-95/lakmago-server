@@ -1,13 +1,15 @@
 /*
  * Testlar uchun xotiradagi soxta Mongo kolleksiyasi (baza kerak emas).
- * Qo'llab-quvvatlanadi: nuqtali yo'llar, tenglik (ObjectId ↔ satr), null (maydon yo'q ham), $in, $nin, $ne;
+ * Qo'llab-quvvatlanadi: nuqtali yo'llar, tenglik (ObjectId ↔ satr), null (maydon yo'q ham), $in, $nin, $ne, $exists, $or, $and;
  * yangilash: $set, $inc (nuqtali). findOneAndUpdate ATOMIK (JS bir oqimli) — poyga holatini ketma-ket sinash mumkin.
  */
 export const get = (obj, path) => path.split('.').reduce((o, k) => (o == null ? undefined : o[k]), obj);
-const same = (a, b) => (a == null && b == null) || (a != null && b != null && String(a) === String(b));
+const same = (a, b) => (a == null && b == null) || (Array.isArray(a) ? a.some((x) => String(x) === String(b)) : a != null && b != null && String(a) === String(b));
 
 export function matches(doc, filter = {}) {
   return Object.entries(filter).every(([k, cond]) => {
+    if (k === '$or') return cond.some((f) => matches(doc, f));
+    if (k === '$and') return cond.every((f) => matches(doc, f));
     const v = get(doc, k);
     if (cond && typeof cond === 'object' && !Array.isArray(cond) && !(cond.constructor?.name === 'ObjectId')
       && Object.keys(cond).some((x) => x.startsWith('$'))) {
@@ -15,7 +17,11 @@ export function matches(doc, filter = {}) {
         if (op === '$in') return arg.some((a) => same(v, a));
         if (op === '$nin') return !arg.some((a) => same(v, a));
         if (op === '$ne') return !same(v, arg);
+        if (op === '$exists') return (v !== undefined) === Boolean(arg);
         if (op === '$gte') return v >= arg;
+        if (op === '$gt') return v > arg;
+        if (op === '$lte') return v <= arg;
+        if (op === '$lt') return v < arg;
         throw new Error(`fakeModel: ${op} qo'llab-quvvatlanmaydi`);
       });
     }

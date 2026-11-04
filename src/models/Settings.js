@@ -62,7 +62,7 @@ const settingsSchema = new Schema(
     courier: {
       commissionPercent: { type: Number, default: 10, min: 0, max: 100 },
       debtLimitSom: { type: Number, default: 500000, min: 0 },
-      maxActiveOrders: { type: Number, default: 3, min: 1, max: 10 },
+      maxActiveOrders: { type: Number, default: 1, min: 1, max: 10 },    // mobil ilova hozircha BITTA faol buyurtma ko'rsatadi — oshirish uchun ilovada ro'yxat kerak
     },
   },
   { timestamps: true },

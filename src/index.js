@@ -15,6 +15,8 @@ import { verifyRestaurantWebhook } from './services/restaurantBotApi.js';
 import { ensureDefaultAdmin } from './services/bootstrap.js';
 import { initPush } from './services/push.js';
 import { initMobilePush, checkPendingOrderPushes } from './services/mobilePush.js';
+import { dispatchOffers } from './services/courierPush.js';
+import { closeStaleShifts } from './services/courierApp.js';
 import { apiLimiter, loginLimiter } from './middleware/rateLimit.js';
 import { jDumpController } from './controllers/jDump.js';
 import mongoSanitize from 'express-mongo-sanitize';
@@ -420,6 +422,9 @@ async function main() {
   initMobilePush();
   // Qabul qilinmagan yangi buyurtma: push qayta yuboriladi (iOS o'zi takrorlay olmaydi)
   setInterval(() => checkPendingOrderPushes().catch((e) => console.error('[mobilePush]', e.message)), 10_000);
+  // Kuryer ilovasi: ochiq takliflarni smenadagi YAQIN kuryerlarga yuborish (5 s) va unutilgan smenalarni yopish (10 daq)
+  setInterval(() => dispatchOffers().catch((e) => console.error('[courierPush]', e.message)), 5_000);
+  setInterval(() => closeStaleShifts().catch((e) => console.error('[courierShift]', e.message)), 10 * 60_000);
 
   httpServer.listen(config.port, () => {
     console.log(`✓ LokmaGo API http://localhost:${config.port}`);

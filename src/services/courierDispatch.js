@@ -435,3 +435,26 @@ export async function updateCourierLocation(token, secret, { lat, lng, accuracy,
   getIO()?.to(`order:${a.orderId}`).emit('order:courier', { orderId: String(a.orderId) });
   return { ok: true };
 }
+
+/**
+ * BOSQICH 2: ilovadagi kuryer akkauntining joylashuvi faol buyurtmaga yoziladi — mijoz kuzatuvi (orderTrack) avvalgidek ishlaydi.
+ * updateCourierLocation (havola + secret) bilan bir xil mantiq (nuqta + «yetib keldi»), faqat egalik akkaunt bo'yicha tekshiriladi
+ * (chaqiruvchi tekshiradi). Mavjud funksiyalarga TEGILMAGAN.
+ */
+export async function applyAssignmentLocation(assignmentId, { lat, lng, accuracy, heading }) {
+  const now = new Date();
+  const location = { lat, lng, at: now };
+  if (Number.isFinite(accuracy)) location.accuracy = accuracy;
+  if (Number.isFinite(heading)) location.heading = heading;
+  // updateOne + findById (findOneAndUpdate + proyeksiya emas): har qanday MongoDB-mos bazada ishlaydi
+  const res = await DeliveryAssignment.updateOne({ _id: assignmentId, status: 'assigned' }, { $set: { location } });
+  if (!res.matchedCount) return false;
+  const a = await DeliveryAssignment.findById(assignmentId).select('orderId deliverySnapshot').lean();
+  if (!a) return false;
+  const snap = a.deliverySnapshot || {};
+  if (Number.isFinite(snap.lat) && Number.isFinite(snap.lng) && haversineMeters({ lat, lng }, { lat: snap.lat, lng: snap.lng }) <= ARRIVED_RADIUS_M) {
+    await Order.updateOne({ _id: a.orderId, status: 'delivering', arrivedAt: { $exists: false } }, { $set: { arrivedAt: now } });
+  }
+  getIO()?.to(`order:${a.orderId}`).emit('order:courier', { orderId: String(a.orderId) });
+  return true;
+}

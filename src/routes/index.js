@@ -38,10 +38,9 @@ import { settlementController } from '../controllers/settlement.js';
 import { expenseController } from '../controllers/expense.js';
 import { staffController } from '../controllers/staff.js';
 import { panelAdsController, adminAdsController, publicAdsController } from '../controllers/ads.js';
-import { courierAdminController, courierPortalController } from '../controllers/courier.js';
-import {
-  districtsController, courierAppController, adminCourierController, adminRestaurantDeliveryController, panelDeliveryController,
-} from '../controllers/delivery.js';
+import { courierAdminController, courierRegistryController, courierPortalController } from '../controllers/courier.js';
+import { courierAppController, courierAccountAdminController } from '../controllers/courierApp.js';
+import { districtsController, adminCourierController, adminRestaurantDeliveryController, panelDeliveryController } from '../controllers/delivery.js';
 import { courierAuth } from '../middleware/courierAuth.js';
 import { mapsController } from '../controllers/maps.js';
 import { catalogProductController } from '../controllers/catalogProducts.js';
@@ -58,7 +57,7 @@ import {
   auth, requireRole, requirePage, waiterAuth, waiterOrRestaurantAuth,
   kioskAuth, requireKioskSection,
 } from '../middleware/auth.js';
-import { loginLimiter, writeLimiter, courierLocationLimiter, tgLinkStartLimiter, tgLinkPollLimiter } from '../middleware/rateLimit.js';
+import { loginLimiter, writeLimiter, courierLocationLimiter, courierAppLocationLimiter, tgLinkStartLimiter, tgLinkPollLimiter } from '../middleware/rateLimit.js';
 import { botBroadcastController } from '../controllers/botBroadcast.js';
 import { adAttachment, adChunkBody, adUploadController } from '../middleware/adUpload.js';
 import { restaurantPinsController } from '../controllers/restaurantPins.js';
@@ -387,10 +386,10 @@ router.get('/panel/orders/:id/dispatch-status', ...R, courierAdminController.dis
  * admin panelidagi "Kuryerlar" sahifasi bu bilan ishlaydi, lekin
  * yuqoridagi ulashish oqimi bilan bog'liq EMAS).
  */
-router.get('/admin/couriers', ...AS('couriers'), adminCourierController.list);
-router.post('/admin/couriers', ...AS('couriers'), adminCourierController.create);
-router.patch('/admin/couriers/:id', ...AS('couriers'), adminCourierController.update);
-router.delete('/admin/couriers/:id', ...AS('couriers'), adminCourierController.remove);
+router.get('/admin/couriers', ...AS('couriers'), courierRegistryController.list);
+router.post('/admin/couriers', ...AS('couriers'), courierRegistryController.create);
+router.patch('/admin/couriers/:id', ...AS('couriers'), courierRegistryController.update);
+router.delete('/admin/couriers/:id', ...AS('couriers'), courierRegistryController.remove);
 
 /*
  * ═══ LOKMAGO KURYERLARI va YETKAZISH REJIMI (2026-11) ═══ — controllers/delivery.js, services/courierPool.js
@@ -398,8 +397,13 @@ router.delete('/admin/couriers/:id', ...AS('couriers'), adminCourierController.r
  * kuryer kassasi (naqd topshirish/to'lov/tuzatish) — moliya bo'limi ('billing'); kuryerlar va quti — 'couriers'.
  */
 router.get('/districts', districtsController.list);
-router.get('/admin/couriers/:id/ledger', ...AS('couriers'), adminCourierController.ledger);
-router.post('/admin/couriers/:id/ledger', ...AS('billing'), writeLimiter, adminCourierController.addLedger);
+router.get('/admin/courier-accounts/:id/ledger', ...AS('couriers'), adminCourierController.ledger);
+router.post('/admin/courier-accounts/:id/ledger', ...AS('billing'), writeLimiter, adminCourierController.addLedger);
+router.get('/admin/courier-accounts/live', ...AS('couriers'), adminCourierController.live);
+router.get('/admin/courier-accounts/:id/track', ...AS('couriers'), adminCourierController.track);
+router.get('/admin/orders/:id/courier-trace', ...AS('couriers'), adminCourierController.trace);
+router.get('/admin/courier-events', ...AS('couriers'), adminCourierController.events);
+router.put('/admin/restaurants/:id/couriers', ...AS('couriers'), writeLimiter, adminRestaurantDeliveryController.setExclusiveCouriers);
 router.get('/admin/courier-pool', ...AS('couriers'), adminCourierController.pool);
 router.post('/admin/orders/:id/courier-assign', ...AS('couriers'), adminCourierController.assign);
 router.post('/admin/orders/:id/courier-release', ...AS('couriers'), adminCourierController.release);
@@ -410,18 +414,6 @@ router.patch('/admin/restaurants/:id/district', ...AS('restaurants'), adminResta
 router.get('/panel/courier-settings', ...R, panelDeliveryController.info);
 router.post('/panel/orders/:id/courier-party', ...R, writeLimiter, panelDeliveryController.setParty);
 
-// Kuryer ilovasi (telefon + PIN → token). Kuryer TZ: COURIER-APP-TZ.md
-router.post('/courier/auth/login', loginLimiter, courierAppController.login);
-router.get('/courier/me', courierAuth, courierAppController.me);
-router.patch('/courier/me', courierAuth, writeLimiter, courierAppController.updateMe);
-router.get('/courier/pool', courierAuth, courierAppController.pool);
-router.get('/courier/orders/active', courierAuth, courierAppController.active);
-router.get('/courier/orders/history', courierAuth, courierAppController.history);
-router.get('/courier/ledger', courierAuth, courierAppController.ledger);
-router.post('/courier/orders/:id/claim', courierAuth, writeLimiter, courierAppController.claim);
-router.post('/courier/orders/:id/release', courierAuth, writeLimiter, courierAppController.release);
-router.post('/courier/orders/:id/pickup', courierAuth, writeLimiter, courierAppController.pickup);
-router.post('/courier/orders/:id/deliver', courierAuth, writeLimiter, courierAppController.deliver);
 
 /*
  * OCHIQ — kuryer sahifasi. Login YO'Q: token o'zi kredensial.
@@ -434,6 +426,32 @@ router.post('/courier-portal/:token/deliver', writeLimiter, courierPortalControl
 router.post('/courier-portal/:token/profile', writeLimiter, courierPortalController.profile);
 // GPS har ~8 soniyada — umumiy yozish limitidan alohida, yumshoqroq
 router.post('/courier-portal/:token/location', courierLocationLimiter, courierPortalController.location);
+
+/*
+ * KURYER ILOVASI (BOSQICH 2) — login/parol bilan kiradigan ishchi kuryer (mobil ilovadagi «Kuryer» bo'limi).
+ * Bosqich 1 (havola) o'zgarmagan. Kuryer tokeni BOSHQA kalit bilan imzolanadi: mavjud `auth` uni qabul qilmaydi (courierAuth alohida).
+ */
+router.post('/courier-app/login', loginLimiter, courierAppController.login);
+router.get('/courier-app/me', courierAuth, courierAppController.me);
+router.patch('/courier-app/me', courierAuth, writeLimiter, courierAppController.updateMe);
+router.get('/courier-app/shift', courierAuth, courierAppController.shift);
+router.post('/courier-app/shift/start', courierAuth, writeLimiter, courierAppController.shiftStart);
+router.post('/courier-app/shift/end', courierAuth, writeLimiter, courierAppController.shiftEnd);
+router.get('/courier-app/shifts', courierAuth, courierAppController.shifts);
+router.post('/courier-app/location', courierAuth, courierAppLocationLimiter, courierAppController.location);
+router.get('/courier-app/offers', courierAuth, courierAppController.offers);
+router.post('/courier-app/offers/:id/accept', courierAuth, writeLimiter, courierAppController.accept);
+router.get('/courier-app/active', courierAuth, courierAppController.active);
+router.post('/courier-app/active/pickup', courierAuth, writeLimiter, courierAppController.pickup);
+router.post('/courier-app/active/deliver', courierAuth, writeLimiter, courierAppController.deliver);
+router.get('/courier-app/history', courierAuth, courierAppController.history);
+router.get('/courier-app/stats', courierAuth, courierAppController.stats);
+router.post('/courier-app/devices', courierAuth, writeLimiter, courierAppController.registerDevice);
+router.delete('/courier-app/devices', courierAuth, writeLimiter, courierAppController.unregisterDevice);
+router.post('/courier-app/devices/test', courierAuth, writeLimiter, courierAppController.testPush);
+router.get('/admin/courier-accounts', ...AS('couriers'), courierAccountAdminController.list);
+router.post('/admin/courier-accounts', ...AS('couriers'), courierAccountAdminController.create);
+router.patch('/admin/courier-accounts/:id', ...AS('couriers'), courierAccountAdminController.update);
 
 // Reklama (banner) so'rovlari — restoran paneli
 router.get('/panel/ads', ...R, panelAdsController.list);

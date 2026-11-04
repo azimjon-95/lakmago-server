@@ -6,11 +6,15 @@
 process.env.JWT_SECRET = 'x'.repeat(40);
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { Types } from 'mongoose';
+import mongoose, { Types } from 'mongoose';
 import { bindModel } from './helpers/fakeModel.mjs';
+mongoose.set('bufferCommands', false);      // yon ta'sirlar (bot/monitor) bazaga ulanishni kutmasin
 
 const { Order } = await import('../src/models/Order.js');
-const { Courier } = await import('../src/models/Courier.js');
+const { CourierAccount } = await import('../src/models/CourierAccount.js');
+const { CourierEvent } = await import('../src/models/CourierEvent.js');
+const presence = await import('../src/services/courierPresence.js');
+presence._useRedisForTest(false);            // Redis'siz (xotira) rejimi
 const { Ledger } = await import('../src/models/Ledger.js');
 const { Restaurant } = await import('../src/models/Restaurant.js');
 const { Settings } = await import('../src/models/Settings.js');
@@ -21,6 +25,7 @@ const { applyDeliveryParty } = await import('../src/services/deliveryParty.js');
 const id = () => new Types.ObjectId();
 const S = somToTiyin;
 const settings = { courier: { commissionPercent: 10, debtLimitSom: 500000, maxActiveOrders: 2 } };
+const NOW_LOC = (lat, lng) => ({ lat, lng, ts: Date.now() });
 Settings.findOne = async () => settings;
 
 const ledgerRows = [];
@@ -47,10 +52,12 @@ function mkOrder(over = {}) {
   };
 }
 const orders = bindModel(Order, { docs: [] });
-const couriers = bindModel(Courier, { docs: [] });
+const couriers = bindModel(CourierAccount, { docs: [] });
+const events = [];
+CourierEvent.create = async (d) => { events.push(d); return d; };
 const rests = bindModel(Restaurant, { docs: [] });
-const mkCourier = (over = {}) => { const c = { _id: id(), name: 'Ali', status: 'active', isOnline: true, workDistricts: ['pop'], debtLimitSom: null, tokenVersion: 0, ...over }; couriers.docs.push(c); return c; };
-const reset = () => { orders.docs.length = 0; couriers.docs.length = 0; rests.docs.length = 0; ledgerRows.length = 0; };
+const mkCourier = (over = {}) => { const c = { _id: id(), name: 'Ali', isActive: true, activeShiftId: id(), workDistricts: ['pop'], debtLimitSom: null, tokenVersion: 0, ...over }; couriers.docs.push(c); return c; };
+const reset = () => { orders.docs.length = 0; couriers.docs.length = 0; rests.docs.length = 0; ledgerRows.length = 0; events.length = 0; };
 
 test('quti: faqat o\'z tumanidagi, olinmagan, qabul qilingan buyurtmalar; mijoz manzili/telefoni KO\'RINMAYDI', async () => {
   reset();
@@ -81,7 +88,7 @@ test('kim ulgursa: ikkinchi kuryer "boshqa kuryer oldi" oladi; birinchisi takror
 
 test('cheklovlar: oflayn, boshqa tuman, qutida emas, bloklangan', async () => {
   reset();
-  const off = mkCourier({ isOnline: false }); const chust = mkCourier({ workDistricts: ['chust'] }); const blocked = mkCourier({ status: 'blocked' });
+  const off = mkCourier({ activeShiftId: null }); const chust = mkCourier({ workDistricts: ['chust'] }); const blocked = mkCourier({ isActive: false });
   const o = mkOrder(); const own = mkOrder({ courierParty: 'restaurant' }); orders.docs.push(o, own);
   await assert.rejects(pool.claimOrder(off._id, o._id), (e) => e.code === 'OFFLINE');
   await assert.rejects(pool.claimOrder(chust._id, o._id), (e) => e.code === 'WRONG_DISTRICT');
@@ -200,13 +207,13 @@ test('ledger yozuvi xato bersa — bayroq qaytariladi (keyinroq qayta yoziladi, 
 
 test('admin biriktirish va majburiy qaytarish', async () => {
   reset();
-  const c = mkCourier({ isOnline: false, workDistricts: [] });   // admin oflayn kuryerga ham bera oladi
+  const c = mkCourier({ activeShiftId: null, workDistricts: [] });   // admin smenada bo'lmagan kuryerga ham bera oladi
   const o = mkOrder(); orders.docs.push(o);
   await pool.adminAssign(o._id, c._id);
   assert.equal(String(orders.docs[0].lokmaCourier.courierId), String(c._id));
   await pool.releaseOrder(null, o._id, { byAdmin: true });
   assert.equal(orders.docs[0].lokmaCourier.courierId, null);
-  await assert.rejects(pool.adminAssign(o._id, mkCourier({ status: 'blocked' })._id), (e) => e.code === 'COURIER_INACTIVE');
+  await assert.rejects(pool.adminAssign(o._id, mkCourier({ isActive: false })._id), (e) => e.code === 'COURIER_INACTIVE');
 });
 
 test('BIR VAQTDA: 5 kuryer bir oniyda bossa — faqat BITTASI oladi (atomik filtr)', async () => {
@@ -217,4 +224,125 @@ test('BIR VAQTDA: 5 kuryer bir oniyda bossa — faqat BITTASI oladi (atomik filt
   const won = r.filter((x) => x.status === 'fulfilled' && !x.value.already);
   assert.equal(won.length, 1, `g'oliblar: ${won.length}`);
   assert.equal(r.filter((x) => x.status === 'rejected' && x.reason.code === 'RACE_LOST').length, 4);
+});
+
+/* ═══════════ BIRIKTIRILGAN KURYERLAR, NAZORAT VOQEALARI, "OLDIM/TOPSHIRDIM" ═══════════ */
+const { config } = await import('../src/config/index.js');
+const RESTAURANT_LOC = { lat: 40.8700, lng: 71.1100 };
+const CUSTOMER_LOC = { lat: 40.8800, lng: 71.1200 };
+const near = (p, dLat = 0.0003) => ({ lat: p.lat + dLat, lng: p.lng });                  // ~33 m
+const far = (p) => ({ lat: p.lat + 0.02, lng: p.lng });                                   // ~2.2 km
+const putLoc = (c, p, ageMs = 0) => presence.setLocation(String(c._id), { lat: p.lat, lng: p.lng, ts: Date.now() - ageMs });
+const mkRestOrder = (over = {}) => mkOrder({ restaurantId: REST, addressLat: CUSTOMER_LOC.lat, addressLng: CUSTOMER_LOC.lng, ...over });
+const restDoc = (extra = {}) => { rests.docs.push({ _id: REST, name: 'Osh markazi', lat: RESTAURANT_LOC.lat, lng: RESTAURANT_LOC.lng, courierMode: 'lokma', ...extra }); };
+
+test('BIRIKTIRISH: restoranga kuryer biriktirilsa — buyurtmani FAQAT u ko\'radi/oladi; biriktirilgan kuryerga tuman cheklovi yo\'q', async () => {
+  reset();
+  const bound = mkCourier({ name: 'Biriktirilgan', workDistricts: ['chust'] });       // tumani mos EMAS
+  const other = mkCourier({ name: 'Boshqa', workDistricts: ['pop'] });               // tumani mos
+  restDoc({ exclusiveCouriers: [bound._id] });
+  const o = mkRestOrder(); orders.docs.push(o);
+  assert.equal((await pool.listPool(other)).length, 0, 'boshqa kuryer (tumani mos bo\'lsa ham) ko\'rmaydi');
+  assert.equal((await pool.listPool(bound)).length, 1, 'biriktirilgan kuryer tumanidan qat\'i nazar ko\'radi');
+  await assert.rejects(pool.claimOrder(other._id, o._id), (e) => e.code === 'NOT_YOUR_RESTAURANT' && e.status === 403);
+  assert.equal((await pool.claimOrder(bound._id, o._id)).already, false);
+});
+
+test('BIRIKTIRISH: biriktirilmagan restoran — tumani mos hamma; biriktirilgani boshqa kuryerlar uchun yopiq, ammo ularning tumanidagi BOSHQA restoranlar ochiq', async () => {
+  reset();
+  const A = mkCourier({ workDistricts: ['pop'] }); const B = mkCourier({ workDistricts: ['pop'] });
+  const R2 = new Types.ObjectId();
+  restDoc({ exclusiveCouriers: [A._id] });
+  const exclusiveOrder = mkRestOrder();
+  const openOrder = mkRestOrder({ restaurantId: R2 });
+  orders.docs.push(exclusiveOrder, openOrder);
+  const forB = await pool.listPool(B);
+  assert.deepEqual(forB.map((c) => c.id), [String(openOrder._id)], 'B faqat biriktirilmagan restoranniki');
+  assert.equal((await pool.listPool(A)).length, 2, 'A: o\'z restorani + tumanidagi ochiq');
+  // Biriktirish olib tashlansa — hamma ko'radi
+  rests.docs[0].exclusiveCouriers = [];
+  assert.equal((await pool.listPool(B)).length, 2);
+});
+
+test('NAZORAT: olish voqeasi yoziladi (kuryerning o\'sha paytdagi joylashuvi bilan)', async () => {
+  reset();
+  const c = mkCourier(); restDoc();
+  await putLoc(c, near(RESTAURANT_LOC));
+  const o = mkRestOrder(); orders.docs.push(o);
+  await pool.claimOrder(c._id, o._id);
+  await new Promise((r) => setImmediate(r));
+  const ev = events.find((e) => e.type === 'claimed');
+  assert.ok(ev && String(ev.courierId) === String(c._id) && Math.abs(ev.lat - near(RESTAURANT_LOC).lat) < 1e-9, 'claimed voqeasi va joylashuvi');
+});
+
+test('"TAOMNI OLDIM": restoranda → holat "yo\'lda", voqea belgilanmaydi; restorandan uzoq → belgilanadi (lekin o\'tadi)', async () => {
+  reset();
+  const c = mkCourier(); restDoc();
+  const ok = mkRestOrder({ status: 'ready' }); const bad = mkRestOrder({ status: 'ready' });
+  orders.docs.push(ok, bad);
+  await pool.claimOrder(c._id, ok._id);
+  await putLoc(c, near(RESTAURANT_LOC));
+  const r1 = await pool.pickupOrder(c._id, ok._id, { actorName: 'Ali' });
+  assert.equal(r1.ok, true);
+  assert.equal(orders.docs.find((x) => x._id === ok._id).status, 'delivering');
+  assert.ok(orders.docs.find((x) => x._id === ok._id).lokmaCourier.pickedUpAt instanceof Date);
+  const evOk = events.filter((e) => e.type === 'picked_up' && String(e.orderId) === String(ok._id));
+  assert.equal(evOk.length, 1); assert.equal(evOk[0].flagged, false); assert.ok(evOk[0].targetDistanceM < 100);
+  assert.equal((await pool.pickupOrder(c._id, ok._id)).already, true, 'takror bosish — xato emas');
+
+  // 2-buyurtma: kuryer restorandan 2 km uzoqda "oldim" bosadi
+  c.activeShiftId = id();
+  await pool.claimOrder(c._id, bad._id).catch(() => {});                // limit 2 — ikkinchisi ham olinadi
+  await putLoc(c, far(RESTAURANT_LOC));
+  const r2 = await pool.pickupOrder(c._id, bad._id);
+  assert.equal(r2.check.flagged, true); assert.equal(r2.check.flagReason, 'far_from_restaurant');
+  assert.ok(events.some((e) => e.flagged && e.flagReason === 'far_from_restaurant' && String(e.orderId) === String(bad._id)));
+});
+
+test('"TOPSHIRDIM": avval "oldim" shart; mijoz manziliga yaqin → yetkazildi; uzoq → belgilanadi; joylashuvsiz → "no_location"', async () => {
+  reset();
+  const c = mkCourier(); restDoc();
+  const o = mkRestOrder({ status: 'ready' }); orders.docs.push(o);
+  await pool.claimOrder(c._id, o._id);
+  await assert.rejects(pool.deliverOrder(c._id, o._id), (e) => e.code === 'NOT_PICKED_UP', 'taomni olmasdan topshirib bo\'lmaydi');
+  await putLoc(c, near(RESTAURANT_LOC));
+  await pool.pickupOrder(c._id, o._id);
+  await putLoc(c, near(CUSTOMER_LOC));
+  const d = await pool.deliverOrder(c._id, o._id);
+  assert.equal(d.ok, true); assert.equal(d.check.flagged, false);
+  assert.equal(orders.docs.find((x) => x._id === o._id).status, 'delivered');
+  assert.ok(events.some((e) => e.type === 'delivered' && e.flagged === false));
+
+  // Joylashuv umuman yo'q → belgilanadi
+  presence.clearLocation(String(c._id));
+  const o2 = mkRestOrder({ status: 'delivering', lokmaCourier: { courierId: c._id, claimedAt: new Date(), pickedUpAt: new Date(), settledAt: null } }); orders.docs.push(o2);
+  const d2 = await pool.deliverOrder(c._id, o2._id);
+  assert.equal(d2.check.flagged, true); assert.equal(d2.check.flagReason, 'no_location');
+});
+
+test('COURIER_ENFORCE_PROXIMITY=1: uzoqdan "oldim/topshirdim" BLOKLANADI (holat o\'zgarmaydi)', async () => {
+  reset();
+  const c = mkCourier(); restDoc();
+  const o = mkRestOrder({ status: 'ready' }); orders.docs.push(o);
+  await pool.claimOrder(c._id, o._id);
+  config.courierEnforceProximity = true;
+  try {
+    await putLoc(c, far(RESTAURANT_LOC));
+    await assert.rejects(pool.pickupOrder(c._id, o._id), (e) => e.code === 'TOO_FAR' && e.extra.targetDistanceM > 1000);
+    assert.equal(orders.docs.find((x) => x._id === o._id).status, 'ready', 'holat o\'zgarmadi');
+    presence.clearLocation(String(c._id));
+    await assert.rejects(pool.pickupOrder(c._id, o._id), (e) => e.code === 'TOO_FAR', 'joylashuvsiz ham bloklanadi');
+    // Ilova aniq joylashuv yuborsa (override) — shu ishlatiladi
+    const ok = await pool.pickupOrder(c._id, o._id, { override: near(RESTAURANT_LOC) });
+    assert.equal(ok.ok, true);
+  } finally { config.courierEnforceProximity = false; }
+});
+
+test('begona kuryer "oldim/topshirdim" qila olmaydi', async () => {
+  reset();
+  const a = mkCourier(); const b = mkCourier(); restDoc();
+  const o = mkRestOrder({ status: 'ready' }); orders.docs.push(o);
+  await pool.claimOrder(a._id, o._id);
+  await assert.rejects(pool.pickupOrder(b._id, o._id), (e) => e.code === 'NOT_FOUND' && e.status === 404);
+  await assert.rejects(pool.deliverOrder(b._id, o._id), (e) => e.code === 'NOT_FOUND');
 });

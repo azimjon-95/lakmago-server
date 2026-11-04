@@ -10,9 +10,9 @@ import jwt from 'jsonwebtoken';
 import { Types } from 'mongoose';
 import { bindModel } from './helpers/fakeModel.mjs';
 
-const { hashPin, verifyPin, isPinAcceptable, signCourierToken, readCourierToken } = await import('../src/services/courierAuth.js');
-const { courierAuth } = await import('../src/middleware/courierAuth.js');
-const { Courier } = await import('../src/models/Courier.js');
+const { courierAuth, signCourierToken } = await import('../src/middleware/courierAuth.js');
+const { CourierAccount } = await import('../src/models/CourierAccount.js');
+const { config } = await import('../src/config/index.js');
 const { canJoinAdmin, canJoinRestaurant, courierRoomsFromToken } = await import('../src/sockets/panelSocketAuth.js');
 const { signToken } = await import('../src/middleware/auth.js');
 const { router } = await import('../src/routes/index.js');
@@ -20,18 +20,16 @@ const { router } = await import('../src/routes/index.js');
 const sec = process.env.JWT_SECRET;
 const verify = (t) => jwt.verify(t, sec);
 
-test('PIN: hash/tekshirish, oddiy PIN rad etiladi, xom PIN saqlanmaydi', () => {
-  const h = hashPin('5827');
-  assert.ok(h.startsWith('scrypt$') && !h.includes('5827'));
-  assert.equal(verifyPin('5827', h), true);
-  assert.equal(verifyPin('5826', h), false);
-  assert.equal(verifyPin('5827', 'buzuq'), false);
-  assert.notEqual(hashPin('5827'), h, 'har safar yangi tuz');
-  for (const bad of ['1111', '1234', '4321', '0000', '123', 'abcd', '123456789', '98765']) assert.equal(isPinAcceptable(bad), false, bad);
-  for (const ok of ['5827', '90517', '384920']) assert.equal(isPinAcceptable(ok), true, ok);
+test('kuryer akkaunti: parol bcrypt hash (xom parol saqlanmaydi), noto\'g\'ri parol rad etiladi', () => {
+  const h = CourierAccount.hash('parol12345');
+  assert.ok(h.startsWith('$2') && !h.includes('parol12345'));
+  const acc = new CourierAccount({ login: 'ali', passwordHash: h, name: 'Ali' });
+  assert.equal(acc.checkPassword('parol12345'), true);
+  assert.equal(acc.checkPassword('parol12346'), false);
+  assert.equal(acc.checkPassword(''), false);
 });
 
-const store = bindModel(Courier, { docs: [] });
+const store = bindModel(CourierAccount, { docs: [] });
 const res = () => { const r = { code: 200, body: null, status(c) { r.code = c; return r; }, json(b) { r.body = b; return r; } }; return r; };
 async function runAuth(token) {
   const req = { headers: token ? { authorization: `Bearer ${token}` } : {} };
@@ -40,22 +38,22 @@ async function runAuth(token) {
   return { passed, code: r.code, body: r.body, req };
 }
 
-test('kuryer middleware: token yo\'q / eski versiya / bloklangan / kutilmoqda / to\'g\'ri', async () => {
-  const c = { _id: new Types.ObjectId(), name: 'Ali', status: 'active', tokenVersion: 2, workDistricts: ['pop'] };
+test('kuryer middleware: token yo\'q / eski versiya (parol almashgan) / bloklangan / to\'g\'ri; boshqa tizim tokenlari kirmaydi', async () => {
+  const c = { _id: new Types.ObjectId(), name: 'Ali', isActive: true, tokenVersion: 2, workDistricts: ['pop'] };
   store.docs.push(c);
   assert.equal((await runAuth(null)).code, 401);
   assert.equal((await runAuth('buzuq')).code, 401);
-  assert.equal((await runAuth(signCourierToken({ ...c, tokenVersion: 1 }))).code, 401, 'PIN almashgan — eski token ishlamaydi');
-  const ok = await runAuth(signCourierToken(c));
+  assert.equal((await runAuth(signCourierToken(c._id, 1))).code, 401, 'parol almashgan — eski token darhol ishlamaydi');
+  const ok = await runAuth(signCourierToken(c._id, 2));
   assert.equal(ok.passed, true);
   assert.equal(ok.req.courierId, String(c._id));
-  c.status = 'blocked';
-  const b = await runAuth(signCourierToken(c));
-  assert.equal(b.code, 403); assert.equal(b.body.code, 'COURIER_BLOCKED');
-  c.status = 'pending';
-  assert.equal((await runAuth(signCourierToken(c))).body.code, 'COURIER_PENDING');
-  // admin/restoran tokeni kuryer API'siga kirmaydi
-  assert.equal(readCourierToken(signToken('u1', 'admin')), null);
+  assert.deepEqual(ok.req.courier.workDistricts, ['pop']);
+  c.isActive = false;
+  assert.equal((await runAuth(signCourierToken(c._id, 2))).code, 403, 'bloklangan');
+  // asosiy kalit bilan yasalgan "kuryer" tokeni va admin/restoran tokenlari kuryer API'siga kirmaydi
+  assert.equal((await runAuth(jwt.sign({ cid: String(c._id), role: 'courier', v: 2 }, sec))).code, 401);
+  assert.equal((await runAuth(signToken('a1', 'admin'))).code, 401);
+  assert.equal((await runAuth(signToken('r1', 'restaurant', 'R1'))).code, 401);
 });
 
 test('SOKET admin xonasi: faqat faol admin/xodim (avval tekshiruvsiz edi)', async () => {
@@ -81,13 +79,16 @@ test('SOKET restoran xonasi: faqat o\'z restorani (yoki admin)', async () => {
   assert.equal(await canJoinRestaurant(undefined, 'R1', deps), false);
 });
 
-test('SOKET kuryer xonalari: o\'z xonasi + ish tumanlari; bloklangan/eski token — hech narsa', async () => {
-  const c = { _id: new Types.ObjectId(), status: 'active', tokenVersion: 0, workDistricts: ['pop', 'chust'] };
-  const deps = { verify, findCourier: async () => c };
-  assert.deepEqual(await courierRoomsFromToken(signCourierToken(c), deps), [`courier:${c._id}`, 'courier-district:pop', 'courier-district:chust']);
-  assert.deepEqual(await courierRoomsFromToken(signToken('a1', 'admin'), deps), []);
+test('SOKET kuryer xonalari: o\'z xonasi + ish tumanlari; bloklangan / eski token / boshqa kalit — hech narsa', async () => {
+  const c = { _id: new Types.ObjectId(), isActive: true, tokenVersion: 0, workDistricts: ['pop', 'chust'] };
+  const deps = { verifyCourier: (t) => jwt.verify(t, config.courierJwtSecret), findCourier: async () => c };
+  assert.deepEqual(await courierRoomsFromToken(signCourierToken(c._id, 0), deps), [`courier:${c._id}`, 'courier-district:pop', 'courier-district:chust']);
+  assert.deepEqual(await courierRoomsFromToken(signToken('a1', 'admin'), deps), [], 'admin tokeni kuryer xonasiga kirmaydi');
+  assert.deepEqual(await courierRoomsFromToken(jwt.sign({ cid: String(c._id), role: 'courier' }, sec), deps), [], 'asosiy kalit bilan yasalgan');
   c.tokenVersion = 1;
-  assert.deepEqual(await courierRoomsFromToken(signCourierToken({ ...c, tokenVersion: 0 }), deps), []);
+  assert.deepEqual(await courierRoomsFromToken(signCourierToken(c._id, 0), deps), [], 'parol almashgan');
+  c.tokenVersion = 0; c.isActive = false;
+  assert.deepEqual(await courierRoomsFromToken(signCourierToken(c._id, 0), deps), [], 'bloklangan');
 });
 
 /* ── Yo'l ruxsatlari: middleware zanjirini soxta so'rov bilan yuritamiz (controller'gacha yetdimi?) ── */
@@ -117,10 +118,27 @@ test('RUXSAT: rejim/foiz/tekin yetkazish va global sozlama — FAQAT bosh admin'
 test('RUXSAT: tuman — restoranlar bo\'limi; kuryer kassasi — moliya bo\'limi; kuryerlar — buyurtmalar bo\'limi', async () => {
   assert.equal((await reaches('patch', '/admin/restaurants/:id/district', tok.ops)).ok, true);
   assert.equal((await reaches('patch', '/admin/restaurants/:id/district', tok.orders)).ok, false);
-  assert.equal((await reaches('post', '/admin/couriers/:id/ledger', tok.acc)).ok, true, 'buxgalter');
-  assert.equal((await reaches('post', '/admin/couriers/:id/ledger', tok.orders)).ok, false, 'buyurtmalar bo\'limi pulni yozmaydi');
+  assert.equal((await reaches('post', '/admin/courier-accounts/:id/ledger', tok.acc)).ok, true, 'buxgalter');
+  assert.equal((await reaches('post', '/admin/courier-accounts/:id/ledger', tok.orders)).ok, false, 'buyurtmalar bo\'limi pulni yozmaydi');
   assert.equal((await reaches('get', '/admin/couriers', tok.orders)).ok, true);
   assert.equal((await reaches('get', '/admin/couriers', tok.ops)).ok, false);
   assert.equal((await reaches('post', '/panel/orders/:id/courier-party', tok.rest)).ok, true);
   assert.equal((await reaches('post', '/panel/orders/:id/courier-party', tok.admin)).ok, false, 'panel yo\'li faqat restoran');
+});
+
+test('RUXSAT: kuryer nazorati (jonli, trek, voqealar, biriktirish) — "kuryerlar" bo\'limi; kuryer ilovasi — faqat kuryer tokeni', async () => {
+  for (const [m, p] of [['get', '/admin/courier-accounts/live'], ['get', '/admin/courier-accounts/:id/track'], ['get', '/admin/orders/:id/courier-trace'], ['get', '/admin/courier-events'], ['put', '/admin/restaurants/:id/couriers']]) {
+    assert.equal((await reaches(m, p, tok.orders)).ok, true, `${p} kuryerlar bo'limi`);
+    assert.equal((await reaches(m, p, tok.admin)).ok, true, `${p} admin`);
+    assert.equal((await reaches(m, p, tok.ops)).ok, false, `${p} restoranlar bo'limi kira olmaydi`);
+    assert.equal((await reaches(m, p, tok.rest)).ok, false, `${p} restoran`);
+    assert.equal((await reaches(m, p, null)).ok, false);
+  }
+  const c = new Types.ObjectId(); store.docs.length = 0; store.docs.push({ _id: c, name: 'Ali', isActive: true, tokenVersion: 0, workDistricts: [] });
+  const courierTok = signCourierToken(c, 0);
+  for (const [m, p] of [['get', '/courier-app/me'], ['get', '/courier-app/offers'], ['post', '/courier-app/active/pickup'], ['post', '/courier-app/active/deliver'], ['post', '/courier-app/location'], ['patch', '/courier-app/me']]) {
+    assert.equal((await reaches(m, p, courierTok)).ok, true, `${p} kuryer`);
+    assert.equal((await reaches(m, p, tok.admin)).ok, false, `${p} admin kira olmaydi`);
+    assert.equal((await reaches(m, p, tok.rest)).ok, false, `${p} restoran kira olmaydi`);
+  }
 });

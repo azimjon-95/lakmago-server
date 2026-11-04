@@ -242,7 +242,7 @@ const orderSchema = new Schema(
     district: { type: String, default: null, index: true },
     courierParty: { type: String, enum: ['restaurant', 'lokma', null], default: null },
     lokmaCourier: {
-      courierId: { type: Schema.Types.ObjectId, ref: 'Courier', default: null, index: true },
+      courierId: { type: Schema.Types.ObjectId, ref: 'CourierAccount', default: null, index: true },
       poolAt: { type: Date, default: null },
       claimedAt: { type: Date, default: null },
       pickedUpAt: { type: Date, default: null },

@@ -1,19 +1,19 @@
 import { z } from 'zod';
 import { Types } from 'mongoose';
 import { asyncHandler } from '../middleware/error.js';
-import { Courier, normalizePhone } from '../models/Courier.js';
+import { CourierAccount } from '../models/CourierAccount.js';
 import { Order } from '../models/Order.js';
 import { Ledger } from '../models/Ledger.js';
 import { Restaurant } from '../models/Restaurant.js';
 import { Settings, getSettings } from '../models/Settings.js';
 import { DISTRICTS, DEFAULT_DISTRICT, isDistrict, normalizeDistricts } from '../constants/districts.js';
 import { COURIER_MODES } from '../services/deliveryParty.js';
-import { hashPin, verifyPin, isPinAcceptable, signCourierToken } from '../services/courierAuth.js';
 import {
-  CourierPoolError, listPool, myActiveOrders, claimOrder, releaseOrder, adminAssign, setOrderParty,
-  courierBalanceSom, openCashExposureSom, debtLimitFor, poolCard, POOL_STATUSES, ACTIVE_STATUSES,
+  CourierPoolError, listPoolForAdmin, adminAssign, releaseOrder, setOrderParty,
+  courierBalanceSom, openCashExposureSom, debtLimitFor, ACTIVE_STATUSES, POOL_STATUSES,
 } from '../services/courierPool.js';
-import { changeOrderStatus, OrderFlowError } from '../services/orderFlow.js';
+import { liveCouriers, courierTrack, orderTrace, flaggedEvents } from '../services/courierTrack.js';
+import { OrderFlowError } from '../services/orderFlow.js';
 import { tiyinToSom } from '../services/orderFinance.js';
 
 /*
@@ -46,30 +46,7 @@ export const districtsController = {
   }),
 };
 
-/* ══════════════ KURYER ILOVASI ══════════════ */
-function orderForCourier(o) {
-  const f = o.finance || {};
-  const r = o.restaurantId && typeof o.restaurantId === 'object' ? o.restaurantId : {};
-  const u = o.userId && typeof o.userId === 'object' ? o.userId : {};
-  return {
-    ...poolCard(o),
-    claimedAt: o.lokmaCourier?.claimedAt || null,
-    pickedUpAt: o.lokmaCourier?.pickedUpAt || null,
-    restaurant: { name: r.name || '', address: r.address || '', lat: r.lat ?? null, lng: r.lng ?? null, phone: r.phone || '' },
-    customer: {
-      name: u.firstName || '',
-      phone: o.phone || u.phone || '',
-      address: o.address || '',
-      addressNote: o.addressNote || '',
-      lat: o.addressLat ?? null,
-      lng: o.addressLng ?? null,
-      comment: o.comment || '',
-    },
-    items: (o.items || []).map((it) => ({ name: it.name, quantity: it.quantity })),
-    totalSom: tiyinToSom(f.totalCharged),
-  };
-}
-
+/* ══════════════ KURYER SUMMARY (admin kassa) ══════════════ */
 async function courierSummary(courierId, courier) {
   const [balanceSom, openCashSom, debtLimitSom, s] = await Promise.all([
     courierBalanceSom(courierId), openCashExposureSom(courierId), debtLimitFor(courier), getSettings(),
@@ -80,262 +57,15 @@ async function courierSummary(courierId, courier) {
     debtLimitSom,
     cashRoomSom: round2(debtLimitSom + balanceSom - openCashSom),   // yana qancha naqd buyurtma ola oladi
     commissionPercent: Number(s?.courier?.commissionPercent ?? 10),
-    maxActiveOrders: Number(s?.courier?.maxActiveOrders ?? 3),
+    maxActiveOrders: Number(s?.courier?.maxActiveOrders ?? 1),
   };
 }
 
-export const courierAppController = {
-  // POST /courier/auth/login { phone, pin }
-  login: asyncHandler(async (req, res) => {
-    const phoneKey = normalizePhone(req.body?.phone);
-    const pin = String(req.body?.pin ?? '');
-    if (phoneKey.length !== 9 || !/^\d{4,8}$/.test(pin)) return res.status(400).json({ error: 'Telefon yoki PIN noto‘g‘ri', code: 'BAD_INPUT' });
-    const courier = await Courier.findOne({ phoneKey }).select('+pinHash status tokenVersion name').lean();
-    // Bir xil javob — telefon bazada bormi-yo'qligini oshkor qilmaymiz
-    if (!courier || !courier.pinHash || !verifyPin(pin, courier.pinHash)) {
-      return res.status(401).json({ error: 'Telefon yoki PIN noto‘g‘ri', code: 'BAD_CREDENTIALS' });
-    }
-    if (courier.status !== 'active') {
-      return res.status(403).json({ error: courier.status === 'pending' ? 'Akkaunt hali tasdiqlanmagan' : 'Akkaunt bloklangan', code: courier.status === 'pending' ? 'COURIER_PENDING' : 'COURIER_BLOCKED' });
-    }
-    await Courier.updateOne({ _id: courier._id }, { $set: { lastLoginAt: new Date() } });
-    res.json({ token: signCourierToken(courier), courier: { id: String(courier._id), name: courier.name } });
-  }),
-
-  // GET /courier/me
-  me: asyncHandler(async (req, res) => {
-    const c = req.courier;
-    res.json({
-      courier: {
-        id: req.courierId, name: c.name, phone: c.phone, vehicle: c.vehicle || '',
-        workDistricts: c.workDistricts || [], isOnline: Boolean(c.isOnline), totalDeliveries: c.totalDeliveries || 0,
-      },
-      ...(await courierSummary(req.courierId, c)),
-      districts: DISTRICTS,
-    });
-  }),
-
-  // PATCH /courier/me { workDistricts?, isOnline?, vehicle? } — kuryer o'zi: bugun qaysi tumanlarda ishlaydi, onlayn/oflayn
-  updateMe: asyncHandler(async (req, res) => {
-    const schema = z.object({
-      workDistricts: z.array(z.string()).max(20).optional(),
-      isOnline: z.boolean().optional(),
-      vehicle: z.enum(['foot', 'bike', 'moto', 'car', '']).optional(),
-    }).strict();
-    const parsed = schema.safeParse(req.body || {});
-    if (!parsed.success) return res.status(400).json({ error: 'Noto‘g‘ri ma‘lumot', code: 'BAD_INPUT' });
-    const set = {};
-    if (parsed.data.workDistricts) {
-      const d = normalizeDistricts(parsed.data.workDistricts);
-      if (d.length !== new Set(parsed.data.workDistricts).size) return res.status(400).json({ error: 'Noma‘lum tuman', code: 'BAD_DISTRICT' });
-      set.workDistricts = d;
-    }
-    if (parsed.data.vehicle !== undefined) set.vehicle = parsed.data.vehicle;
-    if (parsed.data.isOnline !== undefined) {
-      const districts = set.workDistricts ?? req.courier.workDistricts ?? [];
-      if (parsed.data.isOnline && !districts.length) return res.status(400).json({ error: 'Avval ishlaydigan tumanlaringizni tanlang', code: 'NO_DISTRICTS' });
-      set.isOnline = parsed.data.isOnline;
-      set.onlineAt = parsed.data.isOnline ? new Date() : null;
-    }
-    const c = await Courier.findByIdAndUpdate(req.courierId, { $set: set }, { new: true }).select('workDistricts isOnline vehicle').lean();
-    res.json({ workDistricts: c.workDistricts, isOnline: c.isOnline, vehicle: c.vehicle });
-  }),
-
-  // GET /courier/pool — umumiy quti (faqat o'z tumanlari, mijoz manzilisiz)
-  pool: asyncHandler(async (req, res) => {
-    const c = await Courier.findById(req.courierId).select('workDistricts isOnline').lean();
-    res.set('Cache-Control', 'no-store').json({ isOnline: Boolean(c?.isOnline), workDistricts: c?.workDistricts || [], orders: await listPool(c) });
-  }),
-
-  // GET /courier/orders/active — olingan buyurtmalar (to'liq ma'lumot)
-  active: asyncHandler(async (req, res) => {
-    res.set('Cache-Control', 'no-store').json({ orders: (await myActiveOrders(req.courierId)).map(orderForCourier) });
-  }),
-
-  // GET /courier/orders/history?days=30
-  history: asyncHandler(async (req, res) => {
-    const days = Math.min(90, Math.max(1, Number(req.query.days) || 30));
-    const since = new Date(Date.now() - days * 86400000);
-    const rows = await Order.find({ 'lokmaCourier.courierId': new Types.ObjectId(req.courierId), status: 'delivered', deliveredAt: { $gte: since } })
-      .sort({ deliveredAt: -1 }).limit(300)
-      .select('dailyNumber deliveredAt paymentMethod finance district restaurantName').lean();
-    res.json({
-      days,
-      totalEarningSom: round2(rows.reduce((s, o) => s + tiyinToSom(o.finance?.courierPayout), 0)),
-      orders: rows.map((o) => ({
-        id: String(o._id), number: o.dailyNumber ?? null, deliveredAt: o.deliveredAt, district: o.district,
-        restaurantName: o.restaurantName || '', paymentMethod: o.paymentMethod,
-        earningSom: tiyinToSom(o.finance?.courierPayout), cashCollectedSom: o.paymentMethod === 'cash' ? tiyinToSom(o.finance?.totalCharged) : 0,
-      })),
-    });
-  }),
-
-  // GET /courier/ledger — balans harakatlari
-  ledger: asyncHandler(async (req, res) => {
-    const rows = await Ledger.find({ courierId: new Types.ObjectId(req.courierId) }).sort({ createdAt: -1 }).limit(200)
-      .select('type amount orderId createdAt meta.note').lean();
-    res.json({ ...(await courierSummary(req.courierId, req.courier)), entries: rows });
-  }),
-
-  claim: asyncHandler(async (req, res) => {
-    if (!isOid(req.params.id)) return res.status(400).json({ error: 'Noto‘g‘ri ID' });
-    try {
-      const { already } = await claimOrder(req.courierId, req.params.id);
-      res.json({ ok: true, already });
-    } catch (e) { sendError(res, e); }
-  }),
-
-  release: asyncHandler(async (req, res) => {
-    if (!isOid(req.params.id)) return res.status(400).json({ error: 'Noto‘g‘ri ID' });
-    try { res.json(await releaseOrder(req.courierId, req.params.id)); } catch (e) { sendError(res, e); }
-  }),
-
-  // POST /courier/orders/:id/pickup — "Restorandan oldim" (restoran "Tayyor" bosmagan bo'lsa ham — taom qo'lda)
-  pickup: asyncHandler(async (req, res) => {
-    if (!isOid(req.params.id)) return res.status(400).json({ error: 'Noto‘g‘ri ID' });
-    const order = await Order.findOne({ _id: req.params.id, 'lokmaCourier.courierId': new Types.ObjectId(req.courierId) })
-      .select('restaurantId status').lean();
-    if (!order) return res.status(404).json({ error: 'Buyurtma topilmadi', code: 'NOT_FOUND' });
-    try {
-      if (['accepted', 'preparing'].includes(order.status)) {
-        await changeOrderStatus({ orderId: order._id, restaurantId: order.restaurantId, status: 'ready', actorName: req.courier.name });
-      }
-      await changeOrderStatus({ orderId: order._id, restaurantId: order.restaurantId, status: 'delivering', actorName: req.courier.name, courierId: req.courierId });
-      res.json({ ok: true });
-    } catch (e) { sendError(res, e); }
-  }),
-
-  // POST /courier/orders/:id/deliver — "Mijozga topshirdim" (naqd bo'lsa — pul olingan deb hisoblanadi)
-  deliver: asyncHandler(async (req, res) => {
-    if (!isOid(req.params.id)) return res.status(400).json({ error: 'Noto‘g‘ri ID' });
-    const order = await Order.findOne({ _id: req.params.id, 'lokmaCourier.courierId': new Types.ObjectId(req.courierId) })
-      .select('restaurantId status').lean();
-    if (!order) return res.status(404).json({ error: 'Buyurtma topilmadi', code: 'NOT_FOUND' });
-    try {
-      const { changed } = await changeOrderStatus({ orderId: order._id, restaurantId: order.restaurantId, status: 'delivered', actorName: req.courier.name, courierId: req.courierId });
-      res.json({ ok: true, alreadyDelivered: !changed, ...(await courierSummary(req.courierId, req.courier)) });
-    } catch (e) { sendError(res, e); }
-  }),
-};
-
-/* ══════════════ ADMIN: KURYERLAR ══════════════ */
-const courierBody = z.object({
-  name: z.string().trim().min(2).max(80),
-  phone: z.string().trim().max(32),
-  pin: z.string().optional(),
-  telegramChatId: z.string().trim().max(32).optional(),
-  telegramUsername: z.string().trim().max(64).optional(),
-  status: z.enum(['pending', 'active', 'blocked']).optional(),
-  blockedReason: z.string().trim().max(200).optional(),
-  workDistricts: z.array(z.string()).max(20).optional(),
-  vehicle: z.enum(['foot', 'bike', 'moto', 'car', '']).optional(),
-  debtLimitSom: z.number().min(0).max(100000000).nullable().optional(),
-  // Eski admin panel (2026-08) "Faol/Nofaol" tugmasi shuni yuboradi — status'ga aylantiriladi (moslik)
-  isActive: z.boolean().optional(),
-}).strict();
-
-async function balancesFor(ids) {
-  if (!ids.length) return new Map();
-  const rows = await Ledger.aggregate([
-    { $match: { courierId: { $in: ids.map((i) => new Types.ObjectId(String(i))) } } },
-    { $group: { _id: '$courierId', total: { $sum: '$amount' } } },
-  ]);
-  return new Map(rows.map((r) => [String(r._id), round2(r.total)]));
-}
-
+/* ══════════════ ADMIN: KURYER KASSASI, QUTI, NAZORAT ══════════════ */
 export const adminCourierController = {
-  list: asyncHandler(async (_req, res) => {
-    const couriers = await Courier.find().select('+pinHash').sort({ status: 1, isOnline: -1, name: 1 }).lean();
-    const ids = couriers.map((c) => c._id);
-    const [balances, activeRows] = await Promise.all([
-      balancesFor(ids),
-      Order.aggregate([
-        { $match: { 'lokmaCourier.courierId': { $in: ids }, status: { $in: ACTIVE_STATUSES } } },
-        { $group: { _id: '$lokmaCourier.courierId', n: { $sum: 1 } } },
-      ]),
-    ]);
-    const active = new Map(activeRows.map((r) => [String(r._id), r.n]));
-    // PIN hash HECH QACHON javobga chiqmaydi — faqat "PIN o'rnatilganmi"
-    res.json(couriers.map(({ pinHash, ...c }) => ({ ...c, hasPin: Boolean(pinHash), balanceSom: balances.get(String(c._id)) || 0, activeOrders: active.get(String(c._id)) || 0 })));
-  }),
-
-  create: asyncHandler(async (req, res) => {
-    const parsed = courierBody.safeParse(req.body || {});
-    if (!parsed.success) return res.status(400).json({ error: 'Noto‘g‘ri ma‘lumot', details: parsed.error.flatten() });
-    const d = parsed.data;
-    const phoneKey = normalizePhone(d.phone);
-    if (phoneKey.length !== 9) return res.status(400).json({ error: 'Telefon raqami noto‘g‘ri', code: 'BAD_PHONE' });
-    if (await Courier.exists({ phoneKey })) return res.status(409).json({ error: 'Bu telefon bilan kuryer allaqachon bor', code: 'PHONE_TAKEN' });
-    if (d.pin !== undefined && !isPinAcceptable(d.pin)) return res.status(400).json({ error: 'PIN 4–8 raqam bo‘lsin va oddiy bo‘lmasin (1111, 1234 emas)', code: 'WEAK_PIN' });
-    const status = d.status || 'active';
-    const courier = await Courier.create({
-      name: d.name, phone: d.phone, phoneKey,
-      telegramChatId: d.telegramChatId || '', telegramUsername: d.telegramUsername || '',
-      status, isActive: status === 'active', blockedReason: d.blockedReason || '',
-      workDistricts: normalizeDistricts(d.workDistricts || []),
-      vehicle: d.vehicle || '', debtLimitSom: d.debtLimitSom ?? null,
-      pinHash: d.pin ? hashPin(d.pin) : '',
-    });
-    const out = courier.toObject();
-    delete out.pinHash;
-    res.status(201).json(out);
-  }),
-
-  /*
-   * XATO TUZATILDI: avval `req.body` dagi istalgan qiymat tekshiruvsiz yozilardi (bo'sh ism, matnli isActive ...).
-   * Endi zod bilan; PIN almashsa yoki bloklansa — tokenVersion++ (eski sessiyalar darhol bekor), bloklanganda oflayn.
-   */
-  update: asyncHandler(async (req, res) => {
-    if (!isOid(req.params.id)) return res.status(400).json({ error: 'Noto‘g‘ri ID' });
-    const parsed = courierBody.partial().safeParse(req.body || {});
-    if (!parsed.success) return res.status(400).json({ error: 'Noto‘g‘ri ma‘lumot', details: parsed.error.flatten() });
-    const d = parsed.data;
-    const set = {};
-    const inc = {};
-    for (const k of ['name', 'telegramChatId', 'telegramUsername', 'blockedReason', 'vehicle']) if (d[k] !== undefined) set[k] = d[k];
-    if (d.debtLimitSom !== undefined) set.debtLimitSom = d.debtLimitSom;
-    if (d.workDistricts) set.workDistricts = normalizeDistricts(d.workDistricts);
-    if (d.phone !== undefined) {
-      const phoneKey = normalizePhone(d.phone);
-      if (phoneKey.length !== 9) return res.status(400).json({ error: 'Telefon raqami noto‘g‘ri', code: 'BAD_PHONE' });
-      if (await Courier.exists({ phoneKey, _id: { $ne: req.params.id } })) return res.status(409).json({ error: 'Bu telefon bilan kuryer allaqachon bor', code: 'PHONE_TAKEN' });
-      set.phone = d.phone; set.phoneKey = phoneKey;
-    }
-    if (d.pin !== undefined) {
-      if (!isPinAcceptable(d.pin)) return res.status(400).json({ error: 'PIN 4–8 raqam bo‘lsin va oddiy bo‘lmasin (1111, 1234 emas)', code: 'WEAK_PIN' });
-      set.pinHash = hashPin(d.pin);
-      inc.tokenVersion = 1;
-    }
-    if (!d.status && typeof d.isActive === 'boolean') d.status = d.isActive ? 'active' : 'blocked';
-    if (d.status) {
-      set.status = d.status;
-      set.isActive = d.status === 'active';
-      if (d.status !== 'active') { set.isOnline = false; inc.tokenVersion = 1; }
-    }
-    const courier = await Courier.findByIdAndUpdate(req.params.id, { $set: set, ...(Object.keys(inc).length ? { $inc: inc } : {}) }, { new: true }).lean();
-    if (!courier) return res.status(404).json({ error: 'Kuryer topilmadi' });
-    delete courier.pinHash;
-    res.json(courier);
-  }),
-
-  /*
-   * XATO TUZATILDI: avval kuryer butunlay o'chirilardi — endi uning balans tarixi (Ledger) yoki faol buyurtmasi bo'lsa
-   * O'CHIRILMAYDI (pul izi yo'qolmasin), bloklash taklif qilinadi.
-   */
-  remove: asyncHandler(async (req, res) => {
-    if (!isOid(req.params.id)) return res.status(400).json({ error: 'Noto‘g‘ri ID' });
-    const id = new Types.ObjectId(req.params.id);
-    const [hasLedger, hasOrders] = await Promise.all([Ledger.exists({ courierId: id }), Order.exists({ 'lokmaCourier.courierId': id })]);
-    if (hasLedger || hasOrders) {
-      return res.status(409).json({ error: 'Kuryerning buyurtma/balans tarixi bor — o‘chirib bo‘lmaydi, bloklang', code: 'HAS_HISTORY' });
-    }
-    await Courier.deleteOne({ _id: id });
-    res.json({ ok: true });
-  }),
-
   ledger: asyncHandler(async (req, res) => {
     if (!isOid(req.params.id)) return res.status(400).json({ error: 'Noto‘g‘ri ID' });
-    const courier = await Courier.findById(req.params.id).select('name debtLimitSom').lean();
+    const courier = await CourierAccount.findById(req.params.id).select('name debtLimitSom').lean();
     if (!courier) return res.status(404).json({ error: 'Kuryer topilmadi' });
     const rows = await Ledger.find({ courierId: new Types.ObjectId(req.params.id) }).sort({ createdAt: -1 }).limit(500).lean();
     res.json({ courier, ...(await courierSummary(req.params.id, courier)), entries: rows });
@@ -362,7 +92,7 @@ export const adminCourierController = {
     if (amt === 0 || Math.abs(amt) > 100000000) return res.status(400).json({ error: 'Summa noto‘g‘ri', code: 'BAD_AMOUNT' });
     if (type !== 'courier_adjustment' && amt < 0) return res.status(400).json({ error: 'Summa musbat bo‘lsin', code: 'BAD_AMOUNT' });
     if (type === 'courier_adjustment' && note.length < 5) return res.status(400).json({ error: 'Tuzatish sababini yozing', code: 'NOTE_REQUIRED' });
-    if (!(await Courier.exists({ _id: req.params.id }))) return res.status(404).json({ error: 'Kuryer topilmadi' });
+    if (!(await CourierAccount.exists({ _id: req.params.id }))) return res.status(404).json({ error: 'Kuryer topilmadi' });
     const amount = type === 'courier_payout' ? -amt : amt;
     const row = await Ledger.create({
       type, amount, courierId: new Types.ObjectId(req.params.id),
@@ -374,16 +104,17 @@ export const adminCourierController = {
 
   // GET /admin/courier-pool?district= — qutidagi (olinmagan) va kuryerdagi buyurtmalar
   pool: asyncHandler(async (req, res) => {
-    const d = req.query.district && isDistrict(req.query.district) ? [String(req.query.district)] : DISTRICTS.map((x) => x.id);
-    const [waiting, assigned] = await Promise.all([
-      listPool({ workDistricts: d }, { limit: 100 }),
-      Order.find({ courierParty: 'lokma', 'lokmaCourier.courierId': { $ne: null }, status: { $in: ACTIVE_STATUSES }, district: { $in: d } })
-        .select('dailyNumber status district restaurantName lokmaCourier paymentMethod finance').populate('lokmaCourier.courierId', 'name phone').lean(),
+    const d = req.query.district && isDistrict(req.query.district) ? [String(req.query.district)] : null;
+    const [waiting, assignedRows] = await Promise.all([
+      listPoolForAdmin({ districts: d }),
+      Order.find({ courierParty: 'lokma', 'lokmaCourier.courierId': { $ne: null }, status: { $in: ACTIVE_STATUSES }, ...(d ? { district: { $in: d } } : {}) })
+        .select('dailyNumber status district restaurantName lokmaCourier paymentMethod finance items').populate('lokmaCourier.courierId', 'name phone').lean(),
     ]);
     res.set('Cache-Control', 'no-store').json({
       waiting,
-      assigned: assigned.map((o) => ({
+      assigned: assignedRows.map((o) => ({
         id: String(o._id), number: o.dailyNumber ?? null, status: o.status, district: o.district, restaurantName: o.restaurantName || '',
+        itemsLine: (o.items || []).map((i) => `${i.quantity}× ${i.name}`).join(', '),
         courier: o.lokmaCourier?.courierId ? { id: String(o.lokmaCourier.courierId._id), name: o.lokmaCourier.courierId.name, phone: o.lokmaCourier.courierId.phone } : null,
         claimedAt: o.lokmaCourier?.claimedAt, pickedUpAt: o.lokmaCourier?.pickedUpAt,
         paymentMethod: o.paymentMethod, cashToCollectSom: o.paymentMethod === 'cash' ? tiyinToSom(o.finance?.totalCharged) : 0,
@@ -391,20 +122,50 @@ export const adminCourierController = {
     });
   }),
 
+  /* ───── NAZORAT: jonli xarita, trek, buyurtma tarixi, shubhali voqealar ───── */
+
+  // GET /admin/courier-accounts/live — smenadagi kuryerlar: qayerda, qaysi taomni qayerdan qayerga olib ketyapti
+  live: asyncHandler(async (_req, res) => {
+    res.set('Cache-Control', 'no-store').json({ at: new Date().toISOString(), couriers: await liveCouriers() });
+  }),
+
+  // GET /admin/courier-accounts/:id/track?from=&to= — kuryer yo'li (breadcrumb)
+  track: asyncHandler(async (req, res) => {
+    if (!isOid(req.params.id)) return res.status(400).json({ error: 'Noto‘g‘ri ID' });
+    const day = 24 * 3600_000;
+    const from = req.query.from ? new Date(req.query.from) : new Date(Date.now() - day);
+    const to = req.query.to ? new Date(req.query.to) : new Date();
+    if (Number.isNaN(+from) || Number.isNaN(+to)) return res.status(400).json({ error: 'Sana noto‘g‘ri' });
+    res.set('Cache-Control', 'no-store').json(await courierTrack(req.params.id, { from, to }));
+  }),
+
+  // GET /admin/orders/:id/courier-trace — buyurtma bo'yicha to'liq nazorat (olish/oldi/topshirdi + joylashuv + yo'l)
+  trace: asyncHandler(async (req, res) => {
+    if (!isOid(req.params.id)) return res.status(400).json({ error: 'Noto‘g‘ri ID' });
+    const t = await orderTrace(req.params.id);
+    if (!t) return res.status(404).json({ error: 'Buyurtma topilmadi' });
+    res.set('Cache-Control', 'no-store').json(t);
+  }),
+
+  // GET /admin/courier-events?flagged=1 — shubhali voqealar (uzoqdan "oldim/topshirdim", joylashuvsiz)
+  events: asyncHandler(async (req, res) => {
+    res.set('Cache-Control', 'no-store').json({ events: await flaggedEvents({ limit: Number(req.query.limit) || 100, since: req.query.since }) });
+  }),
+
   assign: asyncHandler(async (req, res) => {
     if (!isOid(req.params.id) || !isOid(req.body?.courierId)) return res.status(400).json({ error: 'Noto‘g‘ri ID' });
-    try { await adminAssign(req.params.id, req.body.courierId); res.json({ ok: true }); } catch (e) { sendError(res, e); }
+    try { await adminAssign(req.params.id, req.body.courierId, { adminId: req.userId }); res.json({ ok: true }); } catch (e) { sendError(res, e); }
   }),
 
   release: asyncHandler(async (req, res) => {
     if (!isOid(req.params.id)) return res.status(400).json({ error: 'Noto‘g‘ri ID' });
-    try { res.json(await releaseOrder(null, req.params.id, { byAdmin: true })); } catch (e) { sendError(res, e); }
+    try { res.json(await releaseOrder(null, req.params.id, { byAdmin: true, adminId: req.userId })); } catch (e) { sendError(res, e); }
   }),
 
   // GET/PATCH /admin/courier-settings — global foiz, qarz chegarasi, bir vaqtdagi buyurtmalar (FAQAT bosh admin)
   getSettings: asyncHandler(async (_req, res) => {
     const s = await getSettings();
-    res.json({ commissionPercent: s?.courier?.commissionPercent ?? 10, debtLimitSom: s?.courier?.debtLimitSom ?? 500000, maxActiveOrders: s?.courier?.maxActiveOrders ?? 3 });
+    res.json({ commissionPercent: s?.courier?.commissionPercent ?? 10, debtLimitSom: s?.courier?.debtLimitSom ?? 500000, maxActiveOrders: s?.courier?.maxActiveOrders ?? 1 });
   }),
   updateSettings: asyncHandler(async (req, res) => {
     const schema = z.object({
@@ -445,10 +206,30 @@ export const adminRestaurantDeliveryController = {
     for (const k of ['courierMode', 'lokmaFreeDelivery', 'district']) if (d[k] !== undefined) set[k] = d[k];
     if (d.lokmaCourierPercent !== undefined) set.lokmaCourierPercent = d.lokmaCourierPercent === null ? null : Math.round(d.lokmaCourierPercent * 100) / 100;
     const r = await Restaurant.findByIdAndUpdate(req.params.id, { $set: set }, { new: true })
-      .select('name district courierMode lokmaFreeDelivery lokmaCourierPercent courierSettingsUpdatedAt').lean();
+      .select('name district courierMode lokmaFreeDelivery lokmaCourierPercent courierSettingsUpdatedAt exclusiveCouriers').lean();
     if (!r) return res.status(404).json({ error: 'Restoran topilmadi' });
     console.log(`[courier-settings] restoran ${r.name}: ${JSON.stringify(d)} — ${req.userId}`);
     res.json({ ...r, freeDeliveryActive: r.courierMode === 'lokma' && r.lokmaFreeDelivery === true });
+  }),
+
+  /*
+   * PUT /admin/restaurants/:id/couriers { courierIds: [...] } — restoranga kuryerlarni BIRIKTIRISH ("kuryerlar" bo'limi).
+   * Ro'yxat bo'sh emas bo'lsa: shu restoranning LokmaGo buyurtmalarini FAQAT shu kuryerlar ko'radi va oladi (tumanidan qat'i nazar);
+   * bo'sh — hamma (tumani mos kuryerlar). To'liq ro'yxat almashtiriladi (qo'shish/olib tashlash bitta so'rovda).
+   */
+  setExclusiveCouriers: asyncHandler(async (req, res) => {
+    if (!isOid(req.params.id)) return res.status(400).json({ error: 'Noto‘g‘ri ID' });
+    const parsed = z.object({ courierIds: z.array(z.string().regex(/^[0-9a-fA-F]{24}$/)).max(50) }).strict().safeParse(req.body || {});
+    if (!parsed.success) return res.status(400).json({ error: 'Noto‘g‘ri ma‘lumot' });
+    const ids = [...new Set(parsed.data.courierIds)];
+    if (ids.length && (await CourierAccount.countDocuments({ _id: { $in: ids } })) !== ids.length) {
+      return res.status(400).json({ error: 'Ro‘yxatda mavjud bo‘lmagan kuryer bor', code: 'BAD_COURIER' });
+    }
+    const r = await Restaurant.findByIdAndUpdate(req.params.id, { $set: { exclusiveCouriers: ids.map((x) => new Types.ObjectId(x)) } }, { new: true })
+      .select('name courierMode exclusiveCouriers').lean();
+    if (!r) return res.status(404).json({ error: 'Restoran topilmadi' });
+    console.log(`[courier-bind] restoran ${r.name}: ${ids.length} ta kuryer — ${req.userId}`);
+    res.json({ id: String(r._id), exclusiveCouriers: (r.exclusiveCouriers || []).map(String), courierMode: r.courierMode || 'own', activeInMode: r.courierMode !== 'own' });
   }),
 
   // PATCH /admin/restaurants/:id/district — tuman (restoranlar bo'limi xodimi ham)

@@ -84,6 +84,17 @@ export const writeLimiter = rateLimit({
  * Kuryer jonli joylashuvi — har ~8 soniyada bitta so'rov (daqiqada ~8), ehtiyot bilan 40.
  * Havola tokeni bo'yicha cheklanadi (bir nechta kuryer bir IP ortida bo'lishi mumkin).
  */
+/** Kuryer ilovasi: GPS har 5 s (12/daq) — 30/daq zaxira bilan; kuryer akkaunti bo'yicha (courierAuth'dan KEYIN qo'yiladi). */
+export const courierAppLocationLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 30,
+  keyGenerator: (req) => `cloc:${req.courierId || req.ip}`,
+  standardHeaders: true,
+  legacyHeaders: false,
+  validate: { keyGeneratorIpFallback: false },
+  handler: limitHandler,
+});
+
 export const courierLocationLimiter = rateLimit({
   windowMs: 60 * 1000,
   max: 40,

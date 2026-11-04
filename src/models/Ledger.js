@@ -41,7 +41,7 @@ const ledgerSchema = new Schema(
     // Kim bilan bog'liq
     orderId: { type: Schema.Types.ObjectId, ref: 'Order', index: true },
     waiterId: { type: Schema.Types.ObjectId, ref: 'Waiter', default: null, index: true },
-    courierId: { type: Schema.Types.ObjectId, ref: 'Courier', default: null, index: true },
+    courierId: { type: Schema.Types.ObjectId, ref: 'CourierAccount', default: null, index: true },
     restaurantId: { type: Schema.Types.ObjectId, ref: 'Restaurant', index: true },
     userId: { type: Schema.Types.ObjectId, ref: 'User', index: true },
 

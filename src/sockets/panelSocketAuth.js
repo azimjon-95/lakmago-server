@@ -2,7 +2,7 @@ import jwt from 'jsonwebtoken';
 import { config } from '../config/index.js';
 import { User } from '../models/User.js';
 import { StaffUser } from '../models/StaffUser.js';
-import { Courier } from '../models/Courier.js';
+import { CourierAccount } from '../models/CourierAccount.js';
 import { restaurantRoomFromToken } from './restaurantSocketAuth.js';
 
 /*
@@ -22,7 +22,8 @@ const defaults = {
   verify: (t) => jwt.verify(t, config.jwtSecret),
   findUser: (id) => User.findById(id).select('role isActive').lean(),
   findStaff: (id) => StaffUser.findById(id).select('isActive department').lean(),
-  findCourier: (id) => Courier.findById(id).select('status tokenVersion workDistricts').lean(),
+  verifyCourier: (t) => jwt.verify(t, config.courierJwtSecret),          // kuryer tokeni BOSHQA kalit bilan imzolanadi
+  findCourier: (id) => CourierAccount.findById(id).select('isActive tokenVersion workDistricts').lean(),
 };
 
 function payloadOf(token, verify) {
@@ -54,12 +55,13 @@ export async function canJoinRestaurant(token, restaurantId, deps = {}) {
   return room === `restaurant:${restaurantId}`;
 }
 
-/** Kuryer tokeni → qo'shiladigan xonalar ro'yxati (yaroqsiz/bloklangan bo'lsa bo'sh). */
+/** Kuryer tokeni (courierAuth bilan bir xil qoidalar) → qo'shiladigan xonalar ro'yxati (yaroqsiz/bloklangan bo'lsa bo'sh). */
 export async function courierRoomsFromToken(token, deps = {}) {
   const d = { ...defaults, ...deps };
-  const p = payloadOf(token, d.verify);
-  if (p?.role !== 'courier' || !p.courierId) return [];
-  const c = await d.findCourier(p.courierId).catch(() => null);
-  if (!c || c.status !== 'active' || Number(c.tokenVersion || 0) !== Number(p.v || 0)) return [];
-  return [`courier:${p.courierId}`, ...(c.workDistricts || []).map((x) => `courier-district:${x}`)];
+  const p = payloadOf(token, d.verifyCourier);
+  const cid = p?.cid;
+  if (p?.role !== 'courier' || !cid) return [];
+  const c = await d.findCourier(cid).catch(() => null);
+  if (!c || !c.isActive || Number(c.tokenVersion || 0) !== Number(p.v || 0)) return [];
+  return [`courier:${cid}`, ...(c.workDistricts || []).map((x) => `courier-district:${x}`)];
 }
