@@ -1,0 +1,36 @@
+name: Server tests
+# REAL MongoDB 7 and Redis 7 (the dev sandbox used FerretDB, which lacks TTL indexes, findAndModify projections and atomic contention).
+# Every `test` / `test:*` script runs; one failing suite does not hide the others. The courier suite expects Redis on port 6390.
+on:
+  push: { branches: [main] }
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      mongo:
+        image: mongo:7
+        ports: ['27017:27017']
+      redis:
+        image: redis:7
+        ports: ['6390:6379']
+    env:
+      JWT_SECRET: ci-only-secret-at-least-32-characters-long
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      - name: Syntax check
+        run: for f in $(git ls-files 'src/**/*.js'); do node --check "$f" || exit 1; done
+      - name: Run all suites
+        run: |
+          failed=()
+          for t in $(node -e "console.log(Object.keys(JSON.parse(require('fs').readFileSync('package.json','utf8')).scripts).filter(k=>k==='test'||k.startsWith('test:')).join(' '))"); do
+            echo "::group::$t"
+            if ! npm run -s "$t"; then failed+=("$t"); fi
+            echo "::endgroup::"
+          done
+          if [ ${#failed[@]} -gt 0 ]; then echo "::error::failing suites: ${failed[*]}"; exit 1; fi
