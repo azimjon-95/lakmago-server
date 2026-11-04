@@ -24,6 +24,8 @@ import { parseReferralCode, attachReferral, rewardReferralIfSubscribed } from '.
 import { config } from '../config/index.js';
 import { verifyItemPrices } from '../services/priceVerification.js';
 import { computeOrderFinance, reconcile, somToTiyin, tiyinToSom } from '../services/orderFinance.js';
+import { applyDeliveryParty, initialParty, courierPercentFor } from '../services/deliveryParty.js';
+import { DEFAULT_DISTRICT } from '../constants/districts.js';
 import { resolveGifts } from '../services/giftBonus.js';
 import { activeAgreement } from '../models/CommissionAgreement.js';
 import { COMPLETABLE_STATUSES } from '../services/reminderRules.js';
@@ -477,7 +479,7 @@ export const orderController = {
 
     const restIds = orders.map((o) => o.restaurantId);
     const restDocs = await Restaurant.find({ _id: { $in: restIds } })
-      .select('name deliveryFee freeDeliveryThreshold minOrderAmount serviceFeePercent serviceFeeMin serviceFeeMax prepMinutes openTime closeTime timezone workingDays isActive isBlocked isApproved isDemo pickupEnabled deliveryEnabled cashEnabled pickupDiscountPercent lat lng delivery')
+      .select('name deliveryFee freeDeliveryThreshold minOrderAmount serviceFeePercent serviceFeeMin serviceFeeMax prepMinutes openTime closeTime timezone workingDays isActive isBlocked isApproved isDemo pickupEnabled deliveryEnabled cashEnabled pickupDiscountPercent lat lng delivery district courierMode lokmaFreeDelivery lokmaCourierPercent')
       .lean();
     const restMap = new Map(restDocs.map((r) => [String(r._id), r]));
 
@@ -656,6 +658,9 @@ export const orderController = {
 
         o.deliveryFee = quote.price;
         o._distanceKm = quote.distanceKm;
+        // Tekin yetkazish (LokmaGo hisobidan) — mijoz 0 to'laydi, kuryer ulushi nominal narxdan (services/deliveryParty.js)
+        o._nominalDeliveryFee = Number(quote.nominalPrice ?? quote.price) || 0;
+        o._freeByLokma = Boolean(quote.freeByLokma);
       } else {
         o.deliveryFee = 0;   // olib ketishda yetkazish yo'q
       }
@@ -739,6 +744,21 @@ export const orderController = {
         restaurantCommissionPercent: Number(agreement?.restaurantCommissionPercent) || 0,
         paymentFeePercent: feePercent,
       });
+      /*
+       * ═══ KIM YETKAZADI ═══ (restoran rejimi — FAQAT LokmaGo admini belgilaydi)
+       * 'own' → restoran kuryeri (yetkazish puli restoranga, HOZIRGIDEK); 'lokma' → LokmaGo kuryeri (yetkazish puli
+       * kuryer + LokmaGo foizi); 'both' → restoran keyin tanlaydi (hozircha restoran deb hisoblanadi).
+       */
+      o._district = rest.district || DEFAULT_DISTRICT;
+      o._courierParty = isPickup ? null : initialParty(rest);
+      if (!isPickup) {
+        o._finance = applyDeliveryParty(o._finance, {
+          party: o._courierParty,
+          nominalDeliveryFeeTiyin: somToTiyin(o._nominalDeliveryFee ?? o.deliveryFee ?? 0),
+          percent: courierPercentFor(rest, appSettings),
+          free: o._courierParty === 'lokma' && Boolean(o._freeByLokma),
+        });
+      }
       o._finance.commissionAgreementId = agreement?._id || null;
       o._finance.agreementEffectiveFrom = agreement?.effectiveFrom || null;
 
@@ -908,6 +928,8 @@ export const orderController = {
         restaurantId: o.restaurantId,
         restaurantName: o.restaurantName,
         groupId,
+        district: o._district || DEFAULT_DISTRICT,
+        courierParty: o._courierParty ?? null,
         items: o.items,
         subtotal: o.subtotal,
         deliveryFee: fee,

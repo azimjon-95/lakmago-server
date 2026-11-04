@@ -75,7 +75,7 @@ export const mapsController = {
     }
 
     const restaurant = await Restaurant.findById(req.query.restaurantId)
-      .select('name lat lng delivery deliveryFee deliveryEnabled freeDeliveryThreshold')
+      .select('name lat lng delivery deliveryFee deliveryEnabled freeDeliveryThreshold courierMode lokmaFreeDelivery')
       .lean();
 
     if (!restaurant) {
@@ -96,7 +96,9 @@ export const mapsController = {
       distanceKm: quote.distanceKm,
       deliveryAvailable: quote.available,
       deliveryPrice: quote.price,
-      deliveryFree: Boolean(quote.free),
+      // LokmaGo tekin yetkazishi ham "bepul" (mijoz 0 to'laydi) — client o'zgarishsiz "Bepul" ko'rsatadi
+      deliveryFree: Boolean(quote.free || quote.freeByLokma),
+      freeByLokma: Boolean(quote.freeByLokma),
       freeDeliveryThreshold: quote.threshold || 0,
       ...(quote.reason ? { reason: quote.reason, code: quote.code } : {}),
       ...(quote.breakdown ? { breakdown: quote.breakdown } : {}),

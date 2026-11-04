@@ -370,6 +370,8 @@ export const restaurantPanelController = {
      */
     const orders = await Order.find(filter)
       .populate('userId', 'firstName lastName username telegramId phone photoUrl')
+      // LokmaGo kuryeri — restoran kimga taom berishini bilsin (ism, telefon)
+      .populate('lokmaCourier.courierId', 'name phone vehicle')
       .sort({ createdAt: -1 })
       .limit(80)
       .lean();
@@ -394,6 +396,7 @@ export const restaurantPanelController = {
   orderDetail: asyncHandler(async (req, res) => {
     const order = await Order.findOne({ _id: req.params.id, restaurantId: rid(req) })
       .populate('userId', 'firstName lastName username telegramId phone photoUrl')
+      .populate('lokmaCourier.courierId', 'name phone vehicle')
       .lean();
     if (!order) return res.status(404).json({ error: 'Buyurtma topilmadi' });
     res.json(toPanelOrder(order));

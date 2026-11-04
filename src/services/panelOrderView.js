@@ -37,6 +37,32 @@ export function restaurantFinanceView(f) {
     restaurantPayout: som(f.restaurantPayout),
     deliveryFee: som(f.deliveryFee),
     totalCharged: som(f.totalCharged),
+    /*
+     * Yetkazish kimniki (services/deliveryParty.js): LokmaGo kuryeri yetkazsa yetkazish puli restoranga TUSHMAYDI —
+     * restoran buni ko'rib turishi kerak (aks holda "yetkazish puli qayerda?" degan savol tug'iladi).
+     * Kuryer ulushi va LokmaGo foizi KO'RSATILMAYDI (restoranga tegishli emas).
+     */
+    courierParty: f.courierParty ?? null,
+    restaurantDeliveryPayout: som(f.restaurantDeliveryPayout),
+    freeDeliveryByLokma: Boolean(f.freeDeliveryByLokma),
+  };
+}
+
+/**
+ * LokmaGo kuryeri haqida restoran ko'radigan qisqa ma'lumot — populate qilingan yoki qilinmaganidan qat'i nazar
+ * BIR XIL shakl: { assigned, name, phone, claimedAt, pickedUpAt }. Kuryer balansi/daromadi CHIQMAYDI.
+ */
+export function lokmaCourierView(o) {
+  if (o?.courierParty !== 'lokma') return null;
+  const lc = o.lokmaCourier || {};
+  const c = lc.courierId && typeof lc.courierId === 'object' && 'name' in lc.courierId ? lc.courierId : null;
+  return {
+    assigned: Boolean(lc.courierId),
+    name: c?.name || '',
+    phone: c?.phone || '',
+    vehicle: c?.vehicle || '',
+    claimedAt: lc.claimedAt || null,
+    pickedUpAt: lc.pickedUpAt || null,
   };
 }
 
@@ -82,6 +108,7 @@ export function toPanelOrder(order, now = Date.now()) {
   const o = typeof order?.toObject === 'function' ? order.toObject() : { ...order };
   if (o.finance) o.finance = restaurantFinanceView(o.finance);
   const shaped = shapeOrderForPanel(o);
+  shaped.lokmaCourier = lokmaCourierView(o);
 
   /*
    * eligible/eligibleAt — server hisoblaydi, ilova qoidani qayta yozmasin.

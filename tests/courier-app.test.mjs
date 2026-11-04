@@ -8,6 +8,7 @@
 process.env.MONGO_URI = 'mongodb://127.0.0.1:27017/lokma_courier_app';
 process.env.REDIS_URL = 'redis://127.0.0.1:6390/1';
 process.env.JWT_SECRET = 'x'.repeat(40);
+process.env.COURIER_LEGACY_OFFERS = '1';       // bu test HAVOLA oqimidagi (eski) takliflarni tekshiradi; standart holda ular LokmaGo kuryeriga ko'rinmaydi
 process.env.TELEGRAM_BOT_TOKEN = ''; process.env.RESTAURANT_BOT_TOKEN = '';
 
 import jwt from 'jsonwebtoken';

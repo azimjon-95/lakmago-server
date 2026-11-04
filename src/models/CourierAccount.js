@@ -16,6 +16,17 @@ const courierAccountSchema = new Schema(
     phone: { type: String, default: '', trim: true, maxlength: 20 },
     vehicle: { type: String, enum: ['', 'scooter', 'bike', 'car', 'foot'], default: '' },
     isActive: { type: Boolean, default: true },
+    blockedReason: { type: String, default: '', maxlength: 200 },
+    /*
+     * ═══ LOKMAGO KURYERI (2026-11): tumanlar va naqd chegarasi ═══
+     * workDistricts — qaysi tumanlarda ishlaydi (constants/districts.js). Kuryer ilovada o'zi ham o'zgartira oladi.
+     * debtLimitSom  — qo'lidagi LokmaGo puli chegarasi (null = Settings.courier.debtLimitSom).
+     * tokenVersion  — parol almashsa / bloklansa oshiriladi: eski sessiyalar DARHOL bekor.
+     * Balans SAQLANMAYDI — yagona manba Ledger (courierId): services/courierPool.js
+     */
+    workDistricts: { type: [String], default: [] },
+    debtLimitSom: { type: Number, default: null, min: 0 },
+    tokenVersion: { type: Number, default: 0 },
     /** Hozir ochiq smena (CourierShift._id). Atomik «egallash» shu maydon orqali: ikki smena bir vaqtda ochilmaydi. */
     activeShiftId: { type: Schema.Types.ObjectId, ref: 'CourierShift', default: null },
     lastLoginAt: { type: Date, default: null },

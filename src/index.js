@@ -474,6 +474,12 @@ async function main() {
       .catch((e) => console.warn('[migratsiya] androidGateway tozalanmadi:', e.message));
   }
 
+  // Yetkazish rejimlari (2026-11): eski restoran/kuryer hujjatlariga standart qiymatlar — services/deliveryMigrations.js (idempotent)
+  {
+    const { migrateDeliveryFields } = await import('./services/deliveryMigrations.js');
+    migrateDeliveryFields().catch((e) => console.warn('[migratsiya] yetkazish maydonlari:', e.message));
+  }
+
   /*
    * Restoranga eslatma — buyurtma yakunlanmasdan qolib ketmasin
    * (kuryer "Topshirdim", xodim "Mijozga topshirildi" ni bosishni

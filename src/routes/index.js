@@ -40,6 +40,7 @@ import { staffController } from '../controllers/staff.js';
 import { panelAdsController, adminAdsController, publicAdsController } from '../controllers/ads.js';
 import { courierAdminController, courierRegistryController, courierPortalController } from '../controllers/courier.js';
 import { courierAppController, courierAccountAdminController } from '../controllers/courierApp.js';
+import { districtsController, adminCourierController, adminRestaurantDeliveryController, panelDeliveryController } from '../controllers/delivery.js';
 import { courierAuth } from '../middleware/courierAuth.js';
 import { mapsController } from '../controllers/maps.js';
 import { catalogProductController } from '../controllers/catalogProducts.js';
@@ -391,6 +392,30 @@ router.patch('/admin/couriers/:id', ...AS('couriers'), courierRegistryController
 router.delete('/admin/couriers/:id', ...AS('couriers'), courierRegistryController.remove);
 
 /*
+ * ═══ LOKMAGO KURYERLARI va YETKAZISH REJIMI (2026-11) ═══ — controllers/delivery.js, services/courierPool.js
+ * Ruxsat: pulga ta'sir qiladiganlar (rejim, foiz, tekin yetkazish, global sozlama) — FAQAT bosh admin (A);
+ * kuryer kassasi (naqd topshirish/to'lov/tuzatish) — moliya bo'limi ('billing'); kuryerlar va quti — 'couriers'.
+ */
+router.get('/districts', districtsController.list);
+router.get('/admin/courier-accounts/:id/ledger', ...AS('couriers'), adminCourierController.ledger);
+router.post('/admin/courier-accounts/:id/ledger', ...AS('billing'), writeLimiter, adminCourierController.addLedger);
+router.get('/admin/courier-accounts/live', ...AS('couriers'), adminCourierController.live);
+router.get('/admin/courier-accounts/:id/track', ...AS('couriers'), adminCourierController.track);
+router.get('/admin/orders/:id/courier-trace', ...AS('couriers'), adminCourierController.trace);
+router.get('/admin/courier-events', ...AS('couriers'), adminCourierController.events);
+router.put('/admin/restaurants/:id/couriers', ...AS('couriers'), writeLimiter, adminRestaurantDeliveryController.setExclusiveCouriers);
+router.get('/admin/courier-pool', ...AS('couriers'), adminCourierController.pool);
+router.post('/admin/orders/:id/courier-assign', ...AS('couriers'), adminCourierController.assign);
+router.post('/admin/orders/:id/courier-release', ...AS('couriers'), adminCourierController.release);
+router.get('/admin/courier-settings', ...A, adminCourierController.getSettings);
+router.patch('/admin/courier-settings', ...A, adminCourierController.updateSettings);
+router.patch('/admin/restaurants/:id/courier-settings', ...A, adminRestaurantDeliveryController.updateCourierSettings);
+router.patch('/admin/restaurants/:id/district', ...AS('restaurants'), adminRestaurantDeliveryController.updateDistrict);
+router.get('/panel/courier-settings', ...R, panelDeliveryController.info);
+router.post('/panel/orders/:id/courier-party', ...R, writeLimiter, panelDeliveryController.setParty);
+
+
+/*
  * OCHIQ — kuryer sahifasi. Login YO'Q: token o'zi kredensial.
  * lokma-courier (alohida frontend loyihasi) shu endpointlarni
  * chaqiradi (/k/:token yo'li orqali).
@@ -408,6 +433,7 @@ router.post('/courier-portal/:token/location', courierLocationLimiter, courierPo
  */
 router.post('/courier-app/login', loginLimiter, courierAppController.login);
 router.get('/courier-app/me', courierAuth, courierAppController.me);
+router.patch('/courier-app/me', courierAuth, writeLimiter, courierAppController.updateMe);
 router.get('/courier-app/shift', courierAuth, courierAppController.shift);
 router.post('/courier-app/shift/start', courierAuth, writeLimiter, courierAppController.shiftStart);
 router.post('/courier-app/shift/end', courierAuth, writeLimiter, courierAppController.shiftEnd);
@@ -416,6 +442,7 @@ router.post('/courier-app/location', courierAuth, courierAppLocationLimiter, cou
 router.get('/courier-app/offers', courierAuth, courierAppController.offers);
 router.post('/courier-app/offers/:id/accept', courierAuth, writeLimiter, courierAppController.accept);
 router.get('/courier-app/active', courierAuth, courierAppController.active);
+router.post('/courier-app/active/pickup', courierAuth, writeLimiter, courierAppController.pickup);
 router.post('/courier-app/active/deliver', courierAuth, writeLimiter, courierAppController.deliver);
 router.get('/courier-app/history', courierAuth, courierAppController.history);
 router.get('/courier-app/stats', courierAuth, courierAppController.stats);

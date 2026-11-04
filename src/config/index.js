@@ -429,8 +429,15 @@ export const config = {
   // Kuryer ilovasi (BOSQICH 2). Kuryer JWT'si BOSHQA kalit bilan imzolanadi: mijoz/restoran/admin `auth` middleware'i uni qabul qilmaydi.
   courierJwtSecret: process.env.COURIER_JWT_SECRET || `${jwtSecret}:courier`,
   courierOfferRadiusM: Number(process.env.COURIER_OFFER_RADIUS_M || 10000),    // taklif shu masofadagi smenadagi kuryerlarga boradi
+  courierLegacyOffers: process.env.COURIER_LEGACY_OFFERS === '1',              // 1 = havola oqimidagi (eski) takliflar ham LokmaGo kuryeriga ko'rinadi
   courierMaxActive: Number(process.env.COURIER_MAX_ACTIVE || 1),                // bir vaqtda nechta buyurtma olishi mumkin
   courierShiftAutoCloseH: Number(process.env.COURIER_SHIFT_AUTO_CLOSE_H || 16), // unutilgan smena shuncha soatdan keyin yopiladi
+  // Kuryer nazorati (2026-11): trek, "oldim/topshirdim" joylashuv tekshiruvi
+  courierTrackTtlDays: Number(process.env.COURIER_TRACK_TTL_DAYS || 45),        // trek nuqtalari shuncha kun saqlanadi
+  courierPickupRadiusM: Number(process.env.COURIER_PICKUP_RADIUS_M || 250),     // "taomni oldim" restoranga shuncha masofada bo'lishi kerak (aks holda belgilanadi)
+  courierDeliverRadiusM: Number(process.env.COURIER_DELIVER_RADIUS_M || 400),   // "topshirdim" mijoz manziliga shuncha masofada bo'lishi kerak
+  courierStaleSec: Number(process.env.COURIER_STALE_SEC || 60),                 // joylashuv shundan eski bo'lsa "signal yo'q"
+  courierEnforceProximity: process.env.COURIER_ENFORCE_PROXIMITY === '1',      // 1 = uzoqdan "oldim/topshirdim" BLOKLANADI (standart: faqat belgilanadi)
   mobilePushTimeoutMs: Number(process.env.MOBILE_PUSH_TIMEOUT_MS || 10000),
   mobilePushRepeatSec: Number(process.env.MOBILE_PUSH_REPEAT_SEC || 30),
   mobilePushMaxSends: Number(process.env.MOBILE_PUSH_MAX_SENDS || 10),

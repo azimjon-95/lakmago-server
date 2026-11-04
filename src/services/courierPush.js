@@ -6,7 +6,8 @@ import { Order } from '../models/Order.js';
 import { config } from '../config/index.js';
 import { sendFcm, sendApns, providers } from './mobilePush.js';
 import { nearby } from './courierPresence.js';
-import { offerView } from './courierApp.js';
+import { offerView, poolOfferView } from './courierApp.js';
+import { POOL_STATUSES } from './courierPool.js';
 
 /**
  * KURYERGA TAKLIF PUSH'I. Kuryer ilovasi yopiq / telefon bloklangan bo'lsa ham OS orqali keladi (restoran push'i bilan bir xil
@@ -24,7 +25,7 @@ const som = (n) => `${String(Math.round(Number(n) || 0)).replace(/\B(?=(\d{3})+(
 const km = (m) => (m == null ? '' : m < 950 ? `${Math.round(m / 10) * 10} m` : `${(m / 1000).toFixed(1)} km`);
 
 export function offerMessages(v) {
-  const body = [v.restaurantName, km(v.distanceM), v.deliveryFee ? `haq ${som(v.deliveryFee)}` : ''].filter(Boolean).join(' • ');
+  const body = [v.restaurantName, km(v.distanceM), v.itemsSummary ? v.itemsSummary.slice(0, 60) : '', v.deliveryFee ? `haq ${som(v.deliveryFee)}` : ''].filter(Boolean).join(' • ');
   return {
     android: {
       data: { type: 'courier_offer', assignmentId: v.id, orderCode: v.orderCode, title: '🛵 Yangi yetkazish', body, distanceM: String(v.distanceM ?? '') },
@@ -66,10 +67,61 @@ async function claimOffer(assignmentId, courierId, now) {
   } catch (e) { if (e?.code === 11000) return false; throw e; }
 }
 
-/** Timer (5 s): ochiq takliflarni yaqin kuryerlarga yuboradi. Qaytaradi: yuborilgan push soni. */
+/**
+ * Timer (5 s): ochiq takliflarni smenadagi kuryerlarga yuboradi. Qaytaradi: yuborilgan push soni.
+ *
+ * LOKMAGO QUTISI (asosiy): courierParty='lokma', kuryer yo'q, restoran qabul qilgan buyurtmalar. Kim oladi:
+ *   • restoranga kuryer BIRIKTIRILGAN bo'lsa — FAQAT shu kuryerlar (smenada bo'lsa; masofa/tuman cheklovisiz);
+ *   • aks holda — ish tumani (workDistricts) mos, restoranga [courierOfferRadiusM] ichidagi smenadagi kuryerlar.
+ * Taklif kaliti — buyurtma ID (CourierOffer.assignmentId maydoni shu uchun ishlatiladi).
+ * HAVOLA oqimi (eski) — faqat config.courierLegacyOffers yoqilgan bo'lsa (dispatchLegacyOffers).
+ */
 export async function dispatchOffers(now = Date.now()) {
   const p = providers();
   if (!p.android && !p.ios) return 0;
+  let sent = await dispatchPoolOffers(now);
+  if (config.courierLegacyOffers) sent += await dispatchLegacyOffers(now);
+  return sent;
+}
+
+async function dispatchPoolOffers(now) {
+  const orders = await Order.find({
+    courierParty: 'lokma', 'lokmaCourier.courierId': null, fulfillment: 'delivery', status: { $in: POOL_STATUSES },
+    createdAt: { $gte: new Date(now - MAX_AGE_MS) },
+  }).sort({ createdAt: -1 }).limit(30)
+    .select('dailyNumber status district restaurantId restaurantName paymentMethod finance items addressLat addressLng acceptedAt createdAt')
+    .populate('restaurantId', 'name address lat lng exclusiveCouriers').lean();
+  if (!orders.length) return 0;
+
+  const onShiftAccs = await CourierAccount.find({ isActive: true, activeShiftId: { $ne: null } }).select('_id workDistricts').lean();
+  if (!onShiftAccs.length) return 0;
+  const busyRows = await Order.find({ 'lokmaCourier.courierId': { $in: onShiftAccs.map((c) => c._id) }, status: { $in: ['accepted', 'preparing', 'ready', 'delivering'] } }).select('lokmaCourier.courierId').lean();
+  const busy = new Set(busyRows.map((o) => String(o.lokmaCourier.courierId)));
+  const accById = new Map(onShiftAccs.map((c) => [String(c._id), c]));
+
+  let sent = 0;
+  for (const o of orders) {
+    const r = o.restaurantId || {};
+    if (!Number.isFinite(r.lat) || !Number.isFinite(r.lng)) continue;
+    const exclusive = (r.exclusiveCouriers || []).map(String);
+    const near = await nearby({ lat: r.lat, lng: r.lng }, exclusive.length ? 1e9 : config.courierOfferRadiusM, { limit: 30 });
+    for (const c of near) {
+      const acc = accById.get(c.id);
+      if (!acc || busy.has(c.id)) continue;
+      if (exclusive.length ? !exclusive.includes(c.id) : !(acc.workDistricts || []).includes(o.district)) continue;
+      if (!(await claimOffer(o._id, c.id, now))) continue;
+      const view = poolOfferView({ ...poolCardOf(o), distanceToRestaurantM: c.distanceM });
+      const msgs = offerMessages(view);
+      sent += await pushToCourier(c.id, (platform) => msgs[platform]).catch(() => 0);
+    }
+  }
+  return sent;
+}
+
+// courierPool.poolCard bilan bir xil shakl (sikl bo'lmasligi uchun shu yerda emas, dinamik import o'rniga to'g'ridan-to'g'ri)
+import { poolCard as poolCardOf } from './courierPool.js';
+
+async function dispatchLegacyOffers(now) {
   const open = await DeliveryAssignment.find({ status: 'searching', createdAt: { $gte: new Date(now - MAX_AGE_MS) } }).sort({ createdAt: -1 }).limit(30).lean();
   if (!open.length) return 0;
   const valid = new Set((await Order.find({ _id: { $in: open.map((a) => a.orderId) }, status: { $in: OPEN_ORDER } }).select('_id').lean()).map((o) => String(o._id)));

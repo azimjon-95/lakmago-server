@@ -66,6 +66,13 @@ export const courierAdminController = {
     const { Order } = await import('../models/Order.js');
     const order = await Order.findOne({ _id: req.params.id, restaurantId: rid(req) }).lean();
     if (!order) return res.status(404).json({ error: 'Buyurtma topilmadi' });
+    /*
+     * LokmaGo kuryeri yetkazadigan buyurtma umumiy qutida — restoran o'z havolasini tarqatsa, bitta buyurtmaga IKKI kuryer
+     * (LokmaGo + restoran) borib qolardi va yetkazish puli noto'g'ri taqsimlanardi.
+     */
+    if (order.courierParty === 'lokma') {
+      return res.status(409).json({ error: 'Bu buyurtmani LokmaGo kuryeri yetkazadi — havola kerak emas', code: 'LOKMA_COURIER' });
+    }
 
     /*
      * Bot va panel BIR XIL havolani ishlatadi: ochiq (hali hech kim

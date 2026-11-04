@@ -167,6 +167,19 @@ async function courierStats(phone) {
   return { deliveries: done.length, rating: agg[0]?.avg ?? 0, ratingCount: agg[0]?.n ?? 0 };
 }
 
+/** LokmaGo kuryeri buyurtmasi uchun courierView kutadigan "assignment" shakli (faqat o'qish). */
+async function lokmaCourierAssignment(o) {
+  const [{ CourierAccount }, { getLocation }] = await Promise.all([import('../models/CourierAccount.js'), import('./courierPresence.js')]);
+  const acc = await CourierAccount.findById(o.lokmaCourier.courierId).select('name phone vehicle').lean();
+  if (!acc) return null;
+  const loc = await getLocation(String(acc._id)).catch(() => null);
+  return {
+    status: 'assigned',
+    courier: { name: acc.name, phone: acc.phone || '', vehicle: acc.vehicle || '' },
+    location: loc ? { lat: loc.lat, lng: loc.lng, heading: loc.heading ?? undefined, at: new Date(loc.ts) } : null,
+  };
+}
+
 /* ───────────── Bitta javob ───────────── */
 export async function getOrderTrack(orderId, userId, now = Date.now()) {
   const o = await Order.findOne({ _id: orderId, userId }).lean();
@@ -188,8 +201,14 @@ export async function getOrderTrack(orderId, userId, now = Date.now()) {
   const distanceKm = Number.isFinite(o.distanceKm) ? o.distanceKm
     : (restPoint && custPoint ? Math.round(haversineKm(restPoint, custPoint) * 10) / 10 : null);
 
-  const stats = assignment?.courier?.phone ? await courierStats(assignment.courier.phone) : null;
-  const courier = courierView(assignment, o, stats, now);
+  /*
+   * LokmaGo kuryeri (umumiy quti, 2026-11): havola/DeliveryAssignment yo'q — kuryer akkaunti va uning jonli joylashuvidan
+   * "assignment" shaklini yasaymiz, shunda mijoz kuzatuvi (ism, telefon yo'lda, xarita, ETA) o'zgarishsiz ishlaydi.
+   */
+  const lokmaAssignment = !assignment && o.courierParty === 'lokma' && o.lokmaCourier?.courierId ? await lokmaCourierAssignment(o) : null;
+  const eff = assignment || lokmaAssignment;
+  const stats = eff?.courier?.phone ? await courierStats(eff.courier.phone) : null;
+  const courier = courierView(eff, o, stats, now);
   const prepMinutes = dishes.length ? Math.max(...dishes.map((d) => d.prepMinutes || 0)) : null;
   const { steps, current } = buildSteps(o);
   const eta = estimateEta(o, {

@@ -262,6 +262,28 @@ const restaurantSchema = new Schema(
      * Dine-in va bronda QO'LLANMAYDI — u yerda zal narxi qoladi.
      */
     deliveryMarkupPercent: { type: Number, default: 0, min: 0, max: 100 },
+
+    /*
+     * ===== HUDUD va KIM YETKAZADI (2026-11) =====
+     * FAQAT LokmaGo admini o'zgartiradi (PATCH /admin/restaurants/:id/courier-settings) — restoran o'zi o'zgartira olmaydi.
+     *   district            — Namangan viloyatidagi tuman/shahar (constants/districts.js). Kuryerlar shu bo'yicha ishlaydi.
+     *   courierMode         — 'own' (o'z kuryeri, hozirgidek) | 'lokma' (LokmaGo kuryeri, umumiy quti) | 'both' (restoran tanlaydi)
+     *   lokmaFreeDelivery   — LokmaGo kuryeri TEKIN yetkazadi (mijozdan yetkazish olinmaydi). Faqat 'lokma' rejimida amal qiladi.
+     *   lokmaCourierPercent — LokmaGo'ning yetkazishdan foizi shu restoran uchun (null = global Settings.courier.commissionPercent)
+     * Hisob mantig'i: services/deliveryParty.js
+     */
+    district: { type: String, default: 'pop', index: true },
+    courierMode: { type: String, enum: ['own', 'lokma', 'both'], default: 'own' },
+    lokmaFreeDelivery: { type: Boolean, default: false },
+    lokmaCourierPercent: { type: Number, default: null, min: 0, max: 100 },
+    /*
+     * BIRIKTIRILGAN KURYERLAR (LokmaGo admini): bo'sh emas bo'lsa shu restoranning LokmaGo buyurtmalarini FAQAT shu kuryerlar
+     * ko'radi va oladi (boshqa kuryer — tumani mos bo'lsa ham — yo'q). Biriktirilgan kuryer uchun tuman cheklovi ham yo'q.
+     * Bo'sh — hamma (tumani mos kuryerlar). Faqat 'lokma' / 'both' rejimida ahamiyatli.
+     */
+    exclusiveCouriers: { type: [Schema.Types.ObjectId], ref: 'CourierAccount', default: [] },
+    courierSettingsUpdatedAt: { type: Date, default: null },
+    courierSettingsUpdatedBy: { type: String, default: '' },
     // Tayyorlash vaqti (daqiqa) — olib ketish uchun "nechida tayyor" hisobi
     prepMinutes: { type: Number, default: 20 },
 
