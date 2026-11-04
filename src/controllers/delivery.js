@@ -24,8 +24,8 @@ import { tiyinToSom } from '../services/orderFinance.js';
  *   /courier/*                                         — kuryer ilovasi (courierAuth: telefon + PIN)
  *   PATCH /admin/restaurants/:id/courier-settings      — FAQAT bosh admin: rejim, tekin yetkazish, foiz (pulga ta'sir qiladi)
  *   PATCH /admin/restaurants/:id/district              — admin + "restaurants" bo'limi xodimi
- *   /admin/couriers (ro'yxat, qo'shish, tuman, blok)   — admin + "couriers" bo'limi
- *   POST /admin/couriers/:id/ledger (naqd topshirish, to'lov, tuzatish) — admin + "billing" bo'limi (buxgalter)
+ *   /admin/courier-accounts (ro'yxat, qo'shish, tuman, blok)   — admin + "couriers" bo'limi
+ *   POST /admin/courier-accounts/:id/ledger (naqd topshirish, to'lov, tuzatish) — admin + "billing" bo'limi (buxgalter)
  *   GET/PATCH /admin/courier-settings (global foiz, qarz chegarasi) — FAQAT bosh admin
  *   POST /panel/orders/:id/courier-party               — restoran, FAQAT 'both' rejimida
  */
@@ -72,7 +72,7 @@ export const adminCourierController = {
   }),
 
   /*
-   * POST /admin/couriers/:id/ledger { type, amountSom, note }
+   * POST /admin/courier-accounts/:id/ledger { type, amountSom, note }
    *   courier_handover   — kuryer qo'lidagi naqdni topshirdi (+)
    *   courier_payout     — LokmaGo kuryerga ulushini to'ladi (−)
    *   courier_adjustment — tuzatish (± amountSom, sabab MAJBURIY)

@@ -120,8 +120,8 @@ test('RUXSAT: tuman — restoranlar bo\'limi; kuryer kassasi — moliya bo\'limi
   assert.equal((await reaches('patch', '/admin/restaurants/:id/district', tok.orders)).ok, false);
   assert.equal((await reaches('post', '/admin/courier-accounts/:id/ledger', tok.acc)).ok, true, 'buxgalter');
   assert.equal((await reaches('post', '/admin/courier-accounts/:id/ledger', tok.orders)).ok, false, 'buyurtmalar bo\'limi pulni yozmaydi');
-  assert.equal((await reaches('get', '/admin/couriers', tok.orders)).ok, true);
-  assert.equal((await reaches('get', '/admin/couriers', tok.ops)).ok, false);
+  assert.equal((await reaches('get', '/admin/courier-accounts', tok.orders)).ok, true);
+  assert.equal((await reaches('get', '/admin/courier-accounts', tok.ops)).ok, false);
   assert.equal((await reaches('post', '/panel/orders/:id/courier-party', tok.rest)).ok, true);
   assert.equal((await reaches('post', '/panel/orders/:id/courier-party', tok.admin)).ok, false, 'panel yo\'li faqat restoran');
 });

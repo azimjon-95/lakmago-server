@@ -38,7 +38,7 @@ import { settlementController } from '../controllers/settlement.js';
 import { expenseController } from '../controllers/expense.js';
 import { staffController } from '../controllers/staff.js';
 import { panelAdsController, adminAdsController, publicAdsController } from '../controllers/ads.js';
-import { courierAdminController, courierRegistryController, courierPortalController } from '../controllers/courier.js';
+import { courierAdminController, courierPortalController } from '../controllers/courier.js';
 import { courierAppController, courierAccountAdminController } from '../controllers/courierApp.js';
 import { districtsController, adminCourierController, adminRestaurantDeliveryController, panelDeliveryController } from '../controllers/delivery.js';
 import { courierAuth } from '../middleware/courierAuth.js';
@@ -386,10 +386,6 @@ router.get('/panel/orders/:id/dispatch-status', ...R, courierAdminController.dis
  * admin panelidagi "Kuryerlar" sahifasi bu bilan ishlaydi, lekin
  * yuqoridagi ulashish oqimi bilan bog'liq EMAS).
  */
-router.get('/admin/couriers', ...AS('couriers'), courierRegistryController.list);
-router.post('/admin/couriers', ...AS('couriers'), courierRegistryController.create);
-router.patch('/admin/couriers/:id', ...AS('couriers'), courierRegistryController.update);
-router.delete('/admin/couriers/:id', ...AS('couriers'), courierRegistryController.remove);
 
 /*
  * ═══ LOKMAGO KURYERLARI va YETKAZISH REJIMI (2026-11) ═══ — controllers/delivery.js, services/courierPool.js
