@@ -75,7 +75,8 @@
     "test:courier-flow": "node tests/courier-flow.test.mjs",
     "test:panel-order-courier": "node tests/panel-order-courier.test.mjs",
     "test:courier-track": "node tests/courier-track.test.mjs",
-    "test:courier-app-pool": "node tests/courier-app-pool.test.mjs"
+    "test:courier-app-pool": "node tests/courier-app-pool.test.mjs",
+    "test:boot": "node tests/boot.test.mjs"
   },
   "dependencies": {
     "@socket.io/redis-adapter": "^8.3.0",
