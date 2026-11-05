@@ -1,4 +1,5 @@
 import { config } from '../config/index.js';
+import { formatMeters } from './deviceCheck.js';
 import { REJECT_REASONS } from '../constants/rejectReasons.js';
 import { Order } from '../models/Order.js';
 import { Dish } from '../models/Dish.js';
@@ -264,6 +265,10 @@ export function buildOrderText(order, { actorName = '', assignment = null, tz = 
     lines.push('🏃 <b>Mijoz o‘zi olib ketadi</b>');
   } else {
     lines.push(`📍 ${esc(order.address || '—')}`);
+    // Mijoz qurilmasi manzildan ≥500 m uzoqda edi — restoran pishirishdan oldin qo'ng'iroq qilib aniqlasin
+    if (order.deviceCheck?.status === 'far') {
+      lines.push(`⚠️ <b>Mijoz manzildan ${esc(formatMeters(order.deviceCheck.distanceM))} uzoqda</b>${order.deviceCheck.confirmedFar ? ' (manzilni o‘zi tasdiqlagan)' : ' — qo‘ng‘iroq qilib aniqlang'}`);
+    }
   }
   if (order.phone) lines.push(`📞 ${esc(order.phone)}`);
   if (order.addressNote) lines.push(`📝 ${esc(order.addressNote)}`);

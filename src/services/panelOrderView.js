@@ -25,6 +25,8 @@ import { confirmEligibility, COMPLETABLE_STATUSES } from './reminderRules.js';
  *
  * Summalar so'mda (snapshot tiyinda saqlanadi).
  */
+import { deviceCheckView } from './deviceCheck.js';
+
 export function restaurantFinanceView(f) {
   const som = (t) => Math.round(Number(t) || 0) / 100;
   return {
@@ -109,6 +111,7 @@ export function toPanelOrder(order, now = Date.now()) {
   if (o.finance) o.finance = restaurantFinanceView(o.finance);
   const shaped = shapeOrderForPanel(o);
   shaped.lokmaCourier = lokmaCourierView(o);
+  shaped.deviceCheck = deviceCheckView(o);       // mijoz manzildan uzoqdami (faqat masofa, koordinatasiz)
 
   /*
    * eligible/eligibleAt — server hisoblaydi, ilova qoidani qayta yozmasin.

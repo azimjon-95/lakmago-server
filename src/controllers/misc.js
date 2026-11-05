@@ -26,6 +26,7 @@ import { verifyItemPrices } from '../services/priceVerification.js';
 import { computeOrderFinance, reconcile, somToTiyin, tiyinToSom } from '../services/orderFinance.js';
 import { applyDeliveryParty, initialParty, courierPercentFor } from '../services/deliveryParty.js';
 import { DEFAULT_DISTRICT } from '../constants/districts.js';
+import { assessDevice } from '../services/deviceCheck.js';
 import { resolveGifts } from '../services/giftBonus.js';
 import { activeAgreement } from '../models/CommissionAgreement.js';
 import { COMPLETABLE_STATUSES } from '../services/reminderRules.js';
@@ -367,6 +368,12 @@ const batchOrderSchema = z.object({
   addressLat: z.number().optional(),
   addressLng: z.number().optional(),
   addressNote: z.string().max(200).optional(),
+  // Qurilma qayerda ekani (mijoz ilovasi, YANGI nuqta) — services/deviceCheck.js baholaydi; ixtiyoriy (eski ilovalar yubormaydi)
+  deviceLat: z.number().min(-90).max(90).optional(),
+  deviceLng: z.number().min(-180).max(180).optional(),
+  deviceAccuracy: z.number().min(0).max(100000).optional(),
+  deviceAt: z.string().datetime().optional(),
+  addressConfirmedFar: z.boolean().optional(),
   cardLast4: z.string().optional().default(''),
   cardBrand: z.string().optional().default(''),
   phone: z.string().optional(),
@@ -386,7 +393,8 @@ export const orderController = {
     }
     const { orders, address, phone, paymentMethod, paymentLabel, useBonus,
             fulfillment, timingMode, scheduledFor, cardLast4, cardBrand,
-            addressLat, addressLng, addressNote } = parsed.data;
+            addressLat, addressLng, addressNote,
+            deviceLat, deviceLng, deviceAccuracy, deviceAt, addressConfirmedFar } = parsed.data;
 
     /*
      * Mijoz cheklovlari (admin qarori — services/customerIncidents.js):
@@ -464,6 +472,11 @@ export const orderController = {
         console.log(`[manzil] Koordinata saqlangan manzildan olindi (user ${req.userId})`);
       }
     }
+
+    // Qurilma ↔ manzil: faqat YETKAZISH uchun; barcha buyurtmalar (batch) bir manzilga — bitta baho
+    const deviceCheck = !isPickup && finalLat != null && finalLng != null
+      ? assessDevice({ lat: deviceLat, lng: deviceLng, accuracy: deviceAccuracy, at: deviceAt }, { lat: finalLat, lng: finalLng }, { confirmedFar: addressConfirmedFar === true })
+      : null;
 
     const groupId = 'G' + Date.now() + Math.floor(Math.random() * 1000);
     const io = getIO();
@@ -971,6 +984,7 @@ export const orderController = {
         addressLat: finalLat ?? null,
         addressLng: finalLng ?? null,
         addressNote: addressNote || '',
+        ...(deviceCheck ? { deviceCheck } : {}),
         ...(o._distanceKm != null ? { distanceKm: o._distanceKm } : {}),
         etaMinutes: o.etaMinutes,
         // courierName ATAYLAB yozilmaydi: avval bu yerda TASODIFIY ism tanlanardi va mijozga
