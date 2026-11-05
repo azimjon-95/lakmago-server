@@ -294,6 +294,17 @@ const orderSchema = new Schema(
     addressLng: { type: Number, default: null },
     // Manzil tafsiloti (podez, qavat, xonadon)
     addressNote: { type: String, default: '' },
+    /*
+     * Mijoz qurilmasi buyurtma paytida yetkazish manzilidan qanchalik uzoq edi (services/deviceCheck.js). Xom koordinata saqlanmaydi.
+     * status: match | near | far | unknown. confirmedFar — mijoz uzoq manzilni o'zi tasdiqlagan / bir martalik manzilni o'zi tanlagan.
+     */
+    deviceCheck: {
+      status: { type: String, enum: ['match', 'near', 'far', 'unknown'], default: undefined },
+      distanceM: { type: Number, default: undefined },
+      accuracyM: { type: Number, default: undefined },
+      fixAt: { type: Date, default: undefined },
+      confirmedFar: { type: Boolean, default: undefined },
+    },
     // Restorandan manzilgacha masofa (km)
     distanceKm: { type: Number, default: null },
 

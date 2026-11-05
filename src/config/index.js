@@ -436,6 +436,9 @@ export const config = {
   courierTrackTtlDays: Number(process.env.COURIER_TRACK_TTL_DAYS || 45),        // trek nuqtalari shuncha kun saqlanadi
   courierPickupRadiusM: Number(process.env.COURIER_PICKUP_RADIUS_M || 250),     // "taomni oldim" restoranga shuncha masofada bo'lishi kerak (aks holda belgilanadi)
   courierDeliverRadiusM: Number(process.env.COURIER_DELIVER_RADIUS_M || 400),   // "topshirdim" mijoz manziliga shuncha masofada bo'lishi kerak
+  // Mijoz qurilmasi ↔ yetkazish manzili (services/deviceCheck.js): xato ayirilgach shuncha uzoq bo'lsa 'far' (restoran ogohlantiriladi)
+  deviceFarM: Number(process.env.DEVICE_FAR_M || 500),
+  deviceNearM: Number(process.env.DEVICE_NEAR_M || 150),
   courierStaleSec: Number(process.env.COURIER_STALE_SEC || 60),                 // joylashuv shundan eski bo'lsa "signal yo'q"
   courierEnforceProximity: process.env.COURIER_ENFORCE_PROXIMITY === '1',      // 1 = uzoqdan "oldim/topshirdim" BLOKLANADI (standart: faqat belgilanadi)
   mobilePushTimeoutMs: Number(process.env.MOBILE_PUSH_TIMEOUT_MS || 10000),
