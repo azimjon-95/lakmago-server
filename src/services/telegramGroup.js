@@ -329,7 +329,13 @@ export async function sendCustomBroadcast(opts) {
   const {
     chatId, text = '', imageUrl = '', video = null, videoFileId = '', videoMethod = 'sendVideo',
     buttonText = '', buttonUrl = '', pin = false,
+    width, height, duration,
   } = opts;
+  // Video o'lchami: eni VA bo'yi birga bo'lsagina (bittasi Telegram'ni chalg'itadi); davomiylik alohida
+  const dims = {
+    ...(Number.isInteger(width) && Number.isInteger(height) && width > 0 && height > 0 ? { width, height } : {}),
+    ...(Number.isInteger(duration) && duration > 0 ? { duration } : {}),
+  };
 
   if (!config.telegramBotToken) {
     return { ok: true, demo: true };
@@ -357,7 +363,7 @@ export async function sendCustomBroadcast(opts) {
   let msg;
   let out = {};
   if (hasVideo) {
-    const base = { chat_id: chatId, caption, parse_mode: caption ? 'HTML' : undefined, reply_markup: mediaKeyboard, supports_streaming: true };
+    const base = { chat_id: chatId, caption, parse_mode: caption ? 'HTML' : undefined, reply_markup: mediaKeyboard, supports_streaming: true, ...dims };
     if (video) {
       msg = await tgUpload(
         'sendVideo', base,
