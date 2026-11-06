@@ -137,8 +137,8 @@ export async function handleBotUpdate(update) {
     const status = new_chat_member?.status;
     const prevStatus = old_chat_member?.status;
 
-    // Faqat guruh/superguruh (shaxsiy chat emas)
-    if (chat?.type !== 'group' && chat?.type !== 'supergroup') return;
+    // Guruh/superguruh va KANAL (shaxsiy chat emas). Kanal: umumiy promo avtomatik yuborilmaydi — faqat restoran biriktirilsa pin
+    if (!['group', 'supergroup', 'channel'].includes(chat?.type)) return;
 
     try {
       const { onBotPromotedToAdmin, registerGroup } = await import('./telegramGroup.js');

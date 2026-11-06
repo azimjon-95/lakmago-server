@@ -747,6 +747,10 @@ router.delete('/admin/banners/:id', auth, requireRole('admin'), adminController.
 router.get('/admin/groups', auth, requireRole('admin'), adminController.groups);
 router.post('/admin/groups/add', auth, requireRole('admin'), adminController.addGroup);
 router.post('/admin/groups/:chatId/resend', auth, requireRole('admin'), adminController.resendPromo);
+// Restoran guruhi/kanali: restoran biriktirish (pin → shu restoran sahifasi), pinni yangilash, umumiy reklamani yoqish/o'chirish
+router.put('/admin/groups/:chatId/restaurant', auth, requireRole('admin'), writeLimiter, adminController.setGroupRestaurant);
+router.post('/admin/groups/:chatId/restaurant/repin', auth, requireRole('admin'), writeLimiter, adminController.repinGroupRestaurant);
+router.patch('/admin/groups/:chatId/ads', auth, requireRole('admin'), writeLimiter, adminController.setGroupAds);
 // `adAttachment` — multipart video (xotirada, bazaga yozilmaydi); JSON so'rovga tegmaydi
 // Video bo'laklab yuklanadi (nginx 1 MB chegarasi va uzilishlarga chidamli) — middleware/adUpload.js
 router.post('/admin/ad-uploads', auth, requireRole('admin'), adUploadController.init);
