@@ -37,6 +37,13 @@ function parseBroadcastBody(req) {
       })
       .refine((v) => v === null || (v.length <= 500 && v.every((x) => /^-?\d{1,20}$/.test(x))), 'chatIds noto‘g‘ri'),
     force: bool.optional().default(false),
+    /*
+     * Video o'lchami (admin panel brauzerda o'qiydi — aylantirish hisobga olingan KO'RINADIGAN o'lcham). Telegram'ga uzatiladi:
+     * berilmasa Telegram ba'zi videolarni (ayniqsa iPhone MOV) ezilgan/kvadrat ko'rsatadi. Multipart'da satr bo'lib keladi.
+     */
+    width: z.coerce.number().int().min(1).max(10000).optional(),
+    height: z.coerce.number().int().min(1).max(10000).optional(),
+    duration: z.coerce.number().int().min(0).max(36000).optional(),
   });
   const parsed = schema.safeParse(req.body || {});
   if (!parsed.success) return { error: 'Ma‘lumot noto‘g‘ri' };
