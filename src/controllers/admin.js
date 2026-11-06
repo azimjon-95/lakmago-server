@@ -27,6 +27,16 @@ function parseBroadcastBody(req) {
     buttonText: z.string().optional().default(''),
     buttonUrl: z.string().optional().default(''),
     pin: bool.optional().default(false),
+    // Tanlangan chatlar (ixtiyoriy): JSON massiv yoki multipart'da JSON matn / vergul bilan ajratilgan ro'yxat
+    chatIds: z.union([z.array(z.string()), z.string()]).optional()
+      .transform((v) => {
+        if (v == null || v === '') return null;
+        if (Array.isArray(v)) return v.map(String).filter(Boolean);
+        try { const a = JSON.parse(v); if (Array.isArray(a)) return a.map(String).filter(Boolean); } catch { /* vergulli ro'yxat */ }
+        return String(v).split(',').map((x) => x.trim()).filter(Boolean);
+      })
+      .refine((v) => v === null || (v.length <= 500 && v.every((x) => /^-?\d{1,20}$/.test(x))), 'chatIds noto‘g‘ri'),
+    force: bool.optional().default(false),
   });
   const parsed = schema.safeParse(req.body || {});
   if (!parsed.success) return { error: 'Ma‘lumot noto‘g‘ri' };
@@ -676,8 +686,52 @@ export const adminController = {
   // ===== TELEGRAM GURUHLAR =====
   // GET /api/admin/groups — bot admin qilingan guruhlar (holat bilan)
   groups: asyncHandler(async (_req, res) => {
-    const groups = await GroupChat.find().sort({ createdAt: -1 }).lean();
-    res.json(groups);
+    const groups = await GroupChat.find().sort({ createdAt: -1 }).populate('restaurantId', 'name imageUrl isActive').lean();
+    // restaurantId populate qilingan obyekt → alohida maydon (eski mijozlar uchun restaurantId — satr ID bo'lib qoladi)
+    res.json(groups.map((g) => {
+      const r = g.restaurantId && typeof g.restaurantId === 'object' ? g.restaurantId : null;
+      return { ...g, restaurantId: r ? String(r._id) : null, restaurant: r ? { id: String(r._id), name: r.name, imageUrl: r.imageUrl || '', isActive: r.isActive !== false } : null };
+    }));
+  }),
+
+  /*
+   * PUT /api/admin/groups/:chatId/restaurant { restaurantId | null } — guruh/kanalga RESTORAN biriktirish (yoki ajratish).
+   * Bot restoran nomi + tugmani pin qiladi; tugma Mini App'da SHU restoran sahifasini ochadi (startapp=rest_<id>).
+   * Biriktirilganda umumiy reklama shu chatga yuborilmaydi (adsEnabled=false; PATCH .../ads bilan yoqiladi).
+   */
+  setGroupRestaurant: asyncHandler(async (req, res) => {
+    const p = z.object({ restaurantId: z.string().regex(/^[a-f\d]{24}$/i).nullable() }).strict().safeParse(req.body || {});
+    if (!p.success) return res.status(400).json({ error: 'restaurantId noto‘g‘ri' });
+    const { bindGroupRestaurant, GroupBindError } = await import('../services/telegramGroup.js');
+    try {
+      res.json(await bindGroupRestaurant(req.params.chatId, p.data.restaurantId, { adminId: req.userId }));
+    } catch (e) {
+      if (e instanceof GroupBindError) return res.status(e.status).json({ error: e.message, code: e.code });
+      throw e;
+    }
+  }),
+
+  // POST /api/admin/groups/:chatId/restaurant/repin — restoran pinini qayta yuborish (masalan rasm/nom o'zgargach)
+  repinGroupRestaurant: asyncHandler(async (req, res) => {
+    const g = await GroupChat.findOne({ chatId: String(req.params.chatId) }).lean();
+    if (!g) return res.status(404).json({ error: 'Guruh topilmadi' });
+    if (!g.restaurantId) return res.status(409).json({ error: 'Bu chatga restoran biriktirilmagan', code: 'NOT_BOUND' });
+    const { bindGroupRestaurant, GroupBindError } = await import('../services/telegramGroup.js');
+    try {
+      res.json(await bindGroupRestaurant(g.chatId, String(g.restaurantId), { adminId: req.userId }));
+    } catch (e) {
+      if (e instanceof GroupBindError) return res.status(e.status).json({ error: e.message, code: e.code });
+      throw e;
+    }
+  }),
+
+  // PATCH /api/admin/groups/:chatId/ads { adsEnabled } — shu chatga umumiy reklama yuborilsinmi
+  setGroupAds: asyncHandler(async (req, res) => {
+    const p = z.object({ adsEnabled: z.boolean() }).strict().safeParse(req.body || {});
+    if (!p.success) return res.status(400).json({ error: 'adsEnabled (true/false) kerak' });
+    const g = await GroupChat.findOneAndUpdate({ chatId: String(req.params.chatId) }, { $set: { adsEnabled: p.data.adsEnabled } }, { new: true }).lean();
+    if (!g) return res.status(404).json({ error: 'Guruh topilmadi' });
+    res.json({ chatId: g.chatId, adsEnabled: g.adsEnabled });
   }),
 
   // POST /api/admin/groups/:chatId/resend — reklama xabarini qayta yuborish + pin
@@ -732,6 +786,10 @@ export const adminController = {
   }),
 
   resendPromo: asyncHandler(async (req, res) => {
+    const bound = await GroupChat.findOne({ chatId: String(req.params.chatId) }).select('restaurantId').lean();
+    if (bound?.restaurantId) {
+      return res.status(409).json({ error: 'Bu chatga restoran biriktirilgan — umumiy promo yuborilmaydi. «Pinni yangilash» dan foydalaning.', code: 'RESTAURANT_GROUP' });
+    }
     const { sendAndPinPromo } = await import('../services/telegramGroup.js');
     try {
       await sendAndPinPromo(req.params.chatId);
@@ -753,9 +811,15 @@ export const adminController = {
     const data = parseBroadcastBody(req);
     if (data.error) return res.status(data.status || 400).json({ error: data.error, code: data.code });
 
+    // Reklama o'chirilgan chat (masalan restoran guruhi) — ataylab tasdiqlanmasa (force) yuborilmaydi
+    const target = await GroupChat.findOne({ chatId: String(req.params.chatId) }).select('adsEnabled title').lean();
+    if (target && target.adsEnabled === false && !data.force) {
+      return res.status(409).json({ error: 'Bu chatda umumiy reklama o‘chirilgan (restoran guruhi). Avval reklamani yoqing.', code: 'ADS_DISABLED' });
+    }
+
     const { sendCustomBroadcast } = await import('../services/telegramGroup.js');
     try {
-      const { video, ...rest } = data;
+      const { video, chatIds: _c, force: _f0, ...rest } = data;
       const result = await sendCustomBroadcast({ chatId: req.params.chatId, ...rest, video });
       // Ichki file_id mijozga qaytarilmaydi — kerak emas
       const { videoFileId: _f, videoMethod: _m, ...publicResult } = result;
@@ -770,16 +834,21 @@ export const adminController = {
     const data = parseBroadcastBody(req);
     if (data.error) return res.status(data.status || 400).json({ error: data.error, code: data.code });
 
-    const { sendCustomBroadcast } = await import('../services/telegramGroup.js');
-    // Tartib ANIQ (eskidan yangiga): birinchi guruh faylni yuklaydi, qolganlari file_id bilan — natija har safar bir xil
-    const groups = await GroupChat.find({ isActive: true, isBotAdmin: true }).sort({ _id: 1 });
+    const { sendCustomBroadcast, selectBroadcastTargets } = await import('../services/telegramGroup.js');
+    /*
+     * KIMGA: faqat faol, bot admin va REKLAMASI YOQILGAN chatlar (restoran guruhlari standart holda o'chiq).
+     * `chatIds` berilsa — faqat admin tanlaganlar (shu shartlar bilan; o'tkazib yuborilganlari javobda `skipped`).
+     * Tartib ANIQ (eskidan yangiga): birinchi guruh faylni yuklaydi, qolganlari file_id bilan — natija har safar bir xil.
+     */
+    const all = await GroupChat.find({}).sort({ _id: 1 });
+    const { targets: groups, skipped } = selectBroadcastTargets(all, data.chatIds);
     let sent = 0, failed = 0;
     const failures = [];
     // Video BIR marta yuklanadi; keyingi guruhlarga Telegram file_id bilan
     let fileRef = null;
     for (const g of groups) {
       try {
-        const { video, ...rest } = data;
+        const { video, chatIds: _c, force: _f0, ...rest } = data;
         const r = await sendCustomBroadcast({
           chatId: g.chatId,
           ...rest,
@@ -792,7 +861,7 @@ export const adminController = {
         if (failures.length < 5) failures.push({ chatId: g.chatId, title: g.title, error: e.message });
       }
     }
-    res.json({ total: groups.length, sent, failed, ...(failures.length ? { failures } : {}) });
+    res.json({ total: groups.length, sent, failed, ...(failures.length ? { failures } : {}), ...(skipped.length ? { skipped } : {}) });
   }),
 
   /*

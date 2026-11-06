@@ -20,6 +20,26 @@ const groupChatSchema = new Schema(
     isActive: { type: Boolean, default: true },
 
     lastCheckedAt: { type: Date, default: null },
+
+    /*
+     * ═══ RESTORAN GURUHI / KANALI (2026-11) ═══ — services/telegramGroup.js
+     * restaurantId bo'sh   — UMUMIY LokmaGo guruhi: avvalgidek (umumiy "Buyurtma berish" pin, LokmaGo bosh sahifasi).
+     * restaurantId bor     — RESTORAN guruhi: bot restoran nomi + tugmani pin qiladi, tugma SHU restoran sahifasini ochadi
+     *                        (startapp=rest_<id>); umumiy LokmaGo promo bu yerga pin qilinmaydi.
+     * adsEnabled           — umumiy reklama (admin "Reklama yuborish") shu chatga ketadimi. Restoran biriktirilganda o'chiriladi
+     *                        (admin xohlasa yoqadi). Kanallarda standart o'chiq (avval kanallarga hech narsa yuborilmagan).
+     */
+    kind: { type: String, enum: ['group', 'channel'], default: 'group' },
+    restaurantId: { type: Schema.Types.ObjectId, ref: 'Restaurant', default: null, index: true },
+    adsEnabled: { type: Boolean, default: true },
+    restaurantPin: {
+      messageId: { type: Number, default: null },
+      isPinned: { type: Boolean, default: false },
+      pinnedAt: { type: Date, default: null },
+      error: { type: String, default: '' },
+    },
+    boundAt: { type: Date, default: null },
+    boundBy: { type: String, default: '' },
   },
   { timestamps: true },
 );

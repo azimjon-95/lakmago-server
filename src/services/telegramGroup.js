@@ -98,15 +98,19 @@ export async function sendAndPinPromo(chatId) {
 // Guruhni bazaga yozish/yangilash (admin bo'lsa ham, bo'lmasa ham).
 export async function registerGroup(chat, isBotAdmin) {
   const chatId = String(chat.id);
+  const isChannel = chat.type === 'channel';
   const group = await GroupChat.findOneAndUpdate(
     { chatId },
     {
       $set: {
         title: chat.title || '',
         type: chat.type || 'group',
+        kind: isChannel ? 'channel' : 'group',
         isBotAdmin,
         isActive: true,
       },
+      // Kanalga avval hech narsa yuborilmagan — standart holda umumiy reklama O'CHIQ (faqat restoran biriktirilsa pin)
+      $setOnInsert: { adsEnabled: !isChannel },
     },
     { upsert: true, new: true, setDefaultsOnInsert: true },
   );
@@ -119,8 +123,13 @@ export async function onBotPromotedToAdmin(chat) {
   const chatId = String(chat.id);
   const group = await registerGroup(chat, true);
 
-  // Reklama hali yuborilmagan bo'lsa — darhol yuboramiz va pin qilamiz
-  if (!group.promoMessageId) {
+  if (group.restaurantId) {
+    // RESTORAN guruhi/kanali (qayta admin qilindi) — restoran pini tiklanadi, umumiy promo YUBORILMAYDI
+    await ensureRestaurantPin(group).catch((e) => console.error(`[bot] "${chat.title}" — restoran pini xatosi:`, e.message));
+  } else if (group.kind === 'channel') {
+    // Kanal: umumiy promo avtomatik yuborilmaydi (avvalgidek) — admin restoran biriktirsa pin qilinadi
+  } else if (!group.promoMessageId) {
+    // UMUMIY guruh: reklama hali yuborilmagan bo'lsa — darhol yuboramiz va pin qilamiz (o'zgarishsiz)
     try {
       const msgId = await sendAndPinPromo(chatId);
     } catch (e) {
@@ -189,7 +198,7 @@ export async function refreshPromoButton(chatId, messageId) {
  * (yangi) link bilan yuboradi.
  */
 export async function refreshAllPromoButtons() {
-  const groups = await GroupChat.find({ isActive: true, promoMessageId: { $ne: null } });
+  const groups = await GroupChat.find({ isActive: true, promoMessageId: { $ne: null }, restaurantId: null });   // restoran guruhlariga tegilmaydi
   let fixed = 0;
   let failed = 0;
 
@@ -239,6 +248,15 @@ export async function dailyGroupCheck() {
         await group.save();
         continue;
       }
+
+      // RESTORAN guruhi/kanali: faqat restoran pini tekshiriladi (umumiy promo bu yerga YUBORILMAYDI)
+      if (group.restaurantId) {
+        await group.save();
+        if (await ensureRestaurantPin(group)) fixed++;
+        continue;
+      }
+      // Kanal (restoransiz): umumiy promo avtomatik yuborilmaydi
+      if (group.kind === 'channel') { await group.save(); continue; }
 
       // Reklama umuman yuborilmaган → yuboramiz
       if (!group.promoMessageId) {
@@ -396,4 +414,161 @@ export async function sendCustomBroadcast(opts) {
   }
 
   return { ok: true, messageId: msg.message_id, textMessageId, pinned, captionSplit: splitText, ...out };
+}
+
+
+/* ═══════════════════════════════════════════════════════════════
+ * RESTORAN GURUHI / KANALI (2026-11)
+ * ═══════════════════════════════════════════════════════════════
+ * Admin guruh yoki kanalga restoran biriktiradi → bot restoran nomi va tugmani yuborib TEPAGA pin qiladi.
+ * Tugma `t.me/<bot>?startapp=rest_<id>` — Mini App to'g'ridan-to'g'ri SHU restoran sahifasida ochiladi
+ * (mijoz ilovasi: lib/telegram.js getStartParam). Umumiy LokmaGo promo bu chatga pin qilinmaydi va (standart) reklama ketmaydi.
+ * Kunlik tekshiruv (dailyGroupCheck) pin yo'qolsa qayta pin qiladi, xabar o'chirilgan bo'lsa yangisini yuboradi.
+ */
+
+const escHtml = (v) => String(v ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+/** Restoran pini mazmuni (sof funksiya — tests/group-restaurant.test.mjs). */
+export function restaurantPinContent(r, link) {
+  const name = escHtml(r?.name || 'Restoran');
+  const lines = [`🍽 <b>${name}</b>`];
+  if (r?.cuisine) lines.push(`<i>${escHtml(r.cuisine)}</i>`);
+  lines.push('', '📲 Menyu, narxlar va buyurtma — LokmaGo ilovasida', '⚡️ Tez yetkazib berish yoki olib ketish', '', '👇 Buyurtma berish uchun tugmani bosing:');
+  const photo = r?.imageUrl || (Array.isArray(r?.images) ? r.images.find(Boolean) : '') || '';
+  return {
+    text: lines.join('\n'),
+    photo: /^https?:\/\//i.test(photo) ? photo : '',
+    keyboard: { inline_keyboard: [[{ text: `🍽 ${String(r?.name || 'Restoran').slice(0, 40)} — buyurtma berish`, url: link }]] },
+  };
+}
+
+export const restaurantStartParam = (restaurantId) => `rest_${String(restaurantId)}`;
+
+async function loadRestaurant(id) {
+  const { Restaurant } = await import('../models/Restaurant.js');
+  return Restaurant.findById(id).select('name cuisine imageUrl images isActive').lean();
+}
+
+/** Restoran xabarini yuboradi va pin qiladi. Umumiy promo pini olib tashlanadi (tepada restoran tursin). */
+export async function sendAndPinRestaurant(group, restaurant) {
+  if (!config.telegramBotToken) return { demo: true };
+  const link = await buildMiniAppLink(restaurantStartParam(restaurant._id));
+  const c = restaurantPinContent(restaurant, link);
+  let msg;
+  if (c.photo) {
+    try {
+      msg = await tg('sendPhoto', { chat_id: group.chatId, photo: c.photo, caption: c.text, parse_mode: 'HTML', reply_markup: c.keyboard });
+    } catch (e) {
+      console.warn(`[bot] ${group.chatId} — rasm yuborilmadi (${e.message}), matn bilan`);
+    }
+  }
+  if (!msg) {
+    msg = await tg('sendMessage', { chat_id: group.chatId, text: c.text, parse_mode: 'HTML', reply_markup: c.keyboard, disable_web_page_preview: true });
+  }
+  let isPinned = false; let error = '';
+  try {
+    await tg('pinChatMessage', { chat_id: group.chatId, message_id: msg.message_id, disable_notification: true });
+    isPinned = true;
+  } catch (e) {
+    error = /not enough rights|CHAT_ADMIN_REQUIRED|rights/i.test(e.message)
+      ? 'Botda "Xabarlarni mahkamlash" (Pin messages) huquqi yo‘q'
+      : e.message;
+  }
+  // Umumiy LokmaGo promo pini olib tashlanadi — restoran guruhida tepada faqat restoran tursin (xabarning o'zi o'chirilmaydi)
+  if (group.promoMessageId) {
+    await tg('unpinChatMessage', { chat_id: group.chatId, message_id: group.promoMessageId }).catch(() => {});
+  }
+  // Eski restoran xabari (boshqa restoran yoki qayta yuborish) pinidan olinadi
+  const prev = group.restaurantPin?.messageId;
+  if (prev && prev !== msg.message_id) await tg('unpinChatMessage', { chat_id: group.chatId, message_id: prev }).catch(() => {});
+
+  await GroupChat.updateOne({ chatId: String(group.chatId) }, {
+    $set: {
+      'restaurantPin.messageId': msg.message_id, 'restaurantPin.isPinned': isPinned, 'restaurantPin.pinnedAt': isPinned ? new Date() : null,
+      'restaurantPin.error': error, isPinned: false, lastCheckedAt: new Date(),
+    },
+  });
+  return { messageId: msg.message_id, isPinned, error };
+}
+
+/** Restoran pini joyidami? Yo'q bo'lsa qayta pin, xabar o'chirilgan bo'lsa yangisini yuboradi. true — tuzatildi. */
+export async function ensureRestaurantPin(group) {
+  const restaurant = await loadRestaurant(group.restaurantId);
+  if (!restaurant) return false;
+  const id = group.restaurantPin?.messageId;
+  if (id && await isStillPinned(group.chatId, id)) {
+    if (!group.restaurantPin.isPinned) await GroupChat.updateOne({ chatId: String(group.chatId) }, { $set: { 'restaurantPin.isPinned': true, 'restaurantPin.error': '' } });
+    return false;
+  }
+  if (id) {
+    try {
+      await tg('pinChatMessage', { chat_id: group.chatId, message_id: id, disable_notification: true });
+      await GroupChat.updateOne({ chatId: String(group.chatId) }, { $set: { 'restaurantPin.isPinned': true, 'restaurantPin.pinnedAt': new Date(), 'restaurantPin.error': '' } });
+      return true;
+    } catch { /* xabar o'chirilgan — yangisi yuboriladi */ }
+  }
+  await sendAndPinRestaurant(group, restaurant);
+  return true;
+}
+
+export class GroupBindError extends Error {
+  constructor(message, status = 400, code = 'BAD_REQUEST') { super(message); this.status = status; this.code = code; }
+}
+
+/**
+ * Guruh/kanalga restoran biriktirish (`restaurantId`) yoki ajratish (null).
+ *  • biriktirish: restoran pini yuboriladi va tepaga pin qilinadi; umumiy reklama O'CHIRILADI (adsEnabled=false; admin yoqishi mumkin).
+ *  • ajratish: restoran pini olinadi; umumiy guruhda LokmaGo promo pini qaytariladi (kanalda — hech narsa).
+ */
+export async function bindGroupRestaurant(chatId, restaurantId, { adminId = '' } = {}) {
+  const group = await GroupChat.findOne({ chatId: String(chatId) });
+  if (!group) throw new GroupBindError('Guruh topilmadi', 404, 'NOT_FOUND');
+
+  if (!restaurantId) {
+    const prev = group.restaurantPin?.messageId;
+    if (prev) await tg('unpinChatMessage', { chat_id: group.chatId, message_id: prev }).catch(() => {});
+    await GroupChat.updateOne({ chatId: group.chatId }, {
+      $set: { restaurantId: null, boundAt: null, boundBy: '', 'restaurantPin.isPinned': false, 'restaurantPin.messageId': null, 'restaurantPin.error': '' },
+    });
+    // Umumiy guruh: LokmaGo promo qayta tepaga (mavjud xabar pin qilinadi, bo'lmasa yangisi yuboriladi)
+    if (group.kind !== 'channel' && group.isBotAdmin) {
+      try {
+        if (group.promoMessageId) await tg('pinChatMessage', { chat_id: group.chatId, message_id: group.promoMessageId, disable_notification: true });
+        else await sendAndPinPromo(group.chatId);
+        await GroupChat.updateOne({ chatId: group.chatId }, { $set: { isPinned: true } });
+      } catch { await sendAndPinPromo(group.chatId).catch(() => {}); }
+    }
+    console.log(`[group] ${group.title || group.chatId}: restoran ajratildi — ${adminId}`);
+    return GroupChat.findOne({ chatId: group.chatId }).lean();
+  }
+
+  const restaurant = await loadRestaurant(restaurantId);
+  if (!restaurant) throw new GroupBindError('Restoran topilmadi', 404, 'RESTAURANT_NOT_FOUND');
+  if (restaurant.isActive === false) throw new GroupBindError('Restoran faol emas', 409, 'RESTAURANT_INACTIVE');
+  if (!group.isBotAdmin) throw new GroupBindError('Bot bu chatda admin emas — avval admin qiling (pin uchun)', 409, 'NOT_ADMIN');
+
+  const firstBind = !group.restaurantId;
+  await GroupChat.updateOne({ chatId: group.chatId }, {
+    $set: { restaurantId: restaurant._id, boundAt: new Date(), boundBy: String(adminId || ''), ...(firstBind ? { adsEnabled: false } : {}) },
+  });
+  const fresh = await GroupChat.findOne({ chatId: group.chatId }).lean();
+  const r = await sendAndPinRestaurant(fresh, restaurant);
+  console.log(`[group] ${group.title || group.chatId} → ${restaurant.name} (pin: ${r.isPinned ? 'ha' : `yo'q: ${r.error}`}) — ${adminId}`);
+  return GroupChat.findOne({ chatId: group.chatId }).lean();
+}
+
+/**
+ * Reklama qaysi chatlarga ketadi (sof funksiya). Faqat faol, bot admin bo'lgan va REKLAMASI YOQILGAN chatlar.
+ * `chatIds` berilsa — faqat tanlanganlar (shu shartlar bilan). Qaytaradi: { targets, skipped: [{chatId,title,reason}] }.
+ */
+export function selectBroadcastTargets(groups, chatIds = null) {
+  const wanted = Array.isArray(chatIds) && chatIds.length ? new Set(chatIds.map(String)) : null;
+  const targets = []; const skipped = [];
+  for (const g of groups) {
+    if (wanted && !wanted.has(String(g.chatId))) continue;
+    const reason = !g.isActive ? 'inactive' : !g.isBotAdmin ? 'not_admin' : g.adsEnabled === false ? 'ads_disabled' : '';
+    if (reason) { if (wanted) skipped.push({ chatId: g.chatId, title: g.title, reason }); continue; }
+    targets.push(g);
+  }
+  return { targets, skipped };
 }
