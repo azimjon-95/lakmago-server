@@ -478,6 +478,9 @@ async function main() {
   {
     const { migrateDeliveryFields } = await import('./services/deliveryMigrations.js');
     migrateDeliveryFields().catch((e) => console.warn('[migratsiya] yetkazish maydonlari:', e.message));
+    // Do'kon mahsulotlariga aniq katalog kaliti (Market bosh sahifasi kategoriyalari) — idempotent, fonda
+    const { backfillCatalogCategory } = await import('./services/catalogCategoryMigration.js');
+    backfillCatalogCategory().catch((e) => console.warn('[migratsiya] katalog kategoriyasi:', e.message));
   }
 
   /*

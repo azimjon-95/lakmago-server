@@ -1,4 +1,5 @@
 import { fairOrder, parseFairCursor, makeFairCursor, randomSeed, isValidSeed } from '../services/fairFeed.js';
+import { CATALOG_CATEGORY_VALUES } from '../constants/catalogCategories.js';
 import { asyncHandler } from '../middleware/error.js';
 import { cached, KEYS, TTL } from '../services/cache.js';
 import { Restaurant } from '../models/Restaurant.js';
@@ -201,15 +202,21 @@ export const restaurantController = {
     const catRows = pageIds.length
       ? await Dish.aggregate([
         { $match: { restaurantId: { $in: pageIds }, isAvailable: true } },
-        { $group: { _id: '$restaurantId', categories: { $addToSet: req.marketMode ? '$marketCategory' : '$category' } } },
+        { $group: {
+          _id: '$restaurantId',
+          categories: { $addToSet: req.marketMode ? '$marketCategory' : '$category' },
+          // Market: aniq katalog kalitlari (bosh sahifadagi yumaloq kategoriyalar shu bo'yicha filtrlaydi)
+          catalogCategories: { $addToSet: '$catalogCategory' },
+        } },
       ])
       : [];
     const catMap = new Map(catRows.map((r) => [String(r._id), r.categories.filter(Boolean)]));
+    const catalogCatMap = new Map(catRows.map((r) => [String(r._id), (r.catalogCategories || []).filter(Boolean)]));
 
     let items = [...pageRows, ...extraRows]
       .map((r) => (req.marketMode
         // Do'kon: qaysi mahsulot kategoriyalari bor (mijoz kategoriya bo'yicha filtrlaydi)
-        ? { ...r, productCategories: catMap.get(String(r._id)) || [] }
+        ? { ...r, productCategories: catMap.get(String(r._id)) || [], productCatalogCategories: catalogCatMap.get(String(r._id)) || [] }
         : { ...r, dishCategories: catMap.get(String(r._id)) || [] }))
       // isOpen — DOIM Toshkent (yoki restoranning o'z) vaqt
       // mintaqasidan hisoblanadi, mijoz qurilmasi qaysi davlatda
@@ -511,6 +518,12 @@ export const dishController = {
       if (category && category !== 'all') {
         filter.marketCategory = MARKET_CATEGORY_VALUES.includes(category) ? category : '__none__';
       }
+      /*
+       * Aniq katalog kaliti (Market bosh sahifasi): ?catalogCategory=choy. Eski `category` (marketCategory) bilan to'qnashmasligi uchun
+       * ALOHIDA parametr — 'shokolad' kabi nomlar ikkalasida ham bor, lekin ma'nosi boshqa.
+       */
+      const catalogCategory = typeof req.query.catalogCategory === 'string' ? req.query.catalogCategory.trim() : '';
+      if (catalogCategory) filter.catalogCategory = CATALOG_CATEGORY_VALUES.includes(catalogCategory) ? catalogCategory : '__none__';
       /*
        * Market qidiruvi: ?q= — nom (harf katta-kichikligi farqsiz),
        * shtrix-kod — aniq moslik. Regex maxsus belgilari ekranlanadi

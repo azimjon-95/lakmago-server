@@ -159,3 +159,33 @@ export function marketSuggestion(catalogCategory) {
   const unit = BY_WEIGHT.has(marketCategory) ? 'kg' : marketCategory === 'kokat' ? 'bog' : 'dona';
   return { marketCategory, unit };
 }
+
+/*
+ * ═══ MARKET BOSH SAHIFASI KATEGORIYALARI: KATALOG KALITI ═══
+ * Market sahifasidagi yumaloq kategoriyalar (konfetlar, choy, souslar, ...) UMUMIY KATALOG kalitlari bilan (70 ta,
+ * constants/catalogCategories.js) ishlaydi — `marketCategory` dan ancha ANIQROQ (masalan 'sous' = souslar + ketchup + sirka,
+ * 'shokolad' = shokolad + konfet + shirinlik). Shuning uchun do'kon mahsulotida `Dish.catalogCategory` saqlanadi:
+ *   • katalogdan qo'shilganda — katalog mahsulotining kategoriyasi (aniq);
+ *   • do'kon o'zi yaratgan mahsulotda — marketCategory dan ENG YAQIN katalog kaliti (quyidagi jadval) yoki egasi tanlagani.
+ * null — mos katalog kaliti yo'q ('boshqa', 'halol').
+ */
+export const MARKET_TO_CATALOG = {
+  meva: 'yangi_meva', rezavor: 'yangi_meva', sabzavot: 'yangi_sabzavot', kokat: 'kokatlar', quruq_meva: 'quruq_mevalar', tuzlama: 'tuzlama_marinad',
+  gosht: 'gosht_mahsulotlari', parranda: 'parranda_goshti', qiyma: 'yarim_tayyor_mahsulotlar', kolbasa: 'kolbasa_sosiska',
+  baliq: 'baliq_dengiz_mahsulotlari', dengiz: 'baliq_dengiz_mahsulotlari',
+  sut: 'sut_mahsulotlari', qatiq: 'sut_mahsulotlari', tvorog: 'sut_mahsulotlari', pishloq: 'pishloq_mahsulotlari', saryog: 'sariyog_margarin', tuxum: 'tuxum',
+  non: 'non_mahsulotlari', pishiriq: 'keks_pishiriqlar', tort: 'qandolat_mahsulotlari', pechenye: 'pechenye', shokolad: 'shokolad', sharqona: 'shirinliklar',
+  guruch: 'guruch_don', makaron: 'makaron_mahsulotlari', un: 'un_mahsulotlari', yog: 'osimlik_yoglari', shakar: 'shakar_shirinlashtiruvchi',
+  ziravor: 'ziravorlar', sous: 'souslar', konserva: 'konserva_mahsulotlari', murabbo: 'murabbo_jem',
+  tez_tayyor: 'fastfood_mahsulotlari', nonushta: 'nonushta_mahsulotlari', gazak: 'chips_snacklar', muzlatilgan: 'muzlatilgan_mahsulotlar', chuchvara: 'muzlatilgan_mahsulotlar',
+  muzqaymoq: 'muzqaymoq', suv: 'mineral_suv', gazli: 'gazli_ichimliklar', sharbat: 'sharbatlar', choy: 'choy', qahva: 'qahva', energetik: 'energetik_ichimliklar',
+  bolalar: 'bolalar_oziq_ovqatlari', sogom: 'parhezbop_mahsulotlar',
+  uy_kimyo: 'maishiy_kimyo', gigiyena: 'shaxsiy_gigiyena', qogoz: 'qogoz_salfetka', bir_martalik: 'bir_martalik_idishlar', uy_hayvon: 'uy_hayvonlari_ozuqasi',
+  halol: null, boshqa: null,
+};
+
+/** Mahsulotning katalog kaliti: aniq berilgani, bo'lmasa marketCategory dan eng yaqini, bo'lmasa null. */
+export function catalogCategoryFor({ catalogCategory, marketCategory } = {}) {
+  if (catalogCategory) return catalogCategory;
+  return (marketCategory && MARKET_TO_CATALOG[marketCategory]) || null;
+}

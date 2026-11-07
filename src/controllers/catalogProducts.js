@@ -366,6 +366,7 @@ export const catalogProductController = {
         section: label?.label || 'Mahsulotlar',
         icon: label?.icon || 'ti-shopping-cart',
         marketCategory,
+        catalogCategory: product.category,      // aniq katalog kaliti (Market bosh sahifa kategoriyalari shu bo'yicha)
         unit,
         packSize: str(req.body.packSize, 40, product.volume || ''),
         barcode,
