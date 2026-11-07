@@ -189,3 +189,8 @@ export function catalogCategoryFor({ catalogCategory, marketCategory } = {}) {
   if (catalogCategory) return catalogCategory;
   return (marketCategory && MARKET_TO_CATALOG[marketCategory]) || null;
 }
+
+/** Katalog kaliti -> shu kalitga tegishli marketCategory lar (zaxira filtr: katalog maydoni hali yozilmagan mahsulotlar uchun). */
+export function marketCategoriesFor(catalogKey) {
+  return Object.keys(MARKET_TO_CATALOG).filter((m) => MARKET_TO_CATALOG[m] === catalogKey);
+}
