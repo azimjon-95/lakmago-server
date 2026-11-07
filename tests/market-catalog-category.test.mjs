@@ -128,3 +128,10 @@ test('simlar: do\'konlar ro\'yxati aggregate\'i aniq kalitlarni qaytaradi (haqiq
   const add = readFileSync(new URL('../src/controllers/catalogProducts.js', import.meta.url), 'utf8');
   assert.ok(add.includes('catalogCategory: product.category'), 'katalogdan qo\'shilganda aniq kalit');
 });
+
+test('do\'konlar ro\'yxatida koordinatalar (Sizga yaqin do\'konlar saralashi uchun)', async () => {
+  const { readFileSync } = await import('node:fs');
+  const src = readFileSync(new URL('../src/controllers/catalog.js', import.meta.url), 'utf8');
+  const sel = src.slice(src.indexOf("const LIST_SELECT = '"), src.indexOf("';", src.indexOf("const LIST_SELECT = '")));
+  assert.ok(/\blat\b/.test(sel) && /\blng\b/.test(sel));
+});

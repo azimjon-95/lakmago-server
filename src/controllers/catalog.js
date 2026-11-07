@@ -88,7 +88,8 @@ async function withCustomerPrices(dishes) {
 }
 
 // Mijoz ro'yxati maydonlari (keshlangan so'rov va pin qo'shiladigan restoranlar uchun BIR XIL)
-const LIST_SELECT = 'name cuisine category kind rating reviewCount deliveryMin deliveryMax deliveryFee freeDeliveryThreshold minOrderAmount discount isFresh tint icon images imageUrl createdAt pickupEnabled deliveryEnabled cashEnabled delivery pickupDiscountPercent prepMinutes shopTypes openTime closeTime timezone workingDays';
+// lat/lng — Market "Sizga yaqin do'konlar" saralashi uchun (restoran sahifasida ham ochiq ko'rsatiladi)
+const LIST_SELECT = 'name cuisine category kind rating reviewCount deliveryMin deliveryMax deliveryFee freeDeliveryThreshold minOrderAmount discount isFresh tint icon images imageUrl createdAt pickupEnabled deliveryEnabled cashEnabled delivery pickupDiscountPercent prepMinutes shopTypes openTime closeTime timezone workingDays lat lng';
 
 export const restaurantController = {
   // GET /api/restaurants?category=milliy&cursor=<createdAt>&limit=20
