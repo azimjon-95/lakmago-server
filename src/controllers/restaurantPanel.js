@@ -1,7 +1,8 @@
 import { REJECT_REASONS } from '../constants/rejectReasons.js';
 import { generateUniqueBarcode, barcodeTakenInStore, cleanBarcode, BARCODE_RE } from '../services/barcode.js';
 import { isStore } from '../services/storeRules.js';
-import { MARKET_CATEGORY_VALUES, MARKET_UNIT_VALUES } from '../constants/marketCategories.js';
+import { MARKET_CATEGORY_VALUES, MARKET_UNIT_VALUES, catalogCategoryFor } from '../constants/marketCategories.js';
+import { CATALOG_CATEGORY_VALUES } from '../constants/catalogCategories.js';
 import { RESTAURANT_HIDDEN } from '../services/restaurantVisibility.js';
 import { z } from 'zod';
 import { cached, KEYS, TTL } from '../services/cache.js';
@@ -158,6 +159,8 @@ export const restaurantPanelController = {
       optionGroups: optionGroupsSchema.optional(),
       // Do'kon mahsuloti (Lokma Market) — faqat do'konlarda
       marketCategory: z.enum(MARKET_CATEGORY_VALUES).nullable().optional(),
+      // Aniq katalog kaliti (ixtiyoriy): berilmasa marketCategory dan eng yaqini olinadi
+      catalogCategory: z.enum(CATALOG_CATEGORY_VALUES).nullable().optional(),
       unit: z.enum([...MARKET_UNIT_VALUES, '']).optional(),
       packSize: z.string().max(40).optional(),
       barcode: z.string().max(32).optional(),
@@ -172,6 +175,7 @@ export const restaurantPanelController = {
     if (isStore(shop)) {
       if (!data.marketCategory) return res.status(400).json({ error: 'Mahsulot kategoriyasini tanlang' });
       data.category = 'boshqa';
+      data.catalogCategory = catalogCategoryFor({ catalogCategory: data.catalogCategory, marketCategory: data.marketCategory });
       // Shtrix-kod: ixtiyoriy; yozilgan bo'lsa to'g'ri va shu do'konda takrorlanmagan bo'lishi kerak
       data.barcode = cleanBarcode(data.barcode);
       if (data.barcode && !BARCODE_RE.test(data.barcode)) return res.status(400).json({ error: 'Shtrix-kod noto‘g‘ri (4–32 belgi: harf, raqam, -)' });
@@ -180,7 +184,7 @@ export const restaurantPanelController = {
       }
     } else {
       // Restoranga do'kon maydonlari yozilmaydi
-      delete data.marketCategory; delete data.unit; delete data.packSize; delete data.barcode;
+      delete data.marketCategory; delete data.catalogCategory; delete data.unit; delete data.packSize; delete data.barcode;
     }
     const dish = await Dish.create({ ...data, restaurantId: rid(req) });
 
@@ -224,12 +228,13 @@ export const restaurantPanelController = {
     for (const k of allowed) if (k in req.body) update[k] = req.body[k];
 
     // Do'kon mahsuloti maydonlari — tekshirib, faqat do'konda
-    const MARKET_KEYS = ['marketCategory', 'unit', 'packSize', 'barcode'];
+    const MARKET_KEYS = ['marketCategory', 'catalogCategory', 'unit', 'packSize', 'barcode'];
     if (MARKET_KEYS.some((k) => k in req.body)) {
       const shop = await Restaurant.findById(rid(req)).select('kind category').lean();
       if (isStore(shop)) {
         const m = z.object({
           marketCategory: z.enum(MARKET_CATEGORY_VALUES).optional(),
+          catalogCategory: z.enum(CATALOG_CATEGORY_VALUES).nullable().optional(),
           unit: z.enum([...MARKET_UNIT_VALUES, '']).optional(),
           packSize: z.string().max(40).optional(),
               barcode: z.string().max(32).optional(),
@@ -241,6 +246,15 @@ export const restaurantPanelController = {
           if (await barcodeTakenInStore(rid(req), m.data.barcode, req.params.id)) {
             return res.status(409).json({ error: 'Bu shtrix-kod shu do‘konda boshqa mahsulotda bor', code: 'BARCODE_TAKEN' });
           }
+        }
+        /*
+         * Katalog kaliti: egasi aniq bergan bo'lsa — shu. Aks holda marketCategory o'zgargan bo'lsa va mahsulot katalogdan EMAS
+         * (o'zi yaratgan) bo'lsa — yangi marketCategory dan eng yaqini. Katalogdan qo'shilgan mahsulotniki katalog mahsulotida
+         * qoladi (egasi market kategoriyasini o'zgartirsa ham u o'zgarmaydi).
+         */
+        if (!('catalogCategory' in m.data) && 'marketCategory' in m.data) {
+          const cur = await Dish.findOne({ _id: req.params.id, restaurantId: rid(req) }).select('catalogProductId').lean();
+          if (cur && !cur.catalogProductId) m.data.catalogCategory = catalogCategoryFor({ marketCategory: m.data.marketCategory });
         }
         Object.assign(update, m.data);
         update.category = 'boshqa';
