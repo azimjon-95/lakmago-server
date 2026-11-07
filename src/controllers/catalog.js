@@ -10,7 +10,7 @@ import { activePins } from '../services/restaurantPins.js';
 import { Types } from 'mongoose';
 import { dishCategoryValues, discountExpr } from '../constants/dishCategories.js';
 import { NOT_STORE, ONLY_STORE, andWith, isStore } from '../services/storeRules.js';
-import { MARKET_CATEGORY_VALUES, marketSuggestion } from '../constants/marketCategories.js';
+import { MARKET_CATEGORY_VALUES, MARKET_TO_CATALOG, marketCategoriesFor, marketSuggestion } from '../constants/marketCategories.js';
 import { CatalogProduct } from '../models/CatalogProduct.js';
 
 /*
@@ -208,11 +208,16 @@ export const restaurantController = {
           categories: { $addToSet: req.marketMode ? '$marketCategory' : '$category' },
           // Market: aniq katalog kalitlari (bosh sahifadagi yumaloq kategoriyalar shu bo'yicha filtrlaydi)
           catalogCategories: { $addToSet: '$catalogCategory' },
+          marketCategories: { $addToSet: '$marketCategory' },
         } },
       ])
       : [];
     const catMap = new Map(catRows.map((r) => [String(r._id), r.categories.filter(Boolean)]));
-    const catalogCatMap = new Map(catRows.map((r) => [String(r._id), (r.catalogCategories || []).filter(Boolean)]));
+    // Katalog kalitlari: aniq maydon + marketCategory dan olingan zaxira (eski mahsulotlar kategoriyada ko'rinsin)
+    const catalogCatMap = new Map(catRows.map((r) => [String(r._id), [...new Set([
+      ...(r.catalogCategories || []).filter(Boolean),
+      ...(r.marketCategories || []).filter(Boolean).map((m) => MARKET_TO_CATALOG[m]).filter(Boolean),
+    ])]]));
 
     let items = [...pageRows, ...extraRows]
       .map((r) => (req.marketMode
@@ -524,7 +529,17 @@ export const dishController = {
        * ALOHIDA parametr — 'shokolad' kabi nomlar ikkalasida ham bor, lekin ma'nosi boshqa.
        */
       const catalogCategory = typeof req.query.catalogCategory === 'string' ? req.query.catalogCategory.trim() : '';
-      if (catalogCategory) filter.catalogCategory = CATALOG_CATEGORY_VALUES.includes(catalogCategory) ? catalogCategory : '__none__';
+      if (catalogCategory) {
+        if (!CATALOG_CATEGORY_VALUES.includes(catalogCategory)) {
+          filter.catalogCategory = '__none__';
+        } else {
+          // Aniq kalit YOKI katalog maydoni bo'sh mahsulot, uning marketCategory si shu kalitga mos (eski mahsulotlar ham chiqadi)
+          andClauses.push({ $or: [
+            { catalogCategory },
+            { catalogCategory: null, marketCategory: { $in: marketCategoriesFor(catalogCategory) } },
+          ] });
+        }
+      }
       /*
        * Market qidiruvi: ?q= — nom (harf katta-kichikligi farqsiz),
        * shtrix-kod — aniq moslik. Regex maxsus belgilari ekranlanadi

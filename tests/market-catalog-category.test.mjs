@@ -135,3 +135,20 @@ test('do\'konlar ro\'yxatida koordinatalar (Sizga yaqin do\'konlar saralashi uch
   const sel = src.slice(src.indexOf("const LIST_SELECT = '"), src.indexOf("';", src.indexOf("const LIST_SELECT = '")));
   assert.ok(/\blat\b/.test(sel) && /\blng\b/.test(sel));
 });
+
+test('ESKI MAHSULOT: katalog maydoni bo\'sh, faqat marketCategory bor — kategoriya filtrida chiqadi; boshqa kalitda chiqmaydi', async () => {
+  await Dish.deleteMany({});
+  await Dish.insertMany([
+    dish({ name: 'Eski choy', marketCategory: 'choy', catalogCategory: null }),          // backfill qilinmagan
+    dish({ name: 'Yangi choy', marketCategory: 'choy', catalogCategory: 'choy' }),
+    dish({ name: 'Eski sut', marketCategory: 'sut', catalogCategory: null }),
+  ]);
+  const names = async (query) => {
+    const r = await call(dishController.all, { marketMode: true, query: { limit: '50', ...query } });
+    const items = Array.isArray(r.body) ? r.body : (r.body.items ?? []);
+    return items.map((d) => d.name).sort();
+  };
+  assert.deepEqual(await names({ catalogCategory: 'choy' }), ['Eski choy', 'Yangi choy'], 'aniq + eski (marketCategory orqali) birga');
+  assert.deepEqual(await names({ catalogCategory: 'sut_mahsulotlari' }), ['Eski sut'], 'sut kaliti marketCategory=sut orqali');
+  assert.deepEqual(await names({ catalogCategory: 'konfetlar' }), [], 'mos mahsulot yo\'q — bo\'sh');
+});
