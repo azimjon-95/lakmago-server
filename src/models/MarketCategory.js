@@ -13,7 +13,12 @@ const MarketCategorySchema = new Schema({
   nameUzc: { type: String, default: '', trim: true, maxlength: 80 },
   nameRu: { type: String, default: '', trim: true, maxlength: 80 },
   emoji: { type: String, default: '🛒', maxlength: 16 },
+  // Ikon (yumaloq, Cloudinary) — kategoriya doirasi va "Barchasi" ro'yxatida
   imageUrl: { type: String, default: '', maxlength: 500 },
+  // Karta rasmi (yumaloq, Cloudinary) — kategoriya sarlavhasi yonida
+  cardUrl: { type: String, default: '', maxlength: 500 },
+  // Tavsif — kategoriya ochilganda ko'rinadi
+  description: { type: String, default: '', trim: true, maxlength: 300 },
   order: { type: Number, default: 0, index: true },
   isActive: { type: Boolean, default: true, index: true },
 }, { timestamps: true });

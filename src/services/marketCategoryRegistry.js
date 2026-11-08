@@ -33,6 +33,8 @@ function toView(r) {
     ru: r.nameRu || r.nameUz,
     emoji: r.emoji || '🛒',
     imageUrl: r.imageUrl || '',
+    cardUrl: r.cardUrl || '',
+    description: r.description || '',
     order: r.order,
     isActive: r.isActive !== false,
   };

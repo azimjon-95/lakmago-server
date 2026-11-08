@@ -10,13 +10,30 @@ import { listMarketCategories, invalidateMarketCategories } from '../services/ma
  * ishlatilayotgan bo'lsa nofaol qilish (isActive=false) tavsiya qilinadi.
  */
 const https = z.string().trim().max(500).refine((v) => v === '' || /^https:\/\//i.test(v), 'Rasm havolasi https bilan boshlanishi kerak');
+
+/*
+ * Nomdan kalit (ID) yasash: o‘/o'/oʻ → o, g‘/g'/gʻ → g, qolgan belgilar → _ ; kichik harf.
+ * Masalan: "Sut mahsulotlari" → sut_mahsulotlari; "Chips va snack" → chips_va_snack.
+ */
+export function slugifyKey(name) {
+  const s = String(name || '')
+    .toLowerCase()
+    .replace(/[oʻ‘’'`]/g, (m) => (m === 'o' ? 'o' : ''))
+    .replace(/g[ʻ‘’'`]/g, 'g')
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '');
+  return s.slice(0, 60).replace(/_+$/, '');
+}
 const createSchema = z.object({
-  key: z.string().trim().toLowerCase().regex(/^[a-z0-9_]{2,60}$/, 'Kalit: faqat a–z, 0–9 va _ (2–60 belgi)'),
+  // Bo'sh bo'lsa — nomdan avtomatik yasaladi (create ichida)
+  key: z.string().trim().toLowerCase().max(60).optional(),
   nameUz: z.string().trim().min(1, 'Nomi (lotin) kiritilishi shart').max(80),
   nameUzc: z.string().trim().max(80).optional(),
   nameRu: z.string().trim().max(80).optional(),
   emoji: z.string().max(16).optional(),
   imageUrl: https.optional(),
+  cardUrl: https.optional(),
+  description: z.string().trim().max(300).optional(),
   order: z.number().int().min(0).max(100000).optional(),
   isActive: z.boolean().optional(),
 }).strict();
@@ -44,9 +61,13 @@ export const marketCategoryAdminController = {
     const p = createSchema.safeParse(req.body || {});
     if (!p.success) return res.status(400).json({ error: p.error.issues[0]?.message || 'Ma‘lumot noto‘g‘ri' });
     const d = p.data;
-    if (await MarketCategory.exists({ key: d.key })) return res.status(409).json({ error: 'Bu kalit allaqachon mavjud', code: 'KEY_TAKEN' });
+    const key = (d.key && d.key.length ? d.key : slugifyKey(d.nameUz));
+    if (!/^[a-z0-9_]{2,60}$/.test(key)) return res.status(400).json({ error: 'Kalit yasab bo‘lmadi — boshqa nom kiriting yoki kalitni qo‘lda yozing (a–z, 0–9, _)' });
+    if (await MarketCategory.exists({ key })) return res.status(409).json({ error: 'Bu kalit allaqachon mavjud', code: 'KEY_TAKEN' });
     const doc = await MarketCategory.create({
-      key: d.key,
+      key,
+      cardUrl: d.cardUrl || '',
+      description: d.description || '',
       nameUz: d.nameUz,
       nameUzc: d.nameUzc || '',
       nameRu: d.nameRu || '',
