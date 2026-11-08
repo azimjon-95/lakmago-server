@@ -41,7 +41,7 @@ test('SEED: 21 ta boshlang‘ich kalit, tartib saqlanadi; ikki marta ishga tushs
 });
 
 test('SEED admin o‘zgarishlarini bosib ketmaydi (mavjud kalitga $setOnInsert)', async () => {
-  await MarketCategory.updateOne({ key: 'choy' }, { $set: { nameUz: 'Yashil choy' } });
+  await MarketCategory.updateOne({ key: 'choy' }, { $set: { name: 'Yashil choy', 'i18n.uz.name': 'Yashil choy' } });
   await reg.seedMarketCategories();
   const choy = (await reg.listMarketCategories({ onlyActive: false })).find((c) => c.key === 'choy');
   assert.equal(choy.uz, 'Yashil choy', 'admin nomi saqlandi');
@@ -60,7 +60,7 @@ test('ADMIN CREATE: yangi kalit; dublikat — 409; noto‘g‘ri kalit — 400; 
 
 test('ADMIN UPDATE: nom/tartib/faollik o‘zgaradi; kalit o‘zgarmaydi; mavjud bo‘lmagan — 404', async () => {
   let r = await call(adm.update, { params: { key: 'yangi_kategoriya' }, body: { nameUz: 'Yangilangan', order: 5, isActive: false } });
-  assert.equal(r.code, 200); assert.equal(r.body.nameUz, 'Yangilangan');
+  assert.equal(r.code, 200); assert.equal(r.body.name, 'Yangilangan');
   const inactive = (await reg.listMarketCategories()).some((c) => c.key === 'yangi_kategoriya');
   assert.equal(inactive, false, 'nofaol — mijoz ro‘yxatida yo‘q');
   assert.equal(await reg.isMarketCategoryKey('yangi_kategoriya'), true, 'lekin nofaol kalit mahsulotda bo‘la oladi (tarix)');
