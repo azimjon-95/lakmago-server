@@ -2,6 +2,7 @@ import { REJECT_REASONS } from '../constants/rejectReasons.js';
 import { generateUniqueBarcode, barcodeTakenInStore, cleanBarcode, BARCODE_RE } from '../services/barcode.js';
 import { isStore } from '../services/storeRules.js';
 import { MARKET_CATEGORY_VALUES, MARKET_UNIT_VALUES, catalogCategoryFor } from '../constants/marketCategories.js';
+import { isMarketCategoryKey } from '../services/marketCategoryRegistry.js';
 import { CATALOG_CATEGORY_VALUES } from '../constants/catalogCategories.js';
 import { RESTAURANT_HIDDEN } from '../services/restaurantVisibility.js';
 import { z } from 'zod';
@@ -160,7 +161,7 @@ export const restaurantPanelController = {
       // Do'kon mahsuloti (Lokma Market) — faqat do'konlarda
       marketCategory: z.enum(MARKET_CATEGORY_VALUES).nullable().optional(),
       // Aniq katalog kaliti (ixtiyoriy): berilmasa marketCategory dan eng yaqini olinadi
-      catalogCategory: z.enum(CATALOG_CATEGORY_VALUES).nullable().optional(),
+      catalogCategory: z.string().trim().max(60).nullable().optional(),
       unit: z.enum([...MARKET_UNIT_VALUES, '']).optional(),
       packSize: z.string().max(40).optional(),
       barcode: z.string().max(32).optional(),
@@ -173,9 +174,16 @@ export const restaurantPanelController = {
     const shop = await Restaurant.findById(rid(req)).select('kind category').lean();
     const data = { ...parsed.data };
     if (isStore(shop)) {
-      if (!data.marketCategory) return res.status(400).json({ error: 'Mahsulot kategoriyasini tanlang' });
+      if (!data.marketCategory && !data.catalogCategory) return res.status(400).json({ error: 'Mahsulot kategoriyasini tanlang' });
       data.category = 'boshqa';
-      data.catalogCategory = catalogCategoryFor({ catalogCategory: data.catalogCategory, marketCategory: data.marketCategory });
+      // Kategoriya — markaziy ro'yxatdan (admin boshqaradi). Yuborilgan kalit ro'yxatda bo'lishi shart.
+      if (data.catalogCategory && !(await isMarketCategoryKey(data.catalogCategory))) {
+        return res.status(400).json({ error: 'Noma‘lum kategoriya — ro‘yxatdan tanlang', code: 'UNKNOWN_CATEGORY' });
+      }
+      if (!data.catalogCategory) {
+        const derived = catalogCategoryFor({ marketCategory: data.marketCategory });
+        data.catalogCategory = derived && (await isMarketCategoryKey(derived)) ? derived : null;
+      }
       // Shtrix-kod: ixtiyoriy; yozilgan bo'lsa to'g'ri va shu do'konda takrorlanmagan bo'lishi kerak
       data.barcode = cleanBarcode(data.barcode);
       if (data.barcode && !BARCODE_RE.test(data.barcode)) return res.status(400).json({ error: 'Shtrix-kod noto‘g‘ri (4–32 belgi: harf, raqam, -)' });
@@ -234,12 +242,15 @@ export const restaurantPanelController = {
       if (isStore(shop)) {
         const m = z.object({
           marketCategory: z.enum(MARKET_CATEGORY_VALUES).optional(),
-          catalogCategory: z.enum(CATALOG_CATEGORY_VALUES).nullable().optional(),
+          catalogCategory: z.string().trim().max(60).nullable().optional(),
           unit: z.enum([...MARKET_UNIT_VALUES, '']).optional(),
           packSize: z.string().max(40).optional(),
               barcode: z.string().max(32).optional(),
         }).safeParse(Object.fromEntries(MARKET_KEYS.filter((k) => k in req.body).map((k) => [k, req.body[k]])));
         if (!m.success) return res.status(400).json({ error: 'Mahsulot ma‘lumoti noto‘g‘ri', details: m.error.issues });
+        if (m.data.catalogCategory && !(await isMarketCategoryKey(m.data.catalogCategory))) {
+          return res.status(400).json({ error: 'Noma‘lum kategoriya — ro‘yxatdan tanlang', code: 'UNKNOWN_CATEGORY' });
+        }
         if ('barcode' in m.data) {
           m.data.barcode = cleanBarcode(m.data.barcode);
           if (m.data.barcode && !BARCODE_RE.test(m.data.barcode)) return res.status(400).json({ error: 'Shtrix-kod noto‘g‘ri (4–32 belgi: harf, raqam, -)' });
@@ -254,7 +265,10 @@ export const restaurantPanelController = {
          */
         if (!('catalogCategory' in m.data) && 'marketCategory' in m.data) {
           const cur = await Dish.findOne({ _id: req.params.id, restaurantId: rid(req) }).select('catalogProductId').lean();
-          if (cur && !cur.catalogProductId) m.data.catalogCategory = catalogCategoryFor({ marketCategory: m.data.marketCategory });
+          if (cur && !cur.catalogProductId) {
+            const derived = catalogCategoryFor({ marketCategory: m.data.marketCategory });
+            m.data.catalogCategory = derived && (await isMarketCategoryKey(derived)) ? derived : null;
+          }
         }
         Object.assign(update, m.data);
         update.category = 'boshqa';

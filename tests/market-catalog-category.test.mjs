@@ -15,6 +15,7 @@ const { Dish } = await import('../src/models/Dish.js');
 const { Restaurant } = await import('../src/models/Restaurant.js');
 const { CatalogProduct } = await import('../src/models/CatalogProduct.js');
 const { backfillCatalogCategory } = await import('../src/services/catalogCategoryMigration.js');
+const { seedMarketCategories } = await import('../src/services/marketCategoryRegistry.js');
 const { restaurantController } = await import('../src/controllers/catalog.js');
 const { dishController } = await import('../src/controllers/catalog.js');
 
@@ -41,6 +42,8 @@ let shopA; let shopB; let cpChoy; let cpKonfet;
 before(async () => {
   await mongoose.connect(URI, { serverSelectionTimeoutMS: 8000 });
   await Promise.all([Dish.deleteMany({}), Restaurant.deleteMany({}), CatalogProduct.deleteMany({})]);
+  // Markaziy market ro'yxati (ishga tushishda server ham shunday qiladi)
+  await seedMarketCategories();
   const mk = (name) => Restaurant.create({ name, cuisine: 'Do\'kon', kind: 'shop', category: 'dokon', isApproved: true, isActive: true, openTime: '00:00', closeTime: '23:59', lat: 41, lng: 71 }).catch(async () => Restaurant.collection.insertOne({ name, cuisine: 'Do\'kon', kind: 'shop', isApproved: true, isActive: true, isBlocked: false, createdAt: new Date() }).then((r) => ({ _id: r.insertedId })));
   shopA = await mk('Anor market'); shopB = await mk('Pop bozor');
   cpChoy = await CatalogProduct.create({ name: 'Ahmad choy', category: 'choy', isActive: true });
@@ -124,7 +127,7 @@ test('simlar: do\'konlar ro\'yxati aggregate\'i aniq kalitlarni qaytaradi (haqiq
   const src = readFileSync(new URL('../src/controllers/catalog.js', import.meta.url), 'utf8');
   assert.ok(src.includes("catalogCategories: { $addToSet: '$catalogCategory' }") && src.includes('productCatalogCategories: catalogCatMap.get'));
   const panel = readFileSync(new URL('../src/controllers/restaurantPanel.js', import.meta.url), 'utf8');
-  assert.ok(panel.includes('catalogCategoryFor({ catalogCategory: data.catalogCategory, marketCategory: data.marketCategory })'), 'do\'kon yaratgan mahsulotga kalit yoziladi');
+  assert.ok(panel.includes('isMarketCategoryKey(data.catalogCategory)') && panel.includes('catalogCategoryFor({ marketCategory: data.marketCategory })'), 'do\'kon mahsuloti kalitni markaziy ro\'yxatdan oladi (yoki marketCategory dan zaxira)');
   const add = readFileSync(new URL('../src/controllers/catalogProducts.js', import.meta.url), 'utf8');
   assert.ok(add.includes('catalogCategory: product.category'), 'katalogdan qo\'shilganda aniq kalit');
 });

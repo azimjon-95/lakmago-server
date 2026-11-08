@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { marketCategoryAdminController } from '../controllers/marketCategoryAdmin.js';
 import { restaurantController, dishController } from '../controllers/catalog.js';
 import { marketController } from '../controllers/market.js';
 import { weddingProxy, weddingOwnerProxy } from '../controllers/weddingProxy.js';
@@ -746,6 +747,11 @@ router.delete('/admin/banners/:id', auth, requireRole('admin'), adminController.
 // Telegram guruhlar
 router.get('/admin/groups', auth, requireRole('admin'), adminController.groups);
 router.post('/admin/groups/add', auth, requireRole('admin'), adminController.addGroup);
+// Market kategoriyalari (markaziy ro'yxat): admin paneli
+router.get('/admin/market-categories', ...A, marketCategoryAdminController.list);
+router.post('/admin/market-categories', ...A, writeLimiter, marketCategoryAdminController.create);
+router.patch('/admin/market-categories/:key', ...A, writeLimiter, marketCategoryAdminController.update);
+router.delete('/admin/market-categories/:key', ...A, writeLimiter, marketCategoryAdminController.remove);
 router.post('/admin/groups/:chatId/resend', auth, requireRole('admin'), adminController.resendPromo);
 // Restoran guruhi/kanali: restoran biriktirish (pin → shu restoran sahifasi), pinni yangilash, umumiy reklamani yoqish/o'chirish
 router.put('/admin/groups/:chatId/restaurant', auth, requireRole('admin'), writeLimiter, adminController.setGroupRestaurant);

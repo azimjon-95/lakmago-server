@@ -1,5 +1,6 @@
 import { asyncHandler } from '../middleware/error.js';
 import { MARKET_CATEGORIES, MARKET_GROUPS, MARKET_UNITS } from '../constants/marketCategories.js';
+import { listMarketCategories } from '../services/marketCategoryRegistry.js';
 import { hasFeature } from '../services/featureAccess.js';
 
 /*
@@ -23,10 +24,12 @@ export const marketController = {
     res.json({ market, wedding });
   }),
 
-  categories: (_req, res) => {
-    res.set('Cache-Control', 'public, max-age=600');
-    res.json({ groups: MARKET_GROUPS, categories: MARKET_CATEGORIES, units: MARKET_UNITS });
-  },
+  // Markaziy ro'yxat (admin boshqaradi): catalogCategories — do'kon formasi, Market qatori shu bilan
+  categories: asyncHandler(async (_req, res) => {
+    res.set('Cache-Control', 'public, max-age=60');
+    const catalogCategories = await listMarketCategories();
+    res.json({ groups: MARKET_GROUPS, categories: MARKET_CATEGORIES, units: MARKET_UNITS, catalogCategories });
+  }),
 
   /** catalog kontrolleridan oldin: shu so'rov market rejimida */
   marketMode: (req, _res, next) => { req.marketMode = true; next(); },
