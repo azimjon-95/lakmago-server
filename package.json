@@ -13,7 +13,7 @@
     "bot": "node scripts/bot-tekshir.js",
     "sync:banners": "node scripts/sync-banners.js",
     "seed:catalog": "node scripts/seed-catalog.js",
-    "test": "node tests/webhook-guard.test.mjs && node tests/finance.test.mjs && node tests/delivery-party.test.mjs && node tests/courier-pool.test.mjs && node tests/courier-auth.test.mjs && node tests/courier-flow.test.mjs && node tests/device-check.test.mjs && node tests/group-restaurant.test.mjs && node tests/video-dimensions.test.mjs && node tests/market-catalog-category.test.mjs && node tests/order-device-check.test.mjs && node tests/courier-track.test.mjs && node tests/courier-app-pool.test.mjs && node tests/panel-order-courier.test.mjs && node tests/refund.test.mjs && node tests/delivery-pricing.test.mjs && node tests/gift-bonus.test.mjs && node tests/order-create-gifts.test.mjs && node tests/cors-origins.test.mjs && node tests/db-backup-resilience.test.mjs && node tests/tg-link-login.test.mjs && node tests/restaurant-app.test.mjs && node tests/delivery-road-distance.test.mjs && node tests/catalog-counts.test.mjs && node --test tests/catalog-cache.test.mjs && node tests/incident-post-mode.test.mjs && node --test tests/catalog-paging.test.mjs && node tests/demo-account.test.mjs && node tests/panel-catalog.test.mjs",
+    "test": "node tests/webhook-guard.test.mjs && node tests/finance.test.mjs && node tests/delivery-party.test.mjs && node tests/courier-pool.test.mjs && node tests/courier-auth.test.mjs && node tests/courier-flow.test.mjs && node tests/device-check.test.mjs && node tests/group-restaurant.test.mjs && node tests/video-dimensions.test.mjs && node tests/market-catalog-category.test.mjs && node tests/market-category-registry.test.mjs && node tests/order-device-check.test.mjs && node tests/courier-track.test.mjs && node tests/courier-app-pool.test.mjs && node tests/panel-order-courier.test.mjs && node tests/refund.test.mjs && node tests/delivery-pricing.test.mjs && node tests/gift-bonus.test.mjs && node tests/order-create-gifts.test.mjs && node tests/cors-origins.test.mjs && node tests/db-backup-resilience.test.mjs && node tests/tg-link-login.test.mjs && node tests/restaurant-app.test.mjs && node tests/delivery-road-distance.test.mjs && node tests/catalog-counts.test.mjs && node --test tests/catalog-cache.test.mjs && node tests/incident-post-mode.test.mjs && node --test tests/catalog-paging.test.mjs && node tests/demo-account.test.mjs && node tests/panel-catalog.test.mjs",
     "test:flow": "node tests/finance-flow.test.mjs",
     "report:legacy-finance": "node scripts/legacy-finance-report.js",
     "test:tz": "node tests/tz-finance.test.mjs",
@@ -81,7 +81,8 @@
     "test:order-device": "node tests/order-device-check.test.mjs",
     "test:group-restaurant": "node tests/group-restaurant.test.mjs",
     "test:video-dimensions": "node tests/video-dimensions.test.mjs",
-    "test:market-catalog": "node tests/market-catalog-category.test.mjs"
+    "test:market-catalog": "node tests/market-catalog-category.test.mjs",
+    "test:market-registry": "node tests/market-category-registry.test.mjs"
   },
   "dependencies": {
     "@socket.io/redis-adapter": "^8.3.0",

@@ -133,7 +133,8 @@ const dishSchema = new Schema(
      * Umumiy KATALOG kategoriyasi (70 ta kalit) — Market bosh sahifasidagi yumaloq kategoriyalar (choy, konfetlar, souslar...) shu bo'yicha.
      * marketCategory dan aniqroq. constants/marketCategories.js (MARKET_TO_CATALOG) va services/catalogCategoryMigration.js
      */
-    catalogCategory: { type: String, enum: [...CATALOG_CATEGORY_VALUES, null], default: null, index: true },
+    // Market katalog kaliti — qiymat MarketCategory registridan tekshiriladi (admin qo'shgan kalitlar ham ishlaydi)
+    catalogCategory: { type: String, default: null, index: true, maxlength: 60 },
     unit: { type: String, enum: [...MARKET_UNIT_VALUES, ''], default: '' },
     packSize: { type: String, default: '', maxlength: 40 },
     barcode: { type: String, default: '', maxlength: 32 },

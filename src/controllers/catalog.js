@@ -1,5 +1,6 @@
 import { fairOrder, parseFairCursor, makeFairCursor, randomSeed, isValidSeed } from '../services/fairFeed.js';
 import { CATALOG_CATEGORY_VALUES } from '../constants/catalogCategories.js';
+import { isMarketCategoryKey } from '../services/marketCategoryRegistry.js';
 import { asyncHandler } from '../middleware/error.js';
 import { cached, KEYS, TTL } from '../services/cache.js';
 import { Restaurant } from '../models/Restaurant.js';
@@ -526,7 +527,8 @@ export const dishController = {
        *  • katalog kaliti (shaxsiy_gigiyena, choy, sut_mahsulotlari...) — shu kalit bo'yicha (quyida, catalogCategory bilan bir xil);
        *  • eski marketCategory (sut, meva...) — marketCategory bo'yicha.
        */
-      const catKeyFromCategory = category && CATALOG_CATEGORY_VALUES.includes(category) ? category : '';
+      // `category` — markaziy ro'yxatdagi kalit bo'lsa (admin qo'shganlari ham) katalog bo'yicha; aks holda eski marketCategory
+      const catKeyFromCategory = category && (await isMarketCategoryKey(category)) ? category : '';
       if (category && category !== 'all' && !catKeyFromCategory) {
         filter.marketCategory = MARKET_CATEGORY_VALUES.includes(category) ? category : '__none__';
       }
@@ -536,7 +538,7 @@ export const dishController = {
        */
       const catalogCategory = (typeof req.query.catalogCategory === 'string' ? req.query.catalogCategory.trim() : '') || catKeyFromCategory;
       if (catalogCategory) {
-        if (!CATALOG_CATEGORY_VALUES.includes(catalogCategory)) {
+        if (!(await isMarketCategoryKey(catalogCategory))) {
           filter.catalogCategory = '__none__';
         } else {
           // Aniq kalit YOKI katalog maydoni bo'sh mahsulot, uning marketCategory si shu kalitga mos (eski mahsulotlar ham chiqadi)

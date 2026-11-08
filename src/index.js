@@ -481,6 +481,9 @@ async function main() {
     // Do'kon mahsulotlariga aniq katalog kaliti (Market bosh sahifasi kategoriyalari) — idempotent, fonda
     const { backfillCatalogCategory } = await import('./services/catalogCategoryMigration.js');
     backfillCatalogCategory().catch((e) => console.warn('[migratsiya] katalog kategoriyasi:', e.message));
+    // Market kategoriyalari (markaziy ro'yxat): birinchi ishga tushishda 21 ta boshlang'ich kalit; mavjudlariga tegmaydi
+    const { seedMarketCategories } = await import('./services/marketCategoryRegistry.js');
+    seedMarketCategories().catch((e) => console.warn('[migratsiya] market kategoriyalari:', e.message));
   }
 
   /*
