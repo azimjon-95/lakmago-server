@@ -15,6 +15,7 @@ const reg = await import('../src/services/marketCategoryRegistry.js');
 const { MARKET_HOME_SEED } = await import('../src/constants/marketHomeSeed.js');
 const { marketCategoryAdminController: adm } = await import('../src/controllers/marketCategoryAdmin.js');
 const { dishController } = await import('../src/controllers/catalog.js');
+const { slugifyKey } = await import('../src/controllers/marketCategoryAdmin.js');
 
 const call = async (handler, req) => {
   const out = { code: 200, body: null };
@@ -93,4 +94,20 @@ test('YANGI KALIT → MAHSULOT FILTRI: admin qo‘shgan kalit ?category= bilan i
   const r = await call(dishController.all, { marketMode: true, query: { limit: '50', category: 'yangi_test_kalit' } });
   const items = Array.isArray(r.body) ? r.body : (r.body.items ?? []);
   assert.deepEqual(items.map((d) => d.name), ['Yangi mahsulot']);
+});
+
+test('NOMDAN KALIT: bo‘sh kalit bilan — nomdan yasaladi; tavsif va karta rasmi saqlanadi', async () => {
+  assert.equal(slugifyKey('Sut mahsulotlari'), 'sut_mahsulotlari');
+  assert.equal(slugifyKey("Uy-ro'zg'or"), 'uy_rozgor');
+  assert.equal(slugifyKey('Bolalar oʻquv'), 'bolalar_oquv');
+  let r = await call(adm.create, { body: { nameUz: 'Yangi Sut Turi', description: 'Tavsif matni', cardUrl: 'https://res.cloudinary.com/x/c.png' } });
+  assert.equal(r.code, 201); assert.equal(r.body.key, 'yangi_sut_turi');
+  assert.equal(r.body.description, 'Tavsif matni'); assert.equal(r.body.cardUrl, 'https://res.cloudinary.com/x/c.png');
+  const listed = (await reg.listMarketCategories({ onlyActive: false })).find((c) => c.key === 'yangi_sut_turi');
+  assert.equal(listed.description, 'Tavsif matni', 'mijoz ro‘yxatida tavsif bor');
+  r = await call(adm.create, { body: { nameUz: 'Yangi Sut Turi' } });
+  assert.equal(r.code, 409, 'bir xil nom — kalit band (409)');
+  r = await call(adm.create, { body: { nameUz: '!!!' } });
+  assert.equal(r.code, 400, 'kalit yasab bo‘lmaydigan nom — 400');
+  await call(adm.remove, { params: { key: 'yangi_sut_turi' } });
 });
