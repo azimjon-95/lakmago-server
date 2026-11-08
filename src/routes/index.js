@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { catalogDbController } from '../controllers/catalogDb.js';
 import { marketCategoryAdminController } from '../controllers/marketCategoryAdmin.js';
 import { restaurantController, dishController } from '../controllers/catalog.js';
 import { marketController } from '../controllers/market.js';
@@ -121,6 +122,8 @@ router.post('/weddings/my-bookings/:id/cancel', auth, requireFeature('wedding'),
 router.post('/panel/barcode', auth, requireRole('restaurant'), restaurantPanelController.generateBarcode);
 router.get('/market/categories', marketController.categories);
 router.get('/market/stores', requireFeature('market'), marketController.marketMode, restaurantController.list);
+router.get('/market/catalog-categories', requireFeature('market'), catalogDbController.list);
+router.get('/catalog/assets/:name', catalogDbController.asset);
 router.get('/market/products', requireFeature('market'), marketController.marketMode, dishController.all);
 
 // ===== Mijoz buyurtmalari (JWT) =====

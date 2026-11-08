@@ -1,0 +1,202 @@
+[
+ {
+  "id": "gosht",
+  "label": "Go'sht mahsulotlari",
+  "hint": "Mol, qo'y, parranda, baliq…",
+  "emoji": "🥩",
+  "from": "#7A1F1F",
+  "to": "#C2410C",
+  "order": 10,
+  "cover": "gosht"
+ },
+ {
+  "id": "kolbasa",
+  "label": "Kolbasa va sosiska",
+  "hint": "Kolbasa, sosiska, vetchina, salami…",
+  "emoji": "🌭",
+  "from": "#9F1239",
+  "to": "#FB7185",
+  "order": 20,
+  "cover": "kolbasa"
+ },
+ {
+  "id": "sut",
+  "label": "Sut mahsulotlari",
+  "hint": "Sut, pishloq, qaymoq, tuxum…",
+  "emoji": "🥛",
+  "from": "#1E3A8A",
+  "to": "#60A5FA",
+  "order": 30,
+  "cover": "sut"
+ },
+ {
+  "id": "muzqaymoq",
+  "label": "Muzqaymoq",
+  "hint": "Stakan, rojok, eskimo, tort-muzqaymoq…",
+  "emoji": "🍦",
+  "from": "#BE185D",
+  "to": "#F9A8D4",
+  "order": 40,
+  "cover": "muzqaymoq"
+ },
+ {
+  "id": "sabzavot",
+  "label": "Sabzavotlar",
+  "hint": "Yangi sabzavot va ko'katlar",
+  "emoji": "🥕",
+  "from": "#166534",
+  "to": "#65A30D",
+  "order": 50,
+  "cover": "sabzavot"
+ },
+ {
+  "id": "meva",
+  "label": "Mevalar",
+  "hint": "Mavsumiy va quruq mevalar",
+  "emoji": "🍎",
+  "from": "#B91C1C",
+  "to": "#F59E0B",
+  "order": 60,
+  "cover": "meva"
+ },
+ {
+  "id": "don",
+  "label": "Yormalar va donlar",
+  "hint": "Guruch, un, makaron, dukkakli…",
+  "emoji": "🌾",
+  "from": "#854D0E",
+  "to": "#D97706",
+  "order": 70,
+  "cover": "don"
+ },
+ {
+  "id": "ichimlik",
+  "label": "Ichimliklar",
+  "hint": "Suv, sharbat, gazli, choy, qahva…",
+  "emoji": "🥤",
+  "from": "#0F172A",
+  "to": "#DC2626",
+  "order": 80,
+  "cover": "ichimlik"
+ },
+ {
+  "id": "non",
+  "label": "Non va qandolat",
+  "hint": "Non, pirog, keks, pishiriqlar…",
+  "emoji": "🥐",
+  "from": "#78350F",
+  "to": "#EA9A3E",
+  "order": 90,
+  "cover": "non"
+ },
+ {
+  "id": "shirinlik",
+  "label": "Shirinlik va snacklar",
+  "hint": "Shokolad, pechenye, konfet, chips…",
+  "emoji": "🍫",
+  "from": "#9D174D",
+  "to": "#F9A8D4",
+  "order": 100,
+  "cover": "shirinlik"
+ },
+ {
+  "id": "ziravor",
+  "label": "Ziravorlar va souslar",
+  "hint": "Ziravor, tuz, sous, yog', sirka…",
+  "emoji": "🌶️",
+  "from": "#7C2D12",
+  "to": "#CA8A04",
+  "order": 110,
+  "cover": "ziravor"
+ },
+ {
+  "id": "tayyor",
+  "label": "Tayyor va muzlatilgan",
+  "hint": "Yarim tayyor, konserva, fast-food…",
+  "emoji": "🍱",
+  "from": "#3F3F46",
+  "to": "#B45309",
+  "order": 120,
+  "cover": "tayyor"
+ },
+ {
+  "id": "bolalar_gigiyena",
+  "label": "Bolalar parvarishi / gigiyena",
+  "hint": "Taglik, salfetka, krem, shampun…",
+  "emoji": "🍼",
+  "from": "#0F766E",
+  "to": "#5EEAD4",
+  "order": 130,
+  "cover": "bolalar_gigiyena"
+ },
+ {
+  "id": "bolalar_ovqat",
+  "label": "Bolalar oziq-ovqatlari",
+  "hint": "Pyure, bo'tqa, aralashma…",
+  "emoji": "🥣",
+  "from": "#B45309",
+  "to": "#FCD34D",
+  "order": 140,
+  "cover": "bolalar_ovqat"
+ },
+ {
+  "id": "shaxsiy",
+  "label": "Shaxsiy gigiyena",
+  "hint": "Shampun, sovun, tish pastasi, krem…",
+  "emoji": "🧼",
+  "from": "#6D28D9",
+  "to": "#C4B5FD",
+  "order": 150,
+  "cover": "shaxsiy"
+ },
+ {
+  "id": "uyrozgor",
+  "label": "Uy-ro'zg'or mahsulotlari",
+  "hint": "Idish, qadoq, gigiyena, xo'jalik…",
+  "emoji": "🏠",
+  "from": "#134E4A",
+  "to": "#0EA5E9",
+  "order": 160,
+  "cover": "uyrozgor"
+ },
+ {
+  "id": "kimyo",
+  "label": "Maishiy kimyo",
+  "hint": "Kir yuvish, idish yuvish, tozalash…",
+  "emoji": "🧴",
+  "from": "#1D4ED8",
+  "to": "#38BDF8",
+  "order": 170,
+  "cover": "kimyo"
+ },
+ {
+  "id": "tozalash",
+  "label": "Tozalash vositalari",
+  "hint": "Shvabra, paqir, cho'tka, qo'lqop…",
+  "emoji": "🧹",
+  "from": "#1E3A8A",
+  "to": "#2563EB",
+  "order": 180,
+  "cover": "tozalash"
+ },
+ {
+  "id": "qogoz",
+  "label": "Qog'oz / salfetka",
+  "hint": "Tualet qog'ozi, salfetka, sochiq…",
+  "emoji": "🧻",
+  "from": "#BE185D",
+  "to": "#F9A8D4",
+  "order": 190,
+  "cover": "qogoz"
+ },
+ {
+  "id": "oshxona",
+  "label": "Oshxona buyumlari",
+  "hint": "Qozon, tova, pichoq, idish-tovoq…",
+  "emoji": "🍳",
+  "from": "#44403C",
+  "to": "#A16207",
+  "order": 200,
+  "cover": "oshxona"
+ }
+]

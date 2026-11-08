@@ -1,0 +1,422 @@
+[
+ {
+  "key": "guruch_don",
+  "nameUz": "Guruch va don mahsulotlari",
+  "group": "don",
+  "order": 10
+ },
+ {
+  "key": "un_mahsulotlari",
+  "nameUz": "Un va un mahsulotlari",
+  "group": "don",
+  "order": 20
+ },
+ {
+  "key": "makaron_mahsulotlari",
+  "nameUz": "Makaron mahsulotlari",
+  "group": "don",
+  "order": 30
+ },
+ {
+  "key": "dukkakli_mahsulotlar",
+  "nameUz": "Dukkakli mahsulotlar",
+  "group": "don",
+  "order": 40
+ },
+ {
+  "key": "shakar_shirinlashtiruvchi",
+  "nameUz": "Shakar va shirinlashtiruvchilar",
+  "group": "ziravor",
+  "order": 50
+ },
+ {
+  "key": "tuz",
+  "nameUz": "Tuz",
+  "group": "ziravor",
+  "order": 60
+ },
+ {
+  "key": "osimlik_yoglari",
+  "nameUz": "O'simlik yog'lari",
+  "group": "ziravor",
+  "order": 70
+ },
+ {
+  "key": "sariyog_margarin",
+  "nameUz": "Sariyog' va margarin",
+  "group": "sut",
+  "order": 80
+ },
+ {
+  "key": "sut_mahsulotlari",
+  "nameUz": "Sut va sut mahsulotlari",
+  "group": "sut",
+  "order": 90
+ },
+ {
+  "key": "pishloq_mahsulotlari",
+  "nameUz": "Pishloq mahsulotlari",
+  "group": "sut",
+  "order": 100
+ },
+ {
+  "key": "gosht_mahsulotlari",
+  "nameUz": "Go'sht mahsulotlari",
+  "group": "gosht",
+  "order": 110
+ },
+ {
+  "key": "parranda_goshti",
+  "nameUz": "Parranda go'shti",
+  "group": "gosht",
+  "order": 120
+ },
+ {
+  "key": "kolbasa_sosiska",
+  "nameUz": "Kolbasa va sosiska mahsulotlari",
+  "group": "kolbasa",
+  "order": 130
+ },
+ {
+  "key": "baliq_dengiz_mahsulotlari",
+  "nameUz": "Baliq va dengiz mahsulotlari",
+  "group": "gosht",
+  "order": 140
+ },
+ {
+  "key": "tuxum",
+  "nameUz": "Tuxum",
+  "group": "sut",
+  "order": 150
+ },
+ {
+  "key": "yangi_meva",
+  "nameUz": "Yangi meva",
+  "group": "meva",
+  "order": 160
+ },
+ {
+  "key": "yangi_sabzavot",
+  "nameUz": "Yangi sabzavot",
+  "group": "sabzavot",
+  "order": 170
+ },
+ {
+  "key": "kokatlar",
+  "nameUz": "Ko'katlar",
+  "group": "sabzavot",
+  "order": 180
+ },
+ {
+  "key": "muzlatilgan_mahsulotlar",
+  "nameUz": "Muzlatilgan mahsulotlar",
+  "group": "tayyor",
+  "order": 190
+ },
+ {
+  "key": "yarim_tayyor_mahsulotlar",
+  "nameUz": "Yarim tayyor mahsulotlar",
+  "group": "tayyor",
+  "order": 200
+ },
+ {
+  "key": "konserva_mahsulotlari",
+  "nameUz": "Konserva mahsulotlari",
+  "group": "tayyor",
+  "order": 210
+ },
+ {
+  "key": "tuzlama_marinad",
+  "nameUz": "Tuzlama va marinadlar",
+  "group": "sabzavot",
+  "order": 220
+ },
+ {
+  "key": "ziravorlar",
+  "nameUz": "Ziravorlar",
+  "group": "ziravor",
+  "order": 230
+ },
+ {
+  "key": "souslar",
+  "nameUz": "Souslar",
+  "group": "ziravor",
+  "order": 240
+ },
+ {
+  "key": "ketchup_mayonez",
+  "nameUz": "Ketchup va mayonez",
+  "group": "ziravor",
+  "order": 250
+ },
+ {
+  "key": "sirka",
+  "nameUz": "Sirka",
+  "group": "ziravor",
+  "order": 260
+ },
+ {
+  "key": "tomat_mahsulotlari",
+  "nameUz": "Tomat mahsulotlari",
+  "group": "sabzavot",
+  "order": 270
+ },
+ {
+  "key": "choy",
+  "nameUz": "Choy",
+  "group": "ichimlik",
+  "order": 280
+ },
+ {
+  "key": "qahva",
+  "nameUz": "Qahva",
+  "group": "ichimlik",
+  "order": 290
+ },
+ {
+  "key": "kakao",
+  "nameUz": "Kakao",
+  "group": "ichimlik",
+  "order": 300
+ },
+ {
+  "key": "ichimliklar",
+  "nameUz": "Ichimliklar",
+  "group": "ichimlik",
+  "order": 310
+ },
+ {
+  "key": "mineral_suv",
+  "nameUz": "Mineral suv",
+  "group": "ichimlik",
+  "order": 320
+ },
+ {
+  "key": "sharbatlar",
+  "nameUz": "Sharbatlar",
+  "group": "ichimlik",
+  "order": 330
+ },
+ {
+  "key": "gazli_ichimliklar",
+  "nameUz": "Gazli ichimliklar",
+  "group": "ichimlik",
+  "order": 340
+ },
+ {
+  "key": "energetik_ichimliklar",
+  "nameUz": "Energetik ichimliklar",
+  "group": "ichimlik",
+  "order": 350
+ },
+ {
+  "key": "shirinliklar",
+  "nameUz": "Shirinliklar",
+  "group": "shirinlik",
+  "order": 360
+ },
+ {
+  "key": "konfetlar",
+  "nameUz": "Konfetlar",
+  "group": "shirinlik",
+  "order": 370
+ },
+ {
+  "key": "shokolad",
+  "nameUz": "Shokolad",
+  "group": "shirinlik",
+  "order": 380
+ },
+ {
+  "key": "pechenye",
+  "nameUz": "Pechenye",
+  "group": "shirinlik",
+  "order": 390
+ },
+ {
+  "key": "vafli",
+  "nameUz": "Vafli",
+  "group": "shirinlik",
+  "order": 400
+ },
+ {
+  "key": "keks_pishiriqlar",
+  "nameUz": "Keks va pishiriqlar",
+  "group": "non",
+  "order": 410
+ },
+ {
+  "key": "muzqaymoq",
+  "nameUz": "Muzqaymoq",
+  "group": "muzqaymoq",
+  "order": 420
+ },
+ {
+  "key": "chips_snacklar",
+  "nameUz": "Chips va snacklar",
+  "group": "shirinlik",
+  "order": 430
+ },
+ {
+  "key": "yongoqlar",
+  "nameUz": "Yong'oqlar",
+  "group": "meva",
+  "order": 440
+ },
+ {
+  "key": "quruq_mevalar",
+  "nameUz": "Quruq mevalar",
+  "group": "meva",
+  "order": 450
+ },
+ {
+  "key": "asal",
+  "nameUz": "Asal",
+  "group": "meva",
+  "order": 460
+ },
+ {
+  "key": "murabbo_jem",
+  "nameUz": "Murabbo va jem",
+  "group": "meva",
+  "order": 470
+ },
+ {
+  "key": "non_mahsulotlari",
+  "nameUz": "Non va non mahsulotlari",
+  "group": "non",
+  "order": 480
+ },
+ {
+  "key": "bolalar_oziq_ovqatlari",
+  "nameUz": "Bolalar oziq-ovqatlari",
+  "group": "bolalar_ovqat",
+  "order": 490
+ },
+ {
+  "key": "nonushta_mahsulotlari",
+  "nameUz": "Nonushta mahsulotlari",
+  "group": "tayyor",
+  "order": 500
+ },
+ {
+  "key": "pishirish_mahsulotlari",
+  "nameUz": "Pishirish mahsulotlari",
+  "group": "non",
+  "order": 510
+ },
+ {
+  "key": "qandolat_mahsulotlari",
+  "nameUz": "Qandolat mahsulotlari",
+  "group": "non",
+  "order": 520
+ },
+ {
+  "key": "fastfood_mahsulotlari",
+  "nameUz": "Fast-food mahsulotlari",
+  "group": "tayyor",
+  "order": 530
+ },
+ {
+  "key": "parhezbop_mahsulotlar",
+  "nameUz": "Parhezbop mahsulotlar",
+  "group": "tayyor",
+  "order": 540
+ },
+ {
+  "key": "milliy_oziq_ovqat",
+  "nameUz": "Milliy oziq-ovqat mahsulotlari",
+  "group": "tayyor",
+  "order": 550
+ },
+ {
+  "key": "xorijiy_oziq_ovqat",
+  "nameUz": "Xorijiy oziq-ovqat mahsulotlari",
+  "group": "tayyor",
+  "order": 560
+ },
+ {
+  "key": "maishiy_kimyo",
+  "nameUz": "Maishiy kimyo",
+  "group": "kimyo",
+  "order": 570
+ },
+ {
+  "key": "shaxsiy_gigiyena",
+  "nameUz": "Shaxsiy gigiyena mahsulotlari",
+  "group": "shaxsiy",
+  "order": 580
+ },
+ {
+  "key": "qogoz_salfetka",
+  "nameUz": "Qog'oz va salfetka mahsulotlari",
+  "group": "qogoz",
+  "order": 590
+ },
+ {
+  "key": "bir_martalik_idishlar",
+  "nameUz": "Bir martalik idishlar",
+  "group": "uyrozgor",
+  "order": 600
+ },
+ {
+  "key": "oshxona_xojalik_buyumlari",
+  "nameUz": "Oshxona va xo'jalik buyumlari",
+  "group": "oshxona",
+  "order": 610
+ },
+ {
+  "key": "tozalash_vositalari",
+  "nameUz": "Tozalash vositalari",
+  "group": "tozalash",
+  "order": 620
+ },
+ {
+  "key": "uy_rozgor_mahsulotlari",
+  "nameUz": "Uy-ro'zg'or mahsulotlari",
+  "group": "uyrozgor",
+  "order": 630
+ },
+ {
+  "key": "bolalar_gigiyena",
+  "nameUz": "Bolalar gigiyena mahsulotlari",
+  "group": "bolalar_gigiyena",
+  "order": 640
+ },
+ {
+  "key": "uy_hayvonlari_ozuqasi",
+  "nameUz": "Uy hayvonlari ozuqasi",
+  "group": "uyrozgor",
+  "order": 650
+ },
+ {
+  "key": "tamaki_mahsulotlari",
+  "nameUz": "Tamaki mahsulotlari",
+  "group": "uyrozgor",
+  "order": 660
+ },
+ {
+  "key": "sovgalik_qadoqlangan",
+  "nameUz": "Sovg'alik va qadoqlangan mahsulotlar",
+  "group": "uyrozgor",
+  "order": 670
+ },
+ {
+  "key": "qadoqlash_materiallari",
+  "nameUz": "Qadoqlash materiallari",
+  "group": "uyrozgor",
+  "order": 680
+ },
+ {
+  "key": "restoran_kafe_mahsulotlari",
+  "nameUz": "Restoran va kafe uchun mahsulotlar",
+  "group": "tayyor",
+  "order": 690
+ },
+ {
+  "key": "ofis_korxona_oziq_ovqat",
+  "nameUz": "Ofis va korxonalar uchun oziq-ovqat mahsulotlari",
+  "group": "tayyor",
+  "order": 700
+ }
+]
