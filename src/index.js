@@ -484,6 +484,9 @@ async function main() {
     // Market kategoriyalari (markaziy ro'yxat): birinchi ishga tushishda 21 ta boshlang'ich kalit; mavjudlariga tegmaydi
     const { seedMarketCategories } = await import('./services/marketCategoryRegistry.js');
     seedMarketCategories().catch((e) => console.warn('[migratsiya] market kategoriyalari:', e.message));
+    // Do'kon katalogi (70 kategoriya, 20 guruh, rasmlar) — DB ga yuklash (idempotent; mavjudlarga tegmaydi)
+    const { importCatalogToDb } = await import('./services/catalogDbImport.js');
+    importCatalogToDb().then((r) => console.log('[katalog] DB import:', JSON.stringify(r))).catch((e) => console.warn('[migratsiya] katalog DB:', e.message));
   }
 
   /*

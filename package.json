@@ -82,7 +82,8 @@
     "test:group-restaurant": "node tests/group-restaurant.test.mjs",
     "test:video-dimensions": "node tests/video-dimensions.test.mjs",
     "test:market-catalog": "node tests/market-catalog-category.test.mjs",
-    "test:market-registry": "node tests/market-category-registry.test.mjs"
+    "test:market-registry": "node tests/market-category-registry.test.mjs",
+    "test:catalog-db": "node tests/catalog-db-import.test.mjs"
   },
   "dependencies": {
     "@socket.io/redis-adapter": "^8.3.0",
