@@ -521,14 +521,20 @@ export const dishController = {
     const category = typeof req.query.category === 'string' ? req.query.category.trim() : '';
     if (req.marketMode) {
       // Do'kon mahsuloti — o'z kategoriyalari (constants/marketCategories.js)
-      if (category && category !== 'all') {
+      /*
+       * `category` — Market kategoriyasi. Ikki xil qiymat qabul qilinadi:
+       *  • katalog kaliti (shaxsiy_gigiyena, choy, sut_mahsulotlari...) — shu kalit bo'yicha (quyida, catalogCategory bilan bir xil);
+       *  • eski marketCategory (sut, meva...) — marketCategory bo'yicha.
+       */
+      const catKeyFromCategory = category && CATALOG_CATEGORY_VALUES.includes(category) ? category : '';
+      if (category && category !== 'all' && !catKeyFromCategory) {
         filter.marketCategory = MARKET_CATEGORY_VALUES.includes(category) ? category : '__none__';
       }
       /*
        * Aniq katalog kaliti (Market bosh sahifasi): ?catalogCategory=choy. Eski `category` (marketCategory) bilan to'qnashmasligi uchun
        * ALOHIDA parametr — 'shokolad' kabi nomlar ikkalasida ham bor, lekin ma'nosi boshqa.
        */
-      const catalogCategory = typeof req.query.catalogCategory === 'string' ? req.query.catalogCategory.trim() : '';
+      const catalogCategory = (typeof req.query.catalogCategory === 'string' ? req.query.catalogCategory.trim() : '') || catKeyFromCategory;
       if (catalogCategory) {
         if (!CATALOG_CATEGORY_VALUES.includes(catalogCategory)) {
           filter.catalogCategory = '__none__';

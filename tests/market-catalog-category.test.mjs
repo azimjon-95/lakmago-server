@@ -113,7 +113,7 @@ test('MAHSULOTLAR: ?catalogCategory= aniq kalit bo\'yicha; eski ?category= o\'zg
   };
   assert.deepEqual(await names({ catalogCategory: 'konfetlar' }), ['Bonbon']);
   assert.deepEqual(await names({ catalogCategory: 'choy' }), ['Ahmad']);
-  assert.deepEqual(await names({ category: 'shokolad' }), ['Bonbon'], "eski param (marketCategory) ishlaydi");
+  assert.deepEqual(await names({ category: 'shokolad' }), [], "'shokolad' endi katalog kaliti: katalog maydoni 'konfetlar' bo'lgan Bonbon chiqmaydi (kategoriya ro'yxatidagi kalit bo'yicha qidiriladi)");
   assert.deepEqual(await names({ catalogCategory: 'yoq_kalit' }), [], 'noto\'g\'ri kalit — hech narsa (butun ro\'yxat emas)');
   assert.deepEqual(await names({ catalogCategory: "choy'; db.x" }), [], 'in\'ektsiya shaklidagi matn — xavfsiz');
   assert.equal((await names({})).length, 4, 'parametrsiz — hammasi');
@@ -151,4 +151,22 @@ test('ESKI MAHSULOT: katalog maydoni bo\'sh, faqat marketCategory bor — katego
   assert.deepEqual(await names({ catalogCategory: 'choy' }), ['Eski choy', 'Yangi choy'], 'aniq + eski (marketCategory orqali) birga');
   assert.deepEqual(await names({ catalogCategory: 'sut_mahsulotlari' }), ['Eski sut'], 'sut kaliti marketCategory=sut orqali');
   assert.deepEqual(await names({ catalogCategory: 'konfetlar' }), [], 'mos mahsulot yo\'q — bo\'sh');
+});
+
+test('KATEGORIYA PARAMETRI: ?category=<katalog kaliti> xuddi catalogCategory kabi ishlaydi (aniq + eski mahsulot)', async () => {
+  await Dish.deleteMany({});
+  await Dish.insertMany([
+    dish({ name: 'Choy A', marketCategory: 'choy', catalogCategory: 'choy' }),
+    dish({ name: 'Choy eski', marketCategory: 'choy', catalogCategory: null }),
+    dish({ name: 'Sut A', marketCategory: 'sut', catalogCategory: 'sut_mahsulotlari' }),
+  ]);
+  const names = async (query) => {
+    const r = await call(dishController.all, { marketMode: true, query: { limit: '50', ...query } });
+    const items = Array.isArray(r.body) ? r.body : (r.body.items ?? []);
+    return items.map((d) => d.name).sort();
+  };
+  assert.deepEqual(await names({ category: 'choy' }), ['Choy A', 'Choy eski'], 'katalog kaliti category orqali');
+  assert.deepEqual(await names({ category: 'sut_mahsulotlari' }), ['Sut A'], 'sut kaliti category orqali');
+  assert.deepEqual(await names({ category: 'sut' }), ['Sut A'], 'eski marketCategory nomi ham ishlaydi');
+  assert.deepEqual(await names({ category: 'all' }), ['Choy A', 'Choy eski', 'Sut A'], 'all — hammasi');
 });
