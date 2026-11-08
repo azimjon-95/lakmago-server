@@ -30,6 +30,7 @@ const createSchema = z.object({
   nameUz: z.string().trim().min(1, 'Nomi (lotin) kiritilishi shart').max(80),
   nameUzc: z.string().trim().max(80).optional(),
   nameRu: z.string().trim().max(80).optional(),
+  nameEn: z.string().trim().max(120).optional(),
   emoji: z.string().max(16).optional(),
   imageUrl: https.optional(),
   cardUrl: https.optional(),
@@ -38,6 +39,18 @@ const createSchema = z.object({
   isActive: z.boolean().optional(),
 }).strict();
 const updateSchema = createSchema.omit({ key: true }).partial().strict();
+
+/* API maydonlari -> DB hujjat shakli (catalogcategories): name, description, i18n.{uz,uzc,ru,en} */
+function toDbSet(p) {
+  const s = {};
+  if (p.nameUz !== undefined) { s.name = p.nameUz; s['i18n.uz.name'] = p.nameUz; }
+  if (p.description !== undefined) { s.description = p.description; s['i18n.uz.description'] = p.description; }
+  if (p.nameUzc !== undefined) s['i18n.uzc.name'] = p.nameUzc;
+  if (p.nameRu !== undefined) s['i18n.ru.name'] = p.nameRu;
+  if (p.nameEn !== undefined) s['i18n.en.name'] = p.nameEn;
+  for (const k of ['emoji', 'imageUrl', 'cardUrl', 'order', 'isActive']) if (p[k] !== undefined) s[k] = p[k];
+  return s;
+}
 
 async function nextOrder() {
   const last = await MarketCategory.findOne({}).sort({ order: -1 }).lean();
@@ -66,13 +79,17 @@ export const marketCategoryAdminController = {
     if (await MarketCategory.exists({ key })) return res.status(409).json({ error: 'Bu kalit allaqachon mavjud', code: 'KEY_TAKEN' });
     const doc = await MarketCategory.create({
       key,
-      cardUrl: d.cardUrl || '',
+      name: d.nameUz,
       description: d.description || '',
-      nameUz: d.nameUz,
-      nameUzc: d.nameUzc || '',
-      nameRu: d.nameRu || '',
+      i18n: {
+        uz: { name: d.nameUz, description: d.description || '' },
+        uzc: { name: d.nameUzc || '' },
+        ru: { name: d.nameRu || '' },
+        en: { name: d.nameEn || '' },
+      },
       emoji: d.emoji || '🛒',
       imageUrl: d.imageUrl || '',
+      cardUrl: d.cardUrl || '',
       order: d.order ?? (await nextOrder()),
       isActive: d.isActive !== false,
     });
@@ -85,8 +102,7 @@ export const marketCategoryAdminController = {
     const key = String(req.params.key || '').toLowerCase();
     const p = updateSchema.safeParse(req.body || {});
     if (!p.success) return res.status(400).json({ error: p.error.issues[0]?.message || 'Ma‘lumot noto‘g‘ri' });
-    const set = {};
-    for (const [k, v] of Object.entries(p.data)) if (v !== undefined) set[k] = v;
+    const set = toDbSet(p.data);
     if (!Object.keys(set).length) return res.status(400).json({ error: 'O‘zgartiriladigan maydon yo‘q' });
     const doc = await MarketCategory.findOneAndUpdate({ key }, { $set: set }, { new: true }).lean();
     if (!doc) return res.status(404).json({ error: 'Kategoriya topilmadi' });

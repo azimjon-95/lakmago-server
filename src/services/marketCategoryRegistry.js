@@ -14,7 +14,11 @@ export async function seedMarketCategories() {
   for (const [i, c] of MARKET_HOME_SEED.entries()) {
     await MarketCategory.updateOne(
       { key: c.key },
-      { $setOnInsert: { ...c, order: (i + 1) * 10, isActive: true, imageUrl: '' } },
+      { $setOnInsert: {
+        key: c.key, name: c.nameUz, description: '', emoji: c.emoji || '🛒', imageUrl: '', cardUrl: '',
+        i18n: { uz: { name: c.nameUz }, uzc: { name: c.nameUzc || '' }, ru: { name: c.nameRu || '' }, en: { name: '' } },
+        order: (i + 1) * 10, isActive: true,
+      } },
       { upsert: true },
     );
   }
@@ -26,15 +30,18 @@ export function invalidateMarketCategories() {
 }
 
 function toView(r) {
+  const i18n = r.i18n || {};
+  const uz = r.name || i18n.uz?.name || r.key;
   return {
     key: r.key,
-    uz: r.nameUz,
-    uzc: r.nameUzc || r.nameUz,
-    ru: r.nameRu || r.nameUz,
+    uz,
+    uzc: i18n.uzc?.name || uz,
+    ru: i18n.ru?.name || uz,
+    en: i18n.en?.name || '',
     emoji: r.emoji || '🛒',
     imageUrl: r.imageUrl || '',
     cardUrl: r.cardUrl || '',
-    description: r.description || '',
+    description: r.description || i18n.uz?.description || '',
     order: r.order,
     isActive: r.isActive !== false,
   };
