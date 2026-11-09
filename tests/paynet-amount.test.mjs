@@ -1,5 +1,6 @@
 /*
- * PAYNET SUMMA BIRLIGI — GetInformation va PerformTransaction so'mda.
+ * PAYNET SUMMA BIRLIGI — GetInformation SO'MDA (ekranda ko'rsatish uchun), PerformTransaction TIYINDA (main: e6f3c12).
+ * REGRESSIYA QO'RIQCHISI: eski shox tz/paynet-som ikkalasini so'mda qilgan edi — u haqiqiy to'lovlarni WRONG_AMOUNT bilan rad etardi.
  * Baza KERAK EMAS (Order/Transaction/recordSuccess stub). npm run test:paynet-amount
  */
 process.env.JWT_SECRET = process.env.JWT_SECRET || 'x'.repeat(40);
@@ -38,17 +39,17 @@ console.log('\n[1] GetInformation — amount so‘mda');
   order = { ...order, status: 'awaiting_payment' };
 }
 
-console.log('\n[2] PerformTransaction — so‘m bilan tekshiriladi');
+console.log('\n[2] PerformTransaction — amount TIYINDA tekshiriladi (e6f3c12: Paynet PerformTransaction da tiyin yuboradi)');
 {
   const tx = (amount, tid) => handlePaynetRpc({ jsonrpc: '2.0', id: 3, method: 'PerformTransaction', params: { amount, serviceId: sid, transactionId: tid, fields: { client_id: OID } } });
   txCreated = null;
-  let r = await tx(String(total), 'T-OK');
-  ok(txCreated && txCreated.amount === total * 100, `to‘g‘ri summa (so‘m) tekshiruvdan o‘tdi va tiyinda yozildi (${txCreated?.amount})`);
+  let r = await tx(String(total * 100), 'T-OK');
+  ok(txCreated && txCreated.amount === total * 100, `to'g'ri summa (tiyin) tekshiruvdan o'tdi va tiyinda yozildi (${txCreated?.amount})`);
   txCreated = null;
-  r = await tx(String(total * 100), 'T-TIYIN');
-  ok(r.error?.code === 413 && txCreated === null, 'tiyin summa (11950000) RAD ETILADI (413), hech narsa yozilmaydi');
+  r = await tx(String(total), 'T-SOM');
+  ok(r.error?.code === 413 && txCreated === null, "SO'M summa (119500) RAD ETILADI (413) — shox tz/paynet-som aynan shuni buzardi; hech narsa yozilmaydi");
   txCreated = null;
-  r = await tx(String(total - 1), 'T-LESS');
+  r = await tx(String(total * 100 - 1), 'T-LESS');
   ok(r.error?.code === 413 && txCreated === null, 'kam summa rad etiladi (413)');
 }
 
