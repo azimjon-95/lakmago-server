@@ -9,6 +9,7 @@ import { panelIncidentController, adminIncidentController } from '../controllers
 import { requireFeature } from '../services/featureAccess.js';
 import { restaurantBillingController } from '../controllers/restaurantBilling.js';
 import { bannerController, authController, orderController } from '../controllers/misc.js';
+import { appleAuthController } from '../controllers/appleAuth.js';
 import { reservationController, paymentController } from '../controllers/services.js';
 import { adminController } from '../controllers/admin.js';
 import { panelAuthController } from '../controllers/panelAuth.js';
@@ -87,6 +88,10 @@ router.post('/auth/telegram-web', loginLimiter, authController.telegramWeb); // 
 // Native ilova/brauzer uchun: Telegram bot havolasi orqali kirish (Login Widget'ga ishonmasdan)
 router.get('/app/capabilities', demoController.capabilities);                        // ilova imkoniyatlari (eski serverda 404 → yangi imkoniyatlar yashirin)
 router.post('/auth/demo-login', loginLimiter, demoController.login);               // App Store demo hisobi (DEMO_LOGIN_ENABLED=true bo'lmasa 404)
+// Sign in with Apple (faqat iOS ilovasi; APPLE_SIGNIN_ENABLED=true bo'lmasa 404). Telegram kirishiga bog'liq emas.
+router.get('/auth/apple/config', appleAuthController.config);
+router.post('/auth/apple/challenge', loginLimiter, appleAuthController.challenge);
+router.post('/auth/apple', loginLimiter, appleAuthController.login);
 router.get('/demo/restaurant', auth, demoController.restaurant);                    // demo foydalanuvchi uchun demo restoran kartochkasi
 router.post('/auth/tg-link/start', tgLinkStartLimiter, tgLinkAuthController.start);
 router.post('/auth/tg-link/poll', tgLinkPollLimiter, tgLinkAuthController.poll);
