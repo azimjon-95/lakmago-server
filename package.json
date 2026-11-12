@@ -85,7 +85,8 @@
     "test:market-registry": "node tests/market-category-registry.test.mjs",
     "test:catalog-db": "node tests/catalog-db-import.test.mjs",
     "test:catalogcategories": "node tests/catalogcategories-grok-shape.test.mjs",
-    "verify:catalogcategories": "node scripts/verify-catalogcategories.mjs"
+    "verify:catalogcategories": "node scripts/verify-catalogcategories.mjs",
+    "test:apple-auth": "node --test tests/apple-auth.test.mjs"
   },
   "dependencies": {
     "@socket.io/redis-adapter": "^8.3.0",
