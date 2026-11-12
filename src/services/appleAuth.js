@@ -27,14 +27,15 @@ import { signToken, signAccessToken, generateRefreshToken, hashRefreshToken, ref
  */
 
 export class AppleAuthError extends Error {
-  constructor(status, code, message, payload) {
+  constructor(status, code, message, payload, logInfo) {
     super(message);
     this.status = status;
     this.code = code;
     this.payload = payload;
+    this.logInfo = logInfo;        // faqat server logi uchun (maxfiy emas: aud/iss/vaqt); javobga qo'shilmaydi
   }
 }
-const fail = (status, code, message) => new AppleAuthError(status, code, message);
+const fail = (status, code, message, logInfo) => new AppleAuthError(status, code, message, undefined, logInfo);
 
 const sha256hex = (s) => crypto.createHash('sha256').update(s).digest('hex');
 const safeEq = (a, b) => {
@@ -74,7 +75,7 @@ async function getAppleKey(kid) {
   if (!fresh || canRefetch) {
     try { await fetchKeys(); } catch (e) {
       if (keyCache.keys.has(kid)) return keyCache.keys.get(kid);   // Apple vaqtincha javob bermasa — eski kesh
-      throw fail(503, 'APPLE_KEYS_UNAVAILABLE', 'Apple bilan aloqa o\'rnatilmadi, keyinroq urinib ko\'ring');
+      throw fail(503, 'APPLE_KEYS_UNAVAILABLE', 'Apple bilan aloqa o\'rnatilmadi, keyinroq urinib ko\'ring', { url: getAppleConfig().jwksUrl, error: String(e?.message || e) });
     }
   }
   return keyCache.keys.get(kid) || null;
@@ -140,19 +141,26 @@ export async function verifyAppleIdentityToken(token, { expectedNonce }) {
       algorithms: ['RS256'], issuer: cfg.issuer, audience: cfg.clientIds, clockTolerance: cfg.clockToleranceSec,
     });
   } catch (e) {
-    if (e?.name === 'TokenExpiredError') throw fail(401, 'TOKEN_EXPIRED', 'Apple tokeni muddati tugagan');
-    throw fail(401, 'TOKEN_INVALID', 'Apple tokeni tekshiruvdan o\'tmadi');
+    const p = decoded.payload || {};
+    const info = { aud: p.aud, iss: p.iss, expected: cfg.clientIds, jwt: e?.message };
+    if (e?.name === 'TokenExpiredError') throw fail(401, 'TOKEN_EXPIRED', 'Apple tokeni muddati tugagan', info);
+    if (/audience/i.test(e?.message)) throw fail(401, 'AUDIENCE_MISMATCH', 'Apple tokeni boshqa ilova uchun berilgan', info);
+    if (/issuer/i.test(e?.message)) throw fail(401, 'ISSUER_MISMATCH', 'Apple tokeni noto\'g\'ri (issuer)', info);
+    if (/signature/i.test(e?.message)) throw fail(401, 'SIGNATURE_INVALID', 'Apple tokeni imzosi noto\'g\'ri', info);
+    throw fail(401, 'TOKEN_INVALID', 'Apple tokeni tekshiruvdan o\'tmadi', info);
   }
 
   const now = Math.floor(Date.now() / 1000);
   if (typeof payload.iat !== 'number') throw fail(401, 'TOKEN_INVALID', 'Apple tokeni noto\'g\'ri (iat yo\'q)');   // Apple tokenlarida iat doim bor
-  if (payload.iat > now + cfg.clockToleranceSec || now - payload.iat > cfg.maxTokenAgeSec) throw fail(401, 'TOKEN_EXPIRED', 'Apple tokeni juda eski');
+  if (payload.iat > now + cfg.clockToleranceSec || now - payload.iat > cfg.maxTokenAgeSec) {
+    throw fail(401, 'TOKEN_EXPIRED', 'Apple tokeni juda eski', { iat: payload.iat, serverNow: now, diffSec: now - payload.iat });   // server soati noto'g'ri bo'lsa shu ko'rinadi
+  }
   if (typeof payload.sub !== 'string' || !payload.sub || payload.sub.length > 255) throw fail(401, 'TOKEN_INVALID', 'Apple tokeni noto\'g\'ri (sub)');
 
   // NONCE: token ichidagi qiymat bizning challenge nonce'imizga (yoki uning SHA-256 hex ko'rinishiga) teng bo'lishi shart
   const n = payload.nonce;
   if (typeof n !== 'string' || !n || !(safeEq(n, expectedNonce) || safeEq(n, sha256hex(expectedNonce)))) {
-    throw fail(401, 'NONCE_MISMATCH', 'Apple tokenidagi nonce mos kelmadi');
+    throw fail(401, 'NONCE_MISMATCH', 'Apple tokenidagi nonce mos kelmadi', { hasNonce: typeof n === 'string' && n.length > 0, nonceLen: typeof n === 'string' ? n.length : 0 });
   }
   return payload;
 }
@@ -200,7 +208,16 @@ export async function loginWithApple({ challengeId, identityToken, deviceId, pla
   if (identity) user = await User.findById(identity.userId);
 
   if (!user) {
-    user = await createAppleUser({ givenName, familyName });
+    try {
+      user = await createAppleUser({ givenName, familyName });
+    } catch (e) {
+      if (e?.code === 11000) {
+        // Masalan: eski bazada telegramId indeksi sparse EMAS (loyiha boshida required+unique edi) → Telegram ID'siz
+        // ikkinchi foydalanuvchi yaratib bo'lmaydi. Yechim: scripts/apple-diagnose.js --fix-telegram-index
+        throw fail(500, 'USER_CREATE_DUPLICATE', 'Hisob yaratib bo\'lmadi (server sozlamasi)', { keyPattern: e.keyPattern, index: e.message?.match(/index: (\S+)/)?.[1] });
+      }
+      throw e;
+    }
     isNewUser = true;
     if (identity) {
       // Identity bor, lekin foydalanuvchi hujjati yo'q (nomuvofiqlik): identity'ni yangi foydalanuvchiga ko'chiramiz
