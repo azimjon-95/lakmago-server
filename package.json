@@ -86,7 +86,8 @@
     "test:catalog-db": "node tests/catalog-db-import.test.mjs",
     "test:catalogcategories": "node tests/catalogcategories-grok-shape.test.mjs",
     "verify:catalogcategories": "node scripts/verify-catalogcategories.mjs",
-    "test:apple-auth": "node --test tests/apple-auth.test.mjs"
+    "test:apple-auth": "node --test tests/apple-auth.test.mjs",
+    "diagnose:apple": "node scripts/apple-diagnose.js"
   },
   "dependencies": {
     "@socket.io/redis-adapter": "^8.3.0",

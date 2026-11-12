@@ -281,6 +281,33 @@ test('Apple kalitlariga ulanib bo\'lmasa — 503 (Telegram kirishiga ta\'sir qil
   } finally { delete process.env.APPLE_JWKS_URL; S.setAppleKeyProvider(async (kid) => (kid === K1.kid ? K1.jwk : null)); S.resetAppleKeyCache(); }
 });
 
+test('ESKI BAZA (MongoDB E11000): Telegram ID\'siz foydalanuvchi yaratilmasa → 500 USER_CREATE_DUPLICATE, yetim identity/sessiya yo\'q', async () => {
+  // MongoDB'da sparse BO'LMAGAN unique telegramId indeksi Telegram ID'siz ikkinchi hujjatni E11000 bilan rad etadi.
+  // FerretDB bu xatti-harakatni takrorlamaydi — shuning uchun MongoDB'ning aynan shu xatosini simulyatsiya qilamiz.
+  const orig = User.create;
+  User.create = async () => {
+    const e = new Error('E11000 duplicate key error collection: lokma.users index: telegramId_1 dup key: { telegramId: null }');
+    e.code = 11000; e.keyPattern = { telegramId: 1 }; throw e;
+  };
+  try {
+    const r = await fullLogin({ claims: { sub: 'S-oldidx' } });
+    assert.equal(r.code, 500, JSON.stringify(r.body)); assert.equal(r.body.code, 'USER_CREATE_DUPLICATE');
+    assert.equal(await AuthIdentity.countDocuments({ provider: 'apple' }), 0);
+    assert.equal(await Session.countDocuments(), 0);
+  } finally { User.create = orig; }
+  const ok = await fullLogin({ claims: { sub: 'S-oldidx' } });          // indeks tuzatilgach (create ishlaydi) — kirish muvaffaqiyatli
+  assert.equal(ok.code, 200);
+});
+
+test('kutilmagan server xatosi — 500 SERVER_ERROR (stack/tafsilot javobga chiqmaydi)', async () => {
+  const orig = Session.create;
+  Session.create = async () => { throw new Error('ichki xato tafsiloti'); };
+  try {
+    const r = await fullLogin({ claims: { sub: 'S-500' } });
+    assert.equal(r.code, 500); assert.equal(r.body.code, 'SERVER_ERROR'); assert.ok(!JSON.stringify(r.body).includes('ichki xato'));
+  } finally { Session.create = orig; }
+});
+
 test('TELEGRAM kirishi O\'ZGARMAGAN: marshrutlar, controller\'lar va umumiy token kodi (statik tekshiruv)', () => {
   const src = (p) => readFileSync(new URL(`../${p}`, import.meta.url), 'utf8');
   const routes = src('src/routes/index.js');
