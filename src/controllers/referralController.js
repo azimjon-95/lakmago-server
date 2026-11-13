@@ -34,6 +34,12 @@ export const referralController = {
     const user = await User.findById(req.userId).select('telegramId isSubscribed referredBy referralRewarded');
     if (!user) return res.status(404).json({ error: 'Foydalanuvchi topilmadi' });
 
+    /*
+     * Telegram ID'si yo'q hisob (Apple orqali kirgan, demo) — Telegram kanaliga obuna TEKSHIRIB BO'LMAYDI va talab qilinmaydi
+     * (aks holda getChatMember(NaN) "obuna emas" deb, mijoz buyurtma bera olmasdi; App Store ham Telegram'ni majburlashga yo'l qo'ymaydi).
+     */
+    if (!user.telegramId) return res.json({ required: false, subscribed: true });
+
     // Kanал sozlanmagan — obuna talab qilinmaydi
     if (!config.mainChannel) {
       return res.json({ required: false, subscribed: true });
