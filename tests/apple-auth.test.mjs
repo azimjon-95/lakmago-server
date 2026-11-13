@@ -140,6 +140,19 @@ test('ISM KEYIN KELSA: hisob standart "Mijoz" bo\'lsa to\'ldiriladi; mijoz o\'zi
   assert.equal(r.body.user.lastName, 'Karimov');
 });
 
+test('Apple foydalanuvchi: Telegram kanaliga obuna TALAB QILINMAYDI (buyurtma berishga to\'sqinlik yo\'q)', async () => {
+  const { config } = await import('../src/config/index.js');
+  const { referralController } = await import('../src/controllers/referralController.js');
+  const prev = config.mainChannel; config.mainChannel = '@lokma_test_channel';
+  try {
+    const c = await challenge();
+    const r = await login({ challengeId: c.challengeId, identityToken: mkToken({ nonce: c.nonce, claims: { sub: 'apple-sub-nosub' } }) });
+    assert.equal(r.code, 200);
+    const sub = await call(referralController.subscription, { userId: String(r.body.user._id) });
+    assert.deepEqual(sub.body, { required: false, subscribed: true });
+  } finally { config.mainChannel = prev; }
+});
+
 test('MAVJUD foydalanuvchi: xuddi shu sub → o\'sha hisob (dublikat yo\'q), yangi sessiya', async () => {
   const a = await fullLogin({ claims: { sub: 'S-same' }, givenName: 'Ali' });
   const b = await fullLogin({ claims: { sub: 'S-same' }, givenName: 'Boshqa nom' });
