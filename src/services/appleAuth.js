@@ -245,6 +245,18 @@ export async function loginWithApple({ challengeId, identityToken, deviceId, pla
   // Hisob o'chirilgan edi (cheklov tufayli identity saqlangan) — Telegram oqimidagidek yangi bo'sh profil sifatida tiklanadi
   if (user.status === 'DELETED') { user.status = 'ACTIVE'; user.deletedAt = undefined; await user.save(); }
 
+  /*
+   * Apple ismni FAQAT birinchi avtorizatsiyada beradi. Birinchi urinish muvaffaqiyatsiz tugagan bo'lsa (yoki ism keyin kelsa)
+   * hisob standart "Mijoz" bilan qolardi — endi ism kelganda va hisobda hali standart nom turgan bo'lsa to'ldiriladi.
+   * Mijoz o'zi yozgan ism HECH QACHON almashtirilmaydi.
+   */
+  const gn = cleanName(givenName);
+  if (!isNewUser && gn && user.firstName === DEFAULT_FIRST_NAME && !user.lastName) {
+    user.firstName = gn;
+    user.lastName = cleanName(familyName) || undefined;
+    await user.save();
+  }
+
   const session = await issueSession(user, deviceId);
   return { ...session, user, isNewUser };
 }

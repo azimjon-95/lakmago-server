@@ -119,6 +119,27 @@ test('ism yo\'q bo\'lsa standart nom; tozalash (nazorat belgilari, uzunlik)', as
   assert.ok(r2.body.user.firstName.length <= 40 && !/[\u0000-\u001f]/.test(r2.body.user.firstName));
 });
 
+test('ISM KEYIN KELSA: hisob standart "Mijoz" bo\'lsa to\'ldiriladi; mijoz o\'zi yozgan ism almashtirilmaydi', async () => {
+  const sub = 'apple-sub-name-late';
+  let c = await challenge();
+  let r = await login({ challengeId: c.challengeId, identityToken: mkToken({ nonce: c.nonce, claims: { sub } }) });   // ism yo'q (birinchi urinish ismsiz ketgan)
+  assert.equal(r.code, 200);
+  assert.equal(r.body.user.firstName, 'Mijoz');
+  c = await challenge();
+  r = await login({ challengeId: c.challengeId, identityToken: mkToken({ nonce: c.nonce, claims: { sub } }), givenName: 'Azimjon', familyName: 'Aliyev' });
+  assert.equal(r.code, 200);
+  assert.equal(r.body.isNewUser, false);
+  assert.equal(r.body.user.firstName, 'Azimjon');
+  assert.equal(r.body.user.lastName, 'Aliyev');
+  assert.equal((await User.findById(r.body.user._id)).firstName, 'Azimjon');
+  // Mijoz ismni o'zi o'zgartirgan — keyingi Apple ismi uni bosib ketmasin
+  await User.updateOne({ _id: r.body.user._id }, { $set: { firstName: 'Aziz', lastName: 'Karimov' } });
+  c = await challenge();
+  r = await login({ challengeId: c.challengeId, identityToken: mkToken({ nonce: c.nonce, claims: { sub } }), givenName: 'Boshqa', familyName: 'Nom' });
+  assert.equal(r.body.user.firstName, 'Aziz');
+  assert.equal(r.body.user.lastName, 'Karimov');
+});
+
 test('MAVJUD foydalanuvchi: xuddi shu sub → o\'sha hisob (dublikat yo\'q), yangi sessiya', async () => {
   const a = await fullLogin({ claims: { sub: 'S-same' }, givenName: 'Ali' });
   const b = await fullLogin({ claims: { sub: 'S-same' }, givenName: 'Boshqa nom' });
