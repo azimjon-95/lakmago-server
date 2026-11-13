@@ -416,6 +416,75 @@ export const restaurantController = {
     res.json(await withCustomerPrices(dishes));
   }),
 
+  /*
+   * ═══ KATTA DO'KON MENYUSI: INDEKS + BO'LIM BO'YICHA SAHIFALASH ═══
+   *
+   * Bitta do'konda 2000+ mahsulot va 20+ bo'lim bo'lishi mumkin; hammasini bir so'rovda
+   * yuborish sekin va ilovani qotiradi. Shu uchun ikki yengil endpoint:
+   *   GET /restaurants/:id/menu/index                       → { total, sale, sections:[{key,count}] }
+   *   GET /restaurants/:id/menu/items?section=&cursor=&limit= → { items, hasMore, nextCursor }
+   * section: marketCategory kaliti | '__other__' (kategoriyasiz) | '__sale__' (chegirmalar).
+   * Kursor — oxirgi _id (indeksli, barqaror). Natijalar Redis'da keshlanadi (Redis yo'q bo'lsa — to'g'ridan baza);
+   * Dish o'zgarsa `rest:<id>:*` kesh avtomatik tozalanadi (models/cacheInvalidation.js).
+   * Eski GET /restaurants/:id/dishes TEGILMAGAN (restoranlar va eski ilovalar uchun).
+   */
+  menuIndex: asyncHandler(async (req, res) => {
+    const rid = req.params.id;
+    if (!isValidId(rid)) return res.json({ total: 0, sale: 0, sections: [] });
+    const restaurant = await Restaurant.findById(rid).select('isBlocked isActive isDemo kind category').lean();
+    if (!restaurant || restaurant.isBlocked || (!restaurant.isActive && !restaurant.isDemo)) {
+      return res.json({ total: 0, sale: 0, sections: [] });
+    }
+    const data = await cached(`rest:${rid}:menu:index`, TTL.dishes, async () => {
+      const base = { restaurantId: new Types.ObjectId(rid), isAvailable: true };
+      const [rows, sale] = await Promise.all([
+        // marketCategory yo'q/null — bitta guruh (null); quyida '__other__' ga aylanadi
+        Dish.aggregate([{ $match: base }, { $group: { _id: '$marketCategory', count: { $sum: 1 } } }]),
+        // Chegirma soni ikkinchi darajali: xato bo'lsa menyuning o'zi 500 bermasin
+        Dish.countDocuments({ ...base, $expr: discountExpr() }).catch((e) => { console.warn('[menu] chegirma soni hisoblanmadi:', e.message); return 0; }),
+      ]);
+      return {
+        total: rows.reduce((s, r) => s + r.count, 0),
+        sale,
+        sections: rows.map((r) => ({ key: r._id || '__other__', count: r.count })),
+      };
+    });
+    res.json(data);
+  }),
+
+  menuItems: asyncHandler(async (req, res) => {
+    const rid = req.params.id;
+    const empty = { items: [], hasMore: false, nextCursor: null };
+    if (!isValidId(rid)) return res.json(empty);
+    const restaurant = await Restaurant.findById(rid).select('isBlocked isActive isDemo kind category').lean();
+    if (!restaurant || restaurant.isBlocked || (!restaurant.isActive && !restaurant.isDemo)) return res.json(empty);
+
+    const section = typeof req.query.section === 'string' ? req.query.section.trim().slice(0, 60) : '';
+    const cursor = typeof req.query.cursor === 'string' && isValidId(req.query.cursor) ? req.query.cursor : '';
+    const rawLimit = Number.parseInt(req.query.limit, 10);
+    const limit = Number.isFinite(rawLimit) ? Math.min(Math.max(rawLimit, 1), 48) : 24;
+
+    const key = `rest:${rid}:menu:items:${section || 'all'}:${cursor || '0'}:${limit}`;
+    const data = await cached(key, TTL.dishes, async () => {
+      const filter = { restaurantId: new Types.ObjectId(rid), isAvailable: true };
+      if (section === '__sale__') filter.$expr = discountExpr();
+      else if (section === '__other__') filter.marketCategory = null;
+      else if (section) filter.marketCategory = section;
+      if (cursor) filter._id = { $lt: new Types.ObjectId(cursor) };
+
+      const docs = await Dish.find(filter)
+        .select('restaurantId name description section category prepMinutes price oldPrice weight weightGram volume drinkType calories protein fat carbs ingredients optionGroups isHit isTrending isDiscounted tint icon images imageUrl isAvailable marketCategory unit packSize catalogProductId')
+        .sort({ _id: -1 })
+        .limit(limit + 1)
+        .lean();
+      const hasMore = docs.length > limit;
+      const page = hasMore ? docs.slice(0, limit) : docs;
+      const items = await withCustomerPrices(page);
+      return { items, hasMore, nextCursor: hasMore ? String(page[page.length - 1]._id) : null };
+    });
+    res.json(data);
+  }),
+
   // GET /api/restaurants/:id/orders  (restoran paneli uchun)
   getOrders: asyncHandler(async (req, res) => {
     const orders = await Order.find({ restaurantId: req.params.id }).

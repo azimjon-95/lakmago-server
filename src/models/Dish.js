@@ -148,6 +148,8 @@ const dishSchema = new Schema(
 
 // Index'lar — menyu va trend/chegirma so'rovlari tez ishlashi uchun
 dishSchema.index({ restaurantId: 1, isAvailable: 1, section: 1 }); // restoran menyusi
+// Katta do'kon: bo'lim bo'yicha kursor-sahifalash (GET /restaurants/:id/menu/items)
+dishSchema.index({ restaurantId: 1, isAvailable: 1, marketCategory: 1, _id: -1 });
 dishSchema.index({ isTrending: 1, isAvailable: 1 });               // trend taomlar
 dishSchema.index({ isDiscounted: 1, isAvailable: 1 });             // chegirmadagilar
 
