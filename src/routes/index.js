@@ -112,6 +112,8 @@ router.post('/gift-bonus/quote', auth, writeLimiter, giftBonusController.quote);
 router.get('/restaurants', restaurantController.list);
 router.get('/restaurants/:id', restaurantController.getOne);
 router.get('/restaurants/:id/dishes', restaurantController.getDishes);
+router.get('/restaurants/:id/menu/index', restaurantController.menuIndex);
+router.get('/restaurants/:id/menu/items', restaurantController.menuItems);
 router.get('/dishes/trending', dishController.trending);
 router.get('/dishes/discounted', dishController.discounted);
 router.get('/dishes/all', dishController.all);
