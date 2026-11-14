@@ -88,7 +88,9 @@
     "test:catalogcategories": "node tests/catalogcategories-grok-shape.test.mjs",
     "verify:catalogcategories": "node scripts/verify-catalogcategories.mjs",
     "test:apple-auth": "node --test tests/apple-auth.test.mjs",
-    "diagnose:apple": "node scripts/apple-diagnose.js"
+    "diagnose:apple": "node scripts/apple-diagnose.js",
+    "test:order-price": "node tests/order-customer-price.test.mjs",
+    "diagnose:order": "node scripts/diagnose-order.js"
   },
   "dependencies": {
     "@socket.io/redis-adapter": "^8.3.0",

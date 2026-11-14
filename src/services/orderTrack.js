@@ -244,8 +244,12 @@ export async function getOrderTrack(orderId, userId, now = Date.now()) {
       return {
         name: i.name,
         quantity: i.quantity,
-        unitPrice: i.unitPrice,
-        total: (i.unitPrice || 0) * (i.quantity || 1),
+        // Mijoz ko'rgan narx (ustama/haq bilan); eski buyurtmalarda — restoran narxi
+        unitPrice: i.customerUnitPrice ?? i.unitPrice,
+        total: (i.customerUnitPrice ?? i.unitPrice ?? 0) * (i.quantity || 1),
+        // Hajm (40 sm) va qo'shimchalar — mijoz nima buyurtma qilganini ko'rsin
+        variant: (i.selectedOptions || []).filter((x) => x.variant).map((x) => x.name).join(', ') || null,
+        addons: (i.selectedOptions || []).filter((x) => !x.variant).map((x) => x.name),
         imageUrl: d?.imageUrl || d?.images?.[0] || null,
       };
     }),

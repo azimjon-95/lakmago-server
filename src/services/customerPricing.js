@@ -67,6 +67,21 @@ export function customerPrice(basePrice, ctx) {
   return base + markupAmt + feeAmt;
 }
 
+/**
+ * Buyurtmadagi bitta pozitsiyaning MIJOZ narxi (1 dona) — mijoz menyuda/savatda ko'rgan narx bilan AYNAN bir xil.
+ *
+ * Menyuda har bir qism alohida narxlanadi (applyPricing): taom (yoki tanlangan hajm) narxi va har bir qo'shimcha.
+ * Shuning uchun bu yerda ham: hajm/asos = unitPrice − Σ qo'shimchalar, keyin har bir qism customerPrice() orqali.
+ * `item.unitPrice` — server tekshirgan RESTORAN (baza) narxi (priceVerification.js).
+ */
+export function itemCustomerUnitPrice(item, ctx) {
+  const unit = Math.round(Number(item?.unitPrice) || 0);
+  const addons = (item?.selectedOptions || []).filter((o) => !o?.variant).map((o) => Math.round(Number(o?.price) || 0));
+  const base = unit - addons.reduce((s, x) => s + x, 0);
+  if (base < 0) return customerPrice(unit, ctx);   // kutilmagan ma'lumot — butun narxga qo'llanadi
+  return customerPrice(base, ctx) + addons.reduce((s, x) => s + (x > 0 ? customerPrice(x, ctx) : x), 0);
+}
+
 /** Zal va bron: narx o'zgarmaydi — restoranning o'z narxi. */
 export function dineInPrice(basePrice) {
   return Math.round(Number(basePrice) || 0);

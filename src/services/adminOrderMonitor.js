@@ -299,8 +299,12 @@ function buildText(order) {
   lines.push('');
   for (const it of order.items || []) {
     const qty = it.quantity || 1;
-    const price = it.unitPrice != null ? som(it.unitPrice * qty) : '';
-    lines.push(`• ${esc(it.name)} ×${qty}${price ? ` — ${price} so‘m` : ''}`);
+    const unit = it.customerUnitPrice ?? it.unitPrice;   // mijoz to'laydigan narx (eski buyurtmada — restoran narxi)
+    const price = unit != null ? som(unit * qty) : '';
+    const variant = (it.selectedOptions || []).filter((o) => o.variant).map((o) => o.name).join(', ');
+    lines.push(`• ${esc(it.name)}${variant ? ` · <b>${esc(variant)}</b>` : ''} ×${qty}${price ? ` — ${price} so‘m` : ''}`);
+    const addons = (it.selectedOptions || []).filter((o) => !o.variant).map((o) => o.name);
+    if (addons.length) lines.push(`   ➕ ${esc(addons.join(', '))}`);
   }
   lines.push('');
   lines.push(`Taomlar: ${som(order.subtotal)} so‘m`);

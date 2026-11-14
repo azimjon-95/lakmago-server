@@ -29,6 +29,7 @@ import { DEFAULT_DISTRICT } from '../constants/districts.js';
 import { assessDevice } from '../services/deviceCheck.js';
 import { resolveGifts } from '../services/giftBonus.js';
 import { activeAgreement } from '../models/CommissionAgreement.js';
+import { itemCustomerUnitPrice } from '../services/customerPricing.js';
 import { COMPLETABLE_STATUSES } from '../services/reminderRules.js';
 import { emitOrderToRestaurant } from '../services/orderSocket.js';
 import { customerOrderView, attachRestaurantGeo } from '../services/customerOrderView.js';
@@ -492,7 +493,7 @@ export const orderController = {
 
     const restIds = orders.map((o) => o.restaurantId);
     const restDocs = await Restaurant.find({ _id: { $in: restIds } })
-      .select('name deliveryFee freeDeliveryThreshold minOrderAmount serviceFeePercent serviceFeeMin serviceFeeMax prepMinutes openTime closeTime timezone workingDays isActive isBlocked isApproved isDemo pickupEnabled deliveryEnabled cashEnabled pickupDiscountPercent lat lng delivery district courierMode lokmaFreeDelivery lokmaCourierPercent')
+      .select('name deliveryFee freeDeliveryThreshold minOrderAmount serviceFeePercent serviceFeeMin serviceFeeMax prepMinutes openTime closeTime timezone workingDays isActive isBlocked isApproved isDemo pickupEnabled deliveryEnabled cashEnabled pickupDiscountPercent deliveryMarkupPercent lat lng delivery district courierMode lokmaFreeDelivery lokmaCourierPercent')
       .lean();
     const restMap = new Map(restDocs.map((r) => [String(r._id), r]));
 
@@ -803,6 +804,18 @@ export const orderController = {
        * bo'lishi uchun.
        */
       o.subtotal = tiyinToSom(o._finance.customerFoodTotal);
+
+      /*
+       * Har pozitsiyaning MIJOZ narxi (1 dona) — mijoz menyuda ko'rgan narx; buyurtmani kuzatish, bot va kuryer shuni ko'rsatadi.
+       * Avval faqat restoran (baza) narxi saqlanardi: mijoz 89 100 ko'rgan pitsa buyurtmada "81 000" bo'lib chiqardi.
+       */
+      {
+        const ctx = {
+          deliveryMarkupPercent: Number(rest.deliveryMarkupPercent) || 0,
+          customerFeePercent: Number(agreement?.customerFeePercent) || 0,
+        };
+        o.items = (o.items || []).map((it) => ({ ...it, customerUnitPrice: itemCustomerUnitPrice(it, ctx) }));
+      }
     }
 
     // ===== BONUS BILAN TO'LASH =====
