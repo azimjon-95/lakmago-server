@@ -103,7 +103,12 @@ export function computeOrderFinance({
   // "foodSubtotal" — restoranning taom bo'yicha summasi (komissiya bazasi)
   const foodSubtotal = discountedBase + deliveryMarkupAmount;
 
-  const customerFeeAmount = applyPercent(foodSubtotal, customerFeePercent);
+  /*
+   * Mijoz xizmat haqi — restoran ustamasisiz BAZADAN (customerPricing.js qoidasi: ikkala foiz ham baza narxdan,
+   * bir-birining ustiga qo'yilmaydi). Avval ustamali summadan olinardi: menyuda 115 000 ko'ringan taom
+   * (10 000 baza, 10% ustama + 5% haq) buyurtmada 115 500 bo'lib qolardi. Ustama yoki haq 0 bo'lsa natija o'zgarmaydi.
+   */
+  const customerFeeAmount = applyPercent(discountedBase, customerFeePercent);
   const restaurantCommissionAmount = applyPercent(foodSubtotal, restaurantCommissionPercent);
 
   const customerFoodTotal = foodSubtotal + customerFeeAmount;

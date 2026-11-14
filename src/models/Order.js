@@ -8,6 +8,12 @@ const orderItemSchema = new Schema(
     quantity: { type: Number, required: true },
     unitPrice: { type: Number, required: true },
     /*
+     * Mijoz ko'rgan va to'laydigan 1 dona narxi (restoran ustamasi + mijoz xizmat haqi bilan) — ko'rsatish uchun.
+     * `unitPrice` — RESTORAN (baza) narxi: moliya, qaytarish va hisobotlar shundan hisoblanadi (o'zgarmagan).
+     * Eski buyurtmalarda yo'q — o'qishda `customerUnitPrice ?? unitPrice`.
+     */
+    customerUnitPrice: { type: Number, default: undefined },
+    /*
      * Tanlangan hajm va qo'shimchalar.
      * `group` — qaysi guruhdan ("Porsiya hajmi"), `variant` — hajm
      * (narxni almashtirgan) yoki qo'shimcha. Restoran oshxonada

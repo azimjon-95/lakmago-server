@@ -200,7 +200,8 @@ export function buildOrderText(order, { actorName = '', assignment = null, tz = 
   lines.push('');
 
   for (const it of order.items || []) {
-    const sum = (Number(it.unitPrice) || 0) * (Number(it.quantity) || 0);
+    // Mijoz to'laydigan narx — pastdagi "Taomlar" (subtotal) bilan bir xil manba; eski buyurtmada restoran narxi
+    const sum = (Number(it.customerUnitPrice ?? it.unitPrice) || 0) * (Number(it.quantity) || 0);
     const url = images?.get(String(it.dishId || ''));
     lines.push(`${Number(it.quantity) || 0}× ${dishName(it.name, url)} — ${som(sum)} so‘m`);
 
