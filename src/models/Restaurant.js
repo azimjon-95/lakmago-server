@@ -274,6 +274,29 @@ const restaurantSchema = new Schema(
      */
     district: { type: String, default: 'pop', index: true },
     courierMode: { type: String, enum: ['own', 'lokma', 'both'], default: 'own' },
+    /*
+     * ===== KATALOG HUDUDI (2026-11, docs/TUMAN-CHEGARALARI.md) — `district` (kuryer) dan ALOHIDA =====
+     * Hammasi IXTIYORIY: eski hujjatlarda yo'q (undefined) — o'qish buzilmaydi; katalog filtri o'chiq bo'lsa ishlatilmaydi.
+     *   serviceDistrictId       — restoran lat/lng bo'yicha HAQIQIY joylashgan tuman (server hisoblaydi, mijoz/admin yuborganiga ishonilmaydi)
+     *   serviceAreaDistrictIds  — restoran xizmat ko'rsatadigan tumanlar (standart: o'z tumani; boshqa tuman — faqat admin)
+     *   districtBoundaryVersion — qaysi chegara versiyasi bilan aniqlangan
+     *   districtResolveReason   — aniqlanmagan bo'lsa sababi (OUTSIDE_COVERAGE, BOUNDARY_UNCERTAIN, NO_COORDINATES)
+     *   serviceDistrictOverride — bosh admin qo'lda belgilagan (sabab bilan); bo'lsa koordinata natijasidan ustun
+     *   districtAudit           — o'zgarishlar tarixi (oxirgi 50 ta)
+     */
+    serviceDistrictId: { type: String, default: undefined },
+    serviceAreaDistrictIds: { type: [String], default: undefined },
+    districtBoundaryVersion: { type: String, default: undefined },
+    districtResolvedAt: { type: Date, default: undefined },
+    districtResolveReason: { type: String, default: undefined },
+    serviceDistrictOverride: {
+      type: new Schema({ districtId: String, reason: String, by: String, at: Date }, { _id: false }),
+      default: undefined,
+    },
+    districtAudit: {
+      type: [new Schema({ at: Date, by: String, action: String, from: String, to: String, area: [String], reason: String, version: String }, { _id: false })],
+      default: undefined,
+    },
     lokmaFreeDelivery: { type: Boolean, default: false },
     lokmaCourierPercent: { type: Number, default: null, min: 0, max: 100 },
     /*
@@ -321,6 +344,9 @@ const restaurantSchema = new Schema(
 restaurantSchema.index({ isApproved: 1, isActive: 1, isBlocked: 1, category: 1 });
 restaurantSchema.index({ isApproved: 1, isActive: 1, isBlocked: 1, createdAt: -1 }); // cursor pagination
 restaurantSchema.index({ name: 'text', cuisine: 'text' }); // matn qidiruvi
+// Katalog hududi filtri (?district=) — maydon bo'lmagan hujjatlar indeksga tushmaydi (sparse)
+restaurantSchema.index({ serviceDistrictId: 1 }, { sparse: true });
+restaurantSchema.index({ serviceAreaDistrictIds: 1 }, { sparse: true });
 
 // Har qanday yozuv amalidan keyin Redis keshini avtomatik tozalaydi
 restaurantSchema.plugin(cacheInvalidationPlugin, { kind: 'restaurant' });

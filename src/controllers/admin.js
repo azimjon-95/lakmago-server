@@ -10,6 +10,7 @@ import { GroupChat } from '../models/GroupChat.js';
 import { Reservation } from '../models/Reservation.js';
 import { Ledger } from '../models/Ledger.js';
 import { getIO } from '../sockets/io.js';
+import { refreshRestaurantDistrict, computeServiceDistrict, districtFeatureOn } from '../services/restaurantDistrict.js';
 import { ALLOWED_VIDEO_MIME, looksLikeVideo } from '../middleware/adUpload.js';
 
 /*
@@ -381,6 +382,8 @@ export const adminController = {
       prepMinutes: z.number().optional(),
       // Do'kon yo'nalishlari
       shopTypes: z.array(z.string()).optional(),
+      // Katalog xizmat hududi (ixtiyoriy; server tozalaydi, o'z tumani har doim qo'shiladi). Kuryer tumani bu emas.
+      serviceAreaDistrictIds: z.array(z.string()).max(20).optional(),
       // Restoran akkaunti
       login: z.string().min(3),
       password: z.string().min(4),
@@ -389,7 +392,7 @@ export const adminController = {
     if (!parsed.success) {
       return res.status(400).json({ error: 'Ma‘lumot noto‘g‘ri', details: parsed.error.issues });
     }
-    const { login, password, ...restData } = parsed.data;
+    const { login, password, serviceAreaDistrictIds, ...restData } = parsed.data;
 
     // Login band emasligini tekshirish
     const exists = await User.findOne({ login: login.toLowerCase().trim() });
@@ -409,7 +412,19 @@ export const adminController = {
     restaurant.ownerId = owner._id;
     await restaurant.save();
 
-    res.status(201).json({ restaurant, ownerLogin: owner.login });
+    /*
+     * Katalog hududi (flag yoqilgan bo'lsa): koordinatadan server aniqlaydi. Katalog filtri yoqilgan va tuman aniqlanmasa
+     * (koordinata yo'q / qamrovdan tashqari / chegarada) — restoran FAOLLASHTIRILMAYDI, admin aniq sababni ko'radi.
+     */
+    let districtWarning = null;
+    const d = await refreshRestaurantDistrict(Restaurant, restaurant._id, { area: serviceAreaDistrictIds, by: `admin:${req.userId}`, action: 'create' });
+    if (d && !d.set.serviceDistrictId && config.district.catalogFilterEnabled) {
+      await Restaurant.updateOne({ _id: restaurant._id }, { $set: { isActive: false } });
+      districtWarning = { reason: d.set.districtResolveReason, message: 'Restoran tumani aniqlanmadi — faollashtirilmadi. Xaritadagi nuqtani tekshiring.' };
+    }
+    const fresh = d ? await Restaurant.findById(restaurant._id) : restaurant;
+
+    res.status(201).json({ restaurant: fresh, ownerLogin: owner.login, ...(districtWarning ? { districtWarning } : {}) });
   }),
 
   // PATCH /api/admin/restaurants/:id — muassasa ma'lumotini yangilash (faol/nofaol ham)
@@ -429,8 +444,36 @@ export const adminController = {
     ];
     const update = {};
     for (const k of allowed) if (k in req.body) update[k] = req.body[k];
-    const restaurant = await Restaurant.findByIdAndUpdate(req.params.id, update, { new: true });
+
+    /*
+     * Katalog hududi (faqat DISTRICT_BOUNDARIES_ENABLED): serviceAreaDistrictIds — admin; serviceDistrictId — FAQAT server
+     * koordinatadan (yuborilgani e'tiborga olinmaydi). Katalog filtri yoqilgan bo'lsa, tumani aniqlanmagan restoranni
+     * faollashtirish/tasdiqlash to'xtatiladi (409, aniq sabab bilan).
+     */
+    const areaGiven = 'serviceAreaDistrictIds' in req.body && Array.isArray(req.body.serviceAreaDistrictIds);
+    const coordsGiven = 'lat' in req.body || 'lng' in req.body;
+    if (districtFeatureOn() && config.district.catalogFilterEnabled && (update.isActive === true || update.isApproved === true || coordsGiven)) {
+      const cur = await Restaurant.findById(req.params.id).select('lat lng isActive isApproved serviceDistrictId serviceAreaDistrictIds serviceDistrictOverride districtResolveReason').lean();
+      if (!cur) return res.status(404).json({ error: 'Muassasa topilmadi' });
+      const merged = { ...cur, ...('lat' in update ? { lat: update.lat } : {}), ...('lng' in update ? { lng: update.lng } : {}) };
+      const willBeLive = (update.isActive ?? cur.isActive) && (update.isApproved ?? cur.isApproved);
+      const pre = computeServiceDistrict(merged);
+      if (willBeLive && pre && !pre.set.serviceDistrictId) {
+        return res.status(409).json({
+          error: 'Restoran tumani aniqlanmadi — faollashtirib bo‘lmaydi. Xaritadagi nuqtani tekshiring.',
+          code: 'DISTRICT_UNRESOLVED', reason: pre.set.districtResolveReason,
+        });
+      }
+    }
+
+    let restaurant = await Restaurant.findByIdAndUpdate(req.params.id, update, { new: true });
     if (!restaurant) return res.status(404).json({ error: 'Muassasa topilmadi' });
+    if (coordsGiven || areaGiven) {
+      const d = await refreshRestaurantDistrict(Restaurant, restaurant._id, {
+        ...(areaGiven ? { area: req.body.serviceAreaDistrictIds } : {}), by: `admin:${req.userId}`, action: areaGiven ? 'area' : 'coords',
+      });
+      if (d) restaurant = await Restaurant.findById(restaurant._id);
+    }
     // Real-time: admin panel va restoran paneli darhol yangilanadi
     getIO()?.to('admin').emit('restaurant:update', restaurant);
     getIO()?.to(`restaurant:${restaurant._id}`).emit('restaurant:update', restaurant);
