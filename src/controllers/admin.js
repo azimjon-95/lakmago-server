@@ -688,6 +688,8 @@ export const adminController = {
     const resolved = await rows;
 
     res.json({
+      // Klient filtr qo'llab-quvvatlanganini shu maydondan biladi (eski server uni qaytarmaydi)
+      month: range ? String(req.query.month) : 'all',
       rows: resolved,
       totals: {
         gross: resolved.reduce((s, r) => s + r.gross, 0),
