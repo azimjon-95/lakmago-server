@@ -11,7 +11,7 @@
  *
  * npm run test:revenue
  */
-import { mergeRevenueRows } from '../src/controllers/admin.js';
+import { mergeRevenueRows, revenueMonthRange } from '../src/controllers/admin.js';
 
 let fails = 0;
 const ok = (c, m) => { console.log(c ? '  ✓' : '  ✗ FAIL:', m); if (!c) fails++; };
@@ -111,6 +111,19 @@ console.log('\n[5] Saralash — eng katta aylanma birinchi');
   ];
   const rows = await mergeRevenueRows({ v2, legacy: [], restMap, legacyCommission, tiyinToSom });
   ok(rows[0].name === 'TUTTI FOOD', `birinchi: ${rows[0].name}`);
+}
+
+console.log('\n[6] Oy filtri — O\'zbekiston (UTC+5) chegaralari');
+{
+  const r = revenueMonthRange('2026-11');
+  ok(r.from.toISOString() === '2026-10-31T19:00:00.000Z', `from ${r.from.toISOString()}`);
+  ok(r.to.toISOString() === '2026-11-30T19:00:00.000Z', `to ${r.to.toISOString()}`);
+  const d = revenueMonthRange('2026-12');
+  ok(d.to.toISOString() === '2026-12-31T19:00:00.000Z', 'dekabr oxiri');
+  const y = revenueMonthRange('2026-12');
+  ok(y.from.toISOString() === '2026-11-30T19:00:00.000Z', 'dekabr boshi');
+  ok(revenueMonthRange('all') === null && revenueMonthRange('') === null && revenueMonthRange(undefined) === null, 'noto\'g\'ri -> null (barchasi)');
+  ok(revenueMonthRange('2026-13') === null && revenueMonthRange('2026-1') === null, 'yaroqsiz oy -> null');
 }
 
 console.log(fails ? `\n✗ ${fails} ta xato` : '\n✓ HAMMASI O‘TDI');

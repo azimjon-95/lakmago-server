@@ -79,6 +79,18 @@ function parseBroadcastBody(req) {
  * (komissiya ÷ aylanma) — jadvaldagi raqamlar bilan har doim mos
  * keladi, hatto restoranda kelishuv almashgan bo'lsa ham.
  */
+/** 'YYYY-MM' -> {from,to} (UTC Date, O'zbekiston UTC+5 oy chegaralari); noto'g'ri bo'lsa null. */
+export function revenueMonthRange(month) {
+  const m = /^(\d{4})-(0[1-9]|1[0-2])$/.exec(String(month || ''));
+  if (!m) return null;
+  const y = Number(m[1]); const mo = Number(m[2]);
+  const OFFSET = 5 * 3600 * 1000;
+  return {
+    from: new Date(Date.UTC(y, mo - 1, 1) - OFFSET),
+    to: new Date(Date.UTC(y, mo, 1) - OFFSET),
+  };
+}
+
 export async function mergeRevenueRows({ v2, legacy, restMap, legacyCommission, tiyinToSom }) {
   const merged = new Map();
   const touch = (id) => {
@@ -569,7 +581,7 @@ export const adminController = {
 
   // ===== DAROMAD HISOBI =====
   // GET /api/admin/revenue — har muassasa bo'yicha daromad + platforma daromadi
-  revenue: asyncHandler(async (_req, res) => {
+  revenue: asyncHandler(async (req, res) => {
     /*
      * ═══ HAR RESTORAN — O'Z KELISHUVI BO'YICHA ═══
      *
@@ -594,9 +606,29 @@ export const adminController = {
     const { resolveCommission, calcCommission } = await import('../services/billing.js');
     const { tiyinToSom } = await import('../services/orderFinance.js');
 
+    /*
+     * Ixtiyoriy oy filtri: ?month=YYYY-MM (O'zbekiston vaqti, UTC+5).
+     * Parametr yo'q yoki noto'g'ri bo'lsa — barcha vaqt (eski
+     * xulq-atvor o'zgarmaydi). Sana: deliveredAt, u bo'lmasa createdAt.
+     */
+    const range = revenueMonthRange(req.query?.month);
+    const dateMatch = range
+      ? {
+        $or: [
+          { deliveredAt: { $gte: range.from, $lt: range.to } },
+          {
+            $and: [
+              { $or: [{ deliveredAt: null }, { deliveredAt: { $exists: false } }] },
+              { createdAt: { $gte: range.from, $lt: range.to } },
+            ],
+          },
+        ],
+      }
+      : {};
+
     // ─── Yangi buyurtmalar: snapshot'dan (summalar TIYINDA) ───
     const v2 = await Order.aggregate([
-      { $match: { status: 'delivered', 'finance.model': 'v2' } },
+      { $match: { status: 'delivered', 'finance.model': 'v2', ...dateMatch } },
       /*
        * Snapshot maydonlari avval YUZAGA chiqariladi, keyin
        * guruhlanadi. Ichki yo'l (`$finance.foodSubtotal`) bilan
@@ -624,7 +656,7 @@ export const adminController = {
 
     // ─── Eski buyurtmalar: avvalgi mantiq (summalar SO'MDA) ───
     const legacy = await Order.aggregate([
-      { $match: { status: 'delivered', 'finance.model': { $ne: 'v2' } } },
+      { $match: { status: 'delivered', 'finance.model': { $ne: 'v2' }, ...dateMatch } },
       {
         $group: {
           _id: '$restaurantId',
