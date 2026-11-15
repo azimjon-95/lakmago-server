@@ -1,0 +1,274 @@
+{
+  "source": {
+    "repo": "https://github.com/negeloT/uzbekistan_borders",
+    "path": "LVL_3/GEOJSON_LVL_3/UZB_OSM_BORDER_LVL_3.geojson",
+    "license": "CC BY 4.0 — © OpenStreetMap contributors; dataset by Tolegen Akynzhanov",
+    "regionCode": 1714,
+    "commit": "1df25e4df1ef582905bfb3f6e5c56a608953deb3",
+    "sha256": "2f45e04b0d44c6a126fdb353dfec8f4d7f45946438ad1d91c189fa22339dd059",
+    "features": 206,
+    "crs": "urn:ogc:def:crs:OGC:1.3:CRS84"
+  },
+  "version": "1",
+  "ok": true,
+  "problems": [],
+  "districts": [
+    {
+      "id": "uchqorgon",
+      "code": 1714234,
+      "osmId": "15544192",
+      "name_uz": "Учқўрғон тумани",
+      "name_ru": "Учкурганский район",
+      "name_en": "Uchkurgan district",
+      "type": "MultiPolygon",
+      "polygons": 1,
+      "holes": 0,
+      "points": 497,
+      "bbox": [
+        71.912085,
+        40.9327,
+        72.210115,
+        41.164107
+      ],
+      "nameMatched": true,
+      "geometryErrors": []
+    },
+    {
+      "id": "norin",
+      "code": 1714216,
+      "osmId": "15544193",
+      "name_uz": "Норин тумани",
+      "name_ru": "Нарынский район",
+      "name_en": "Naryn district",
+      "type": "MultiPolygon",
+      "polygons": 1,
+      "holes": 0,
+      "points": 827,
+      "bbox": [
+        71.757936,
+        40.877387,
+        72.156381,
+        41.008034
+      ],
+      "nameMatched": true,
+      "geometryErrors": []
+    },
+    {
+      "id": "mingbuloq",
+      "code": 1714204,
+      "osmId": "15544194",
+      "name_uz": "Мингбулоқ тумани",
+      "name_ru": "Мингбулакский район",
+      "name_en": "Mingbulak district",
+      "type": "MultiPolygon",
+      "polygons": 1,
+      "holes": 0,
+      "points": 685,
+      "bbox": [
+        71.062176,
+        40.642822,
+        71.659462,
+        40.896156
+      ],
+      "nameMatched": true,
+      "geometryErrors": []
+    },
+    {
+      "id": "namangan_sh",
+      "code": 1714401,
+      "osmId": "15550186",
+      "name_uz": "Наманган шаҳри",
+      "name_ru": "Город Наманган",
+      "name_en": "Namangan city",
+      "type": "MultiPolygon",
+      "polygons": 1,
+      "holes": 0,
+      "points": 730,
+      "bbox": [
+        71.519757,
+        40.959417,
+        71.752865,
+        41.150117
+      ],
+      "nameMatched": true,
+      "geometryErrors": []
+    },
+    {
+      "id": "uychi",
+      "code": 1714229,
+      "osmId": "15550187",
+      "name_uz": "Уйчи тумани",
+      "name_ru": "Уйчинский район",
+      "name_en": "Uychi district",
+      "type": "MultiPolygon",
+      "polygons": 1,
+      "holes": 0,
+      "points": 427,
+      "bbox": [
+        71.700544,
+        40.919684,
+        72.07109,
+        41.157443
+      ],
+      "nameMatched": true,
+      "geometryErrors": []
+    },
+    {
+      "id": "namangan_t",
+      "code": 1714212,
+      "osmId": "15550188",
+      "name_uz": "Наманган тумани",
+      "name_ru": "Наманганский район",
+      "name_en": "Namangan district",
+      "type": "MultiPolygon",
+      "polygons": 1,
+      "holes": 0,
+      "points": 418,
+      "bbox": [
+        71.516694,
+        40.86304,
+        71.787834,
+        41.010738
+      ],
+      "nameMatched": true,
+      "geometryErrors": []
+    },
+    {
+      "id": "chortoq",
+      "code": 1714236,
+      "osmId": "15550826",
+      "name_uz": "Чортоқ тумани",
+      "name_ru": "Чартакский район",
+      "name_en": "Chartak district",
+      "type": "MultiPolygon",
+      "polygons": 1,
+      "holes": 0,
+      "points": 692,
+      "bbox": [
+        71.711903,
+        41.031738,
+        71.93688,
+        41.447963
+      ],
+      "nameMatched": true,
+      "geometryErrors": []
+    },
+    {
+      "id": "yangiqorgon",
+      "code": 1714242,
+      "osmId": "15550827",
+      "name_uz": "Янгиқўрғон тумани",
+      "name_ru": "Янгикурганский район",
+      "name_en": "Yangikurgan district",
+      "type": "MultiPolygon",
+      "polygons": 1,
+      "holes": 0,
+      "points": 1001,
+      "bbox": [
+        71.588668,
+        41.047083,
+        71.837289,
+        41.548241
+      ],
+      "nameMatched": true,
+      "geometryErrors": []
+    },
+    {
+      "id": "toraqorgon",
+      "code": 1714224,
+      "osmId": "15551387",
+      "name_uz": "Тўрақўрғон тумани",
+      "name_ru": "Туракурганский район",
+      "name_en": "Turakurgan district",
+      "type": "MultiPolygon",
+      "polygons": 1,
+      "holes": 0,
+      "points": 766,
+      "bbox": [
+        71.314458,
+        40.859838,
+        71.577395,
+        41.128843
+      ],
+      "nameMatched": true,
+      "geometryErrors": []
+    },
+    {
+      "id": "kosonsoy",
+      "code": 1714207,
+      "osmId": "15551388",
+      "name_uz": "Косонсой тумани",
+      "name_ru": "Касансайский район",
+      "name_en": "Kasansay district",
+      "type": "MultiPolygon",
+      "polygons": 1,
+      "holes": 0,
+      "points": 726,
+      "bbox": [
+        71.391381,
+        41.0113,
+        71.674975,
+        41.314789
+      ],
+      "nameMatched": true,
+      "geometryErrors": []
+    },
+    {
+      "id": "chust",
+      "code": 1714237,
+      "osmId": "15551712",
+      "name_uz": "Чуст тумани",
+      "name_ru": "Чустский район",
+      "name_en": "Chust district",
+      "type": "MultiPolygon",
+      "polygons": 1,
+      "holes": 0,
+      "points": 714,
+      "bbox": [
+        70.937558,
+        40.860852,
+        71.421852,
+        41.192657
+      ],
+      "nameMatched": true,
+      "geometryErrors": []
+    },
+    {
+      "id": "pop",
+      "code": 1714219,
+      "osmId": "15551713",
+      "name_uz": "Поп тумани",
+      "name_ru": "Папский район",
+      "name_en": "Pop district",
+      "type": "MultiPolygon",
+      "polygons": 1,
+      "holes": 0,
+      "points": 1180,
+      "bbox": [
+        70.387554,
+        40.719818,
+        71.280818,
+        41.471872
+      ],
+      "nameMatched": true,
+      "geometryErrors": []
+    }
+  ],
+  "missing": [
+    "davlatobod",
+    "yangi_namangan"
+  ],
+  "noBoundary": [
+    "davlatobod",
+    "yangi_namangan"
+  ],
+  "coverage": {
+    "gridMeters": 400,
+    "regionPoints": 49127,
+    "gaps": 0,
+    "overlaps": 0,
+    "overlapPairs": {},
+    "gapSamplesLatLng": [],
+    "gapPercent": 0
+  }
+}
