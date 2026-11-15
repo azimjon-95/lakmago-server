@@ -67,7 +67,11 @@ export const districtsController = {
      */
     const meta = districtBoundaryMeta();
     if (meta) body.boundaries = meta;
-    res.set('Cache-Control', 'public, max-age=3600').json(body);
+    /*
+     * Kesh: tuman flaglari yoqilganda/qaytarilganda telefonlar eski holatda 1 soat qolmasin — qisqa muddat.
+     * (Avval 3600: flag yoqilgach chip 1 soatgacha ko'rinmasligi, rollback esa 1 soat kechikishi mumkin edi.)
+     */
+    res.set('Cache-Control', `public, max-age=${meta ? 60 : 300}`).json(body);
   }),
 };
 

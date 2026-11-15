@@ -93,6 +93,20 @@ async function main() {
     }
   }
 
+  // Qisqa xulosa (qaror qabul qilish uchun): jami / aniqlangan / koordinatasiz / qamrovdan tashqari / noaniq
+  const sumBy = (reason) => report.review.filter((r) => r.reason === reason).length;
+  const resolved = Object.values(report.byDistrict).reduce((a, b) => a + b, 0);
+  const other = report.review.length - sumBy('NO_COORDINATES') - sumBy('OUTSIDE_COVERAGE') - sumBy('BOUNDARY_UNCERTAIN');
+  console.log('\n══════ XULOSA ══════');
+  console.log(`Jami restoran:            ${report.total}${report.scanned < report.total ? ` (ko'rildi: ${report.scanned}, --limit)` : ''}`);
+  console.log(`Tumani aniqlangan:        ${resolved}`);
+  console.log(`Koordinatasiz:            ${sumBy('NO_COORDINATES')}`);
+  console.log(`Qamrovdan tashqari:       ${sumBy('OUTSIDE_COVERAGE')}`);
+  console.log(`Noaniq (ustma-ust):       ${sumBy('BOUNDARY_UNCERTAIN')}`);
+  if (other) console.log(`Boshqa sabab:             ${other}`);
+  console.log(`Ko'rib chiqish, HOZIR FAOL: ${report.review.filter((r) => r.live).length}`);
+  console.log('════════════════════');
+
   console.log(`\n${report.mode}: ${report.scanned}/${report.total} restoran ko'rildi · o'zgaradi: ${report.willChange} · o'zgarmaydi: ${report.unchanged}`);
   console.log('Tumanlar bo\'yicha:', Object.entries(report.byDistrict).map(([k, v]) => `${districtLabel(k)}: ${v}`).join(', ') || '—');
   console.log(`\nKO'RIB CHIQISH KERAK (tuman yozilmaydi): ${report.review.length}`);

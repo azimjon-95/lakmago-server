@@ -33,6 +33,7 @@ ok(!R.isResolverAvailable(), 'resolver o‘chiq (DISABLED)');
 {
   const r = await call(districtsController.list, {});
   ok(!('boundaries' in r.body) && r.body.districts === DISTRICTS && r.body.defaultDistrict === 'pop', '/districts javobi eski formatda (boundaries yo‘q)');
+  ok(r.headers['Cache-Control'] === 'public, max-age=300', '/districts keshi qisqa (flag yoqilganda telefonlar 1 soat eski holatda qolmasin)');
   const loc = await call(locationController.resolve, { lat: '40.87', lng: '71.10' });
   ok(loc.code === 503 && loc.body.error === 'DISTRICT_RESOLVER_UNAVAILABLE', '/location/resolve → 503 (boshqa API ishlaydi)');
   ok(catalogDistrict({ query: { district: 'pop' } }) === null, 'katalog: ?district=pop e‘tiborsiz');
@@ -127,6 +128,7 @@ enable(); reload();
   const ru = await call(locationController.resolve, { lat: '40.8736', lng: '71.1085', lang: 'ru' });
   ok(ru.body.data.districtName === 'Папский район', 'til: ru');
   const d = await call(districtsController.list, {});
+  ok(d.headers['Cache-Control'] === 'public, max-age=60', '/districts flag yoqilganda keshi 60 soniya');
   ok(d.body.boundaries?.supported?.length === 12 && d.body.boundaries.autoDetect.minAccuracyMeters === 50 && d.body.districts === DISTRICTS, '/districts: ixtiyoriy metadata qo‘shildi, asosiy maydonlar o‘zgarmagan');
 }
 
@@ -184,6 +186,22 @@ console.log('\n[8] Katalog filtri — yoqilganda; kesh izolyatsiyasi');
   Object.assign(config.district, { catalogFilterEnabled: false });
   await run(restaurantController.list, { limit: '5', district: 'chust' });
   ok(JSON.stringify(seen.at(-1)) === plain, 'flag o‘chiq: ?district= bo‘lsa ham filtr eski');
+}
+
+console.log('\n[8] Bosh admin override — poligoni yo‘q tumanga o‘tkazib bo‘lmaydi (restoran katalogdan yo‘qolmasin)');
+enable(); reload();
+{
+  const { adminDistrictController } = await import('../src/controllers/location.js');
+  const callOv = (body) => new Promise((resolve) => {
+    const res = { code: 200, status(c) { this.code = c; return this; }, json(b) { resolve({ code: this.code, body: b }); } };
+    adminDistrictController.override({ params: { id: 'a'.repeat(24) }, body, userId: 'u1' }, res, (e) => resolve({ error: e }));
+  });
+  for (const id of ['davlatobod', 'yangi_namangan']) {
+    const r = await callOv({ districtId: id, reason: 'sinov sababi' });
+    ok(r.code === 400 && r.body.code === 'DISTRICT_NO_BOUNDARY', `${id}: 400 DISTRICT_NO_BOUNDARY`);
+  }
+  const unk = await callOv({ districtId: 'zzz', reason: 'sinov sababi' });
+  ok(unk.code === 400, 'noma‘lum tuman: 400');
 }
 
 console.log(fails ? `\n✗ ${fails} ta xato` : '\n✓ HAMMASI O‘TDI');
