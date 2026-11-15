@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { config } from '../config/index.js';
 import { Types } from 'mongoose';
 import { asyncHandler } from '../middleware/error.js';
 import { CourierAccount } from '../models/CourierAccount.js';
@@ -7,6 +8,8 @@ import { Ledger } from '../models/Ledger.js';
 import { Restaurant } from '../models/Restaurant.js';
 import { Settings, getSettings } from '../models/Settings.js';
 import { DISTRICTS, DEFAULT_DISTRICT, isDistrict, normalizeDistricts } from '../constants/districts.js';
+import { NO_BOUNDARY_DISTRICTS } from '../constants/districtBoundaryMap.js';
+import { isResolverAvailable, boundaryVersion, supportedDistrictIds } from '../services/districtResolver.js';
 import { COURIER_MODES } from '../services/deliveryParty.js';
 import {
   CourierPoolError, listPoolForAdmin, adminAssign, releaseOrder, setOrderParty,
@@ -40,9 +43,31 @@ function sendError(res, e) {
 }
 
 /* ══════════════ TUMANLAR (ochiq) ══════════════ */
+function districtBoundaryMeta() {
+  if (!config.district.boundariesEnabled || !isResolverAvailable()) return null;
+  return {
+    version: boundaryVersion(),
+    supported: supportedDistrictIds(),
+    noBoundary: NO_BOUNDARY_DISTRICTS,
+    autoDetect: {
+      enabled: config.district.autoDetectEnabled,
+      minAccuracyMeters: config.district.minAccuracyMeters,
+      confirmationReadings: config.district.confirmationReadings,
+    },
+    catalogFilterEnabled: config.district.catalogFilterEnabled,
+  };
+}
+
 export const districtsController = {
   list: asyncHandler(async (_req, res) => {
-    res.set('Cache-Control', 'public, max-age=3600').json({ region: 'namangan', defaultDistrict: DEFAULT_DISTRICT, districts: DISTRICTS });
+    const body = { region: 'namangan', defaultDistrict: DEFAULT_DISTRICT, districts: DISTRICTS };
+    /*
+     * Ixtiyoriy metadata (faqat DISTRICT_BOUNDARIES_ENABLED=true): qaysi tumanlarning poligoni bor, avtomatik aniqlash
+     * va katalog filtri yoqilganmi. Eski mijozlar bu maydonni o'qimaydi — javob formati buzilmaydi.
+     */
+    const meta = districtBoundaryMeta();
+    if (meta) body.boundaries = meta;
+    res.set('Cache-Control', 'public, max-age=3600').json(body);
   }),
 };
 

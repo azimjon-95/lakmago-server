@@ -9,6 +9,7 @@ import { router } from './routes/index.js';
 import { errorHandler, notFound } from './middleware/error.js';
 import { initSocket } from './sockets/io.js';
 import { initCache } from './services/cache.js';
+import { loadBoundaries } from './services/districtResolver.js';
 import { handleBotUpdate } from './services/telegram.js';
 import { handleRestaurantBotUpdate } from './services/restaurantBot.js';
 import { verifyRestaurantWebhook } from './services/restaurantBotApi.js';
@@ -31,6 +32,9 @@ async function main() {
    * (services/cache.js dagi izohga qarang).
    */
   initCache();
+
+  // Tuman chegaralari (flag o'chiq bo'lsa yoki fayl buzuq bo'lsa — jim o'chiq; server baribir ishga tushadi)
+  loadBoundaries();
 
   // Default admin (dastur egasi) akkauntini yaratish/tekshirish
   await ensureDefaultAdmin();
