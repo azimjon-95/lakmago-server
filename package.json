@@ -90,7 +90,10 @@
     "test:apple-auth": "node --test tests/apple-auth.test.mjs",
     "diagnose:apple": "node scripts/apple-diagnose.js",
     "test:order-price": "node tests/order-customer-price.test.mjs",
-    "diagnose:order": "node scripts/diagnose-order.js"
+    "diagnose:order": "node scripts/diagnose-order.js",
+    "test:district": "node tests/district-resolver.test.mjs",
+    "district:extract": "node scripts/extract-district-boundaries.js",
+    "district:migrate": "node scripts/migrate-service-districts.js"
   },
   "dependencies": {
     "@socket.io/redis-adapter": "^8.3.0",

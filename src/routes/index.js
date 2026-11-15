@@ -60,7 +60,8 @@ import {
   auth, requireRole, requirePage, waiterAuth, waiterOrRestaurantAuth,
   kioskAuth, requireKioskSection,
 } from '../middleware/auth.js';
-import { loginLimiter, writeLimiter, courierLocationLimiter, courierAppLocationLimiter, tgLinkStartLimiter, tgLinkPollLimiter } from '../middleware/rateLimit.js';
+import { locationController, adminDistrictController } from '../controllers/location.js';
+import { loginLimiter, writeLimiter, locationResolveLimiter, courierLocationLimiter, courierAppLocationLimiter, tgLinkStartLimiter, tgLinkPollLimiter } from '../middleware/rateLimit.js';
 import { botBroadcastController } from '../controllers/botBroadcast.js';
 import { adAttachment, adChunkBody, adUploadController } from '../middleware/adUpload.js';
 import { restaurantPinsController } from '../controllers/restaurantPins.js';
@@ -404,6 +405,8 @@ router.get('/panel/orders/:id/dispatch-status', ...R, courierAdminController.dis
  * kuryer kassasi (naqd topshirish/to'lov/tuzatish) — moliya bo'limi ('billing'); kuryerlar va quti — 'couriers'.
  */
 router.get('/districts', districtsController.list);
+// Tuman aniqlash (lokal poligonlar; DISTRICT_BOUNDARIES_ENABLED o'chiq bo'lsa 503) — docs/TUMAN-CHEGARALARI.md
+router.get('/location/resolve', locationResolveLimiter, locationController.resolve);
 router.get('/admin/courier-accounts/:id/ledger', ...AS('couriers'), adminCourierController.ledger);
 router.post('/admin/courier-accounts/:id/ledger', ...AS('billing'), writeLimiter, adminCourierController.addLedger);
 router.get('/admin/courier-accounts/live', ...AS('couriers'), adminCourierController.live);
@@ -418,6 +421,9 @@ router.get('/admin/courier-settings', ...A, adminCourierController.getSettings);
 router.patch('/admin/courier-settings', ...A, adminCourierController.updateSettings);
 router.patch('/admin/restaurants/:id/courier-settings', ...A, adminRestaurantDeliveryController.updateCourierSettings);
 router.patch('/admin/restaurants/:id/district', ...AS('restaurants'), adminRestaurantDeliveryController.updateDistrict);
+// Katalog hududi (kuryer tumanidan alohida): oldindan ko'rish — xodim; qo'lda almashtirish — faqat bosh admin, sabab bilan
+router.get('/admin/district-preview', ...AS('restaurants'), adminDistrictController.preview);
+router.patch('/admin/restaurants/:id/service-district', ...A, writeLimiter, adminDistrictController.override);
 router.get('/panel/courier-settings', ...R, panelDeliveryController.info);
 router.post('/panel/orders/:id/courier-party', ...R, writeLimiter, panelDeliveryController.setParty);
 

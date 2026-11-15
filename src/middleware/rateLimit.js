@@ -122,3 +122,16 @@ export const tgLinkPollLimiter = rateLimit({
   legacyHeaders: false,
   handler: limitHandler,
 });
+
+/**
+ * Tuman aniqlash (GET /location/resolve) — IP boshiga daqiqasiga 30 ta.
+ * Mijoz faqat ishonchli GPS o'lchovida va ilova ochilganda so'raydi (bir necha so'rov/daqiqa); bu chegara faqat
+ * skript/suiiste'molni to'xtatadi. Kalit IP bo'yicha — koordinata kalitga ham, logga ham tushmaydi.
+ */
+export const locationResolveLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: limitHandler,
+});

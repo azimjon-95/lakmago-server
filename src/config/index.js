@@ -128,6 +128,12 @@ if (isProd && (!jwtSecretFromEnv || jwtSecretFromEnv === 'dev-secret')) {
 }
 const jwtSecret = jwtSecretFromEnv || 'dev-secret';
 
+/** Musbat son: noto'g'ri/oraliqdan tashqari bo'lsa standart (sozlama xatosi funksiyani buzmasin). */
+function posNum(raw, def, min, max) {
+  const n = Number(raw);
+  return raw != null && raw !== '' && Number.isFinite(n) && n >= min && n <= max ? n : def;
+}
+
 export const config = {
   port: Number(process.env.PORT ?? 4000),
   mongoUri: process.env.MONGO_URI ?? 'mongodb://localhost:27017/lokmago',
@@ -506,6 +512,26 @@ export const config = {
    * Har kuni 23:59 (O'zbekiston vaqti).
    */
   backupGroupChatId: String(process.env.BACKUP_GROUP_CHAT_ID || '').trim(),
+
+  /*
+   * ═══ TUMAN CHEGARALARI (avtomatik tuman aniqlash, katalogni hudud bo'yicha filtrlash) ═══
+   * HAMMASI STANDART O'CHIQ: kod deploy qilinganda production xatti-harakati o'zgarmaydi.
+   * Noto'g'ri qiymat (masalan son emas) — xavfsiz standart; fayl yo'q/buzuq bo'lsa yangi funksiya shunchaki ishlamaydi.
+   * Hujjat: docs/TUMAN-CHEGARALARI.md
+   */
+  district: {
+    boundariesEnabled: process.env.DISTRICT_BOUNDARIES_ENABLED === 'true',
+    boundariesPath: String(process.env.DISTRICT_BOUNDARIES_PATH || './data/uzbekistan/namangan-districts.geojson').trim(),
+    boundariesVersion: String(process.env.DISTRICT_BOUNDARIES_VERSION || '1').trim(),
+    autoDetectEnabled: process.env.DISTRICT_AUTO_DETECT_ENABLED === 'true',
+    minAccuracyMeters: posNum(process.env.DISTRICT_AUTO_DETECT_MIN_ACCURACY_METERS, 50, 5, 1000),
+    confirmationReadings: posNum(process.env.DISTRICT_AUTO_DETECT_CONFIRMATION_READINGS, 2, 1, 10),
+    boundaryBufferMeters: posNum(process.env.DISTRICT_AUTO_DETECT_BOUNDARY_BUFFER_METERS, 50, 0, 2000),
+    catalogFilterEnabled: process.env.DISTRICT_CATALOG_FILTER_ENABLED === 'true',
+    // Migratsiya tugamaguncha serviceDistrictId'siz (eski) restoranlar: 'show' — har tumanda ko'rinadi (yo'qolib qolmaydi),
+    // 'hide' — filtrlangan ro'yxatda ko'rinmaydi. Hech qachon jimgina "Pop" deb belgilanmaydi.
+    legacyPolicy: process.env.DISTRICT_CATALOG_LEGACY_POLICY === 'hide' ? 'hide' : 'show',
+  },
 };
 
 /*

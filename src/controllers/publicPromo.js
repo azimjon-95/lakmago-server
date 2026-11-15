@@ -1,3 +1,4 @@
+import { catalogDistrict, withDistrict } from '../services/catalogDistrict.js';
 import { NOT_STORE, andWith } from '../services/storeRules.js';
 import { asyncHandler } from '../middleware/error.js';
 import { Promotion } from '../models/Promotion.js';
@@ -64,10 +65,11 @@ export const publicPromoController = {
     // Restoran nomlarini qo'shamiz
     const restIds = [...new Set(promos.map((p) => String(p.restaurantId)))];
     // Do'konlar aksiyasi bosh sahifada ko'rinmaydi (faqat Lokma Market)
-    const rests = await Restaurant.find(andWith({
+    // ?district= (flag yoqilgan bo'lsa) — faqat shu tumandagi restoranlar aksiyalari
+    const rests = await Restaurant.find(withDistrict(andWith({
       _id: { $in: restIds },
       isActive: true, isBlocked: { $ne: true }, isApproved: true,
-    }, NOT_STORE)).select('name imageUrl tint').lean();
+    }, NOT_STORE), catalogDistrict(req))).select('name imageUrl tint').lean();
 
     const restMap = new Map(rests.map((r) => [String(r._id), r]));
 

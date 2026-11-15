@@ -6,6 +6,7 @@ import { isMarketCategoryKey } from '../services/marketCategoryRegistry.js';
 import { CATALOG_CATEGORY_VALUES } from '../constants/catalogCategories.js';
 import { RESTAURANT_HIDDEN } from '../services/restaurantVisibility.js';
 import { z } from 'zod';
+import { refreshRestaurantDistrict } from '../services/restaurantDistrict.js';
 import { cached, KEYS, TTL } from '../services/cache.js';
 import { asyncHandler } from '../middleware/error.js';
 import { Restaurant } from '../models/Restaurant.js';
@@ -616,6 +617,10 @@ export const restaurantPanelController = {
     ).select('-ownerId -__v -balance -totalPaidOut -commissionPercent -commissionMode');
 
     if (!restaurant) return res.status(404).json({ error: 'Restoran topilmadi' });
+
+    // Koordinata o'zgargan bo'lsa — katalog hududi (serviceDistrictId) qayta hisoblanadi. Flag o'chiq bo'lsa hech narsa qilmaydi.
+    // Kuryer tumani (`district`) ga tegilmaydi.
+    if ('lat' in data || 'lng' in data) await refreshRestaurantDistrict(Restaurant, restaurant._id, { by: `restaurant:${rid(req)}`, action: 'coords' });
 
     // Mijozlar ilovasida yangilansin
     getIO()?.emit('restaurant:update', { _id: String(restaurant._id) });
