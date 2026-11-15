@@ -2,6 +2,8 @@
 
 Holat: kod tayyor, **hammasi flag bilan O'CHIQ**. Deploy qilinganda production xatti-harakati o'zgarmaydi.
 
+**Production'ga chiqarish (aniq buyruqlar, tartib, rollback):** [`DISTRICT-PRODUCTION-ROLLOUT.md`](./DISTRICT-PRODUCTION-ROLLOUT.md).
+
 ## Nima qo'shildi
 
 | Qism | Fayl |
@@ -30,9 +32,9 @@ Holat: kod tayyor, **hammasi flag bilan O'CHIQ**. Deploy qilinganda production x
 - `GET /api/location/resolve?lat=&lng=&lang=uz|uzc|ru` → `{ success, data: { districtId, districtName, matched, boundaryVersion, reason? } }`
   - `reason`: `OUTSIDE_COVERAGE`, `BOUNDARY_UNCERTAIN` (chegaradan 50 m ichida yoki ustma-ust), 400 — noto'g'ri koordinata, 503 — resolver o'chiq.
   - Rate limit: 30/daqiqa/IP. Koordinata logga yozilmaydi.
-- `GET /api/districts` — javob avvalgidek; flag yoqilsa ixtiyoriy `boundaries` (`supported`, `noBoundary`, `autoDetect`, `catalogFilterEnabled`).
+- `GET /api/districts` — javob avvalgidek (kesh: flag o'chiq 300 s, yoqilgan 60 s); flag yoqilsa ixtiyoriy `boundaries` (`supported`, `noBoundary`, `autoDetect`, `catalogFilterEnabled`).
 - Katalog: `?district=chust` — `/restaurants`, `/market/stores`, `/dishes/trending|discounted|all`, `/market/products`, `/promotions`. Parametr yo'q yoki flag o'chiq — eski natija va eski kesh kaliti.
-- Admin: `GET /api/admin/district-preview?lat=&lng=` (xodim), `PATCH /api/admin/restaurants/:id/service-district` `{ districtId|null, reason }` (faqat bosh admin, audit).
+- Admin: `GET /api/admin/district-preview?lat=&lng=` (xodim), `PATCH /api/admin/restaurants/:id/service-district` `{ districtId|null, reason }` (faqat bosh admin, audit; poligoni bor tumanga — Davlatobod/Yangi Namangan'ga emas, 400 `DISTRICT_NO_BOUNDARY`).
 - `POST/PATCH /api/admin/restaurants`: ixtiyoriy `serviceAreaDistrictIds`. `serviceDistrictId` faqat server koordinatadan hisoblaydi.
 
 ## Sozlamalar (.env)

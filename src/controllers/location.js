@@ -72,6 +72,13 @@ export const adminDistrictController = {
     if (!parsed.success) return res.status(400).json({ error: 'districtId va sabab (kamida 5 belgi) kerak' });
     const { districtId, reason } = parsed.data;
     if (districtId !== null && !isDistrict(districtId)) return res.status(400).json({ error: 'Noma‘lum tuman' });
+    /*
+     * Poligoni yo'q tuman (Davlatobod, Yangi Namangan) katalog tanlagichida YO'Q — unga override qilingan restoran
+     * filtrlangan katalogda hech qaysi tumanda ko'rinmay qolardi. Ular shahar ichida: namangan_sh ni tanlang.
+     */
+    if (districtId !== null && !supportedDistrictIds().includes(districtId)) {
+      return res.status(400).json({ error: 'Bu tumanning chegarasi yo‘q — katalog uchun unga o‘tkazib bo‘lmaydi (shahar ichida bo‘lsa Namangan shahrini tanlang)', code: 'DISTRICT_NO_BOUNDARY' });
+    }
     const by = `admin:${req.userId}`;
     const r = await Restaurant.findByIdAndUpdate(req.params.id, districtId
       ? { $set: { serviceDistrictOverride: { districtId, reason, by, at: new Date() } } }
