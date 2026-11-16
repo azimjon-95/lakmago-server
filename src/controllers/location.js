@@ -31,8 +31,18 @@ export const locationController = {
       return res.status(503).json({ success: false, error: 'DISTRICT_RESOLVER_UNAVAILABLE', boundaryVersion: boundaryVersion() });
     }
     const lang = typeof rawLang === 'string' && LANGS.has(rawLang) ? rawLang : 'uz';
+    /*
+     * Ixtiyoriy `acc` (GPS aniqligi, metr; ≤ 3000): bufer = max(standart 50 m, acc). Ya'ni pastroq aniqlikdagi nuqta
+     * (tarmoq bo'yicha joylashuv, 100–1000 m) FAQAT butun aniqlik doirasi bitta tuman ichida bo'lsa `matched` bo'ladi,
+     * aks holda BOUNDARY_UNCERTAIN — noto'g'ri tuman tanlanmaydi. Javobda qo'llangan `bufferMeters` qaytadi:
+     * mijoz past aniqlikdagi natijani faqat bufferMeters ≥ aniqlik bo'lsa qabul qiladi (eski server bu maydonni
+     * bermaydi → mijoz qabul qilmaydi). `acc` yo'q — xatti-harakat avvalgidek.
+     */
+    const rawAcc = req.query.acc;
+    const acc = typeof rawAcc === 'string' && /^\d{1,4}(\.\d{1,3})?$/.test(rawAcc) ? Math.min(Number(rawAcc), 3000) : 0;
+    const bufferMeters = Math.max(config.district.boundaryBufferMeters, Math.ceil(acc));
     res.set('Cache-Control', 'no-store');
-    return res.json({ success: true, data: resolveDistrict(lat, lng, { lang }) });
+    return res.json({ success: true, data: { ...resolveDistrict(lat, lng, { lang, bufferMeters }), bufferMeters } });
   }),
 };
 
