@@ -106,6 +106,9 @@ Ism, familiya, telefon, manzil, geolokatsiya, Telegram kanaliga obuna —
 
 `App.jsx` guest foydalanuvchini HECH QACHON bloklamasligi kerak.
 
+Istisno (egasi qarori, 2026-11-16): tuman avto-aniqlash uchun GPS ruxsati ochilishda, splash bilan parallel,
+24 soatda ko'pi bilan bir marta so'raladi — bloklamaydi, manzilga yozilmaydi. Batafsil: `lakmago-client/CLAUDE.md` 2-qoida.
+
 ---
 
 ## 5-QOIDA — Backend narxga ishonmaydi
