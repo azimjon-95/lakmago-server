@@ -204,5 +204,34 @@ enable(); reload();
   ok(unk.code === 400, 'noma‘lum tuman: 400');
 }
 
+console.log('\n[9] /location/resolve?acc= — past aniqlik: butun doira bitta tumanda bo‘lsagina matched');
+enable(); reload();
+{
+  const [a, b] = [known.pop, known.chust];
+  let prev = 'pop'; let edge = null;
+  for (let i = 1; i <= 2000; i += 1) {
+    const t = i / 2000; const lat = a[0] + (b[0] - a[0]) * t; const lng = a[1] + (b[1] - a[1]) * t;
+    const r = R.resolveDistrict(lat, lng, { bufferMeters: 0 });
+    if (r.districtId && r.districtId !== prev) { edge = { lat, lng }; break; }
+    if (r.districtId) prev = r.districtId;
+  }
+  const kx = 111320 * Math.cos((edge.lat * Math.PI) / 180);
+  const stepM = Math.hypot((b[0] - a[0]) * 110574, (b[1] - a[1]) * kx);
+  const f = 250 / stepM;   // chegaradan ~250 m Chust ichkarisi
+  const q = (acc) => ({ lat: (edge.lat + (b[0] - a[0]) * f).toFixed(6), lng: (edge.lng + (b[1] - a[1]) * f).toFixed(6), ...(acc !== undefined ? { acc } : {}) });
+  const r0 = await call(locationController.resolve, q());
+  ok(r0.body.data.districtId === 'chust' && r0.body.data.bufferMeters === 50, `acc yo‘q → chust, bufer 50 (${r0.body.data.districtId}, ${r0.body.data.bufferMeters})`);
+  const r1 = await call(locationController.resolve, q('120'));
+  ok(r1.body.data.districtId === 'chust' && r1.body.data.matched && r1.body.data.bufferMeters === 120, 'acc 120 m (doira ichkarida) → chust');
+  const r2 = await call(locationController.resolve, q('600'));
+  ok(r2.body.data.matched === false && r2.body.data.reason === 'BOUNDARY_UNCERTAIN' && r2.body.data.bufferMeters === 600, `acc 600 m (doira chegaradan oshadi) → BOUNDARY_UNCERTAIN (${r2.body.data.reason})`);
+  for (const bad of ['-5', 'abc', '1e3', '']) {
+    const x = await call(locationController.resolve, q(bad));
+    ok(x.code === 200 && x.body.data.bufferMeters === 50, `noto‘g‘ri acc "${bad}" e‘tiborsiz (bufer 50)`);
+  }
+  const cap = await call(locationController.resolve, q('9999'));
+  ok(cap.body.data.bufferMeters === 3000, 'acc 3000 m bilan cheklanadi');
+}
+
 console.log(fails ? `\n✗ ${fails} ta xato` : '\n✓ HAMMASI O‘TDI');
 process.exit(fails ? 1 : 0);
