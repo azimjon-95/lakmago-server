@@ -15,10 +15,12 @@ const tokenSchema = z.string().trim().min(20).max(4096);
 
 export const mobileDevicesController = {
   register: asyncHandler(async (req, res) => {
-    const parsed = z.object({ token: tokenSchema, platform: z.enum(['android', 'ios']), environment: z.enum(['development', 'production']).optional(),
+    // platform yo'q bo'lsa = android: Android ilovasining JSON sozlamasi standart qiymatni ("android") yubormasdi -> hamma Android telefon 400 olib,
+    // push uchun ro'yxatdan o'tolmasdi. iOS doim yuboradi. Noto'g'ri qiymat (masalan "windows") avvalgidek rad etiladi.
+    const parsed = z.object({ token: tokenSchema, platform: z.enum(['android', 'ios']).default('android'), environment: z.enum(['development', 'production']).optional(),
       deviceId: z.string().trim().max(64).optional(), appVersion: z.string().trim().max(32).optional(),
       notificationsEnabled: z.boolean().optional(), soundEnabled: z.boolean().optional() }).safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ error: 'Token yoki platforma noto‘g‘ri' });
+    if (!parsed.success) return res.status(400).json({ error: 'Token yoki platforma noto‘g‘ri', fields: parsed.error.issues.map((i) => i.path.join('.')) });
     const { token, platform, environment, deviceId, appVersion, notificationsEnabled, soundEnabled } = parsed.data;
     // Bir token — bitta restoran: telefon boshqa restoranga kirsa yozuv o'shanga ko'chadi.
     await MobileDevice.findOneAndUpdate(
