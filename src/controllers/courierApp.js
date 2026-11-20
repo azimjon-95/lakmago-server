@@ -90,7 +90,8 @@ export const courierAppController = {
   stats: asyncHandler(async (req, res) => res.json(await app.stats(req.courierId))),
 
   registerDevice: asyncHandler(async (req, res) => {
-    const p = z.object({ token: z.string().trim().min(20).max(4096), platform: z.enum(['android', 'ios']), environment: z.enum(['development', 'production']).optional(), appVersion: z.string().trim().max(32).optional() }).safeParse(req.body);
+    // platform yo'q bo'lsa = android (Android ilovasi standart qiymatni yubormasdi; restoran devices bilan bir xil)
+    const p = z.object({ token: z.string().trim().min(20).max(4096), platform: z.enum(['android', 'ios']).default('android'), environment: z.enum(['development', 'production']).optional(), appVersion: z.string().trim().max(32).optional() }).safeParse(req.body);
     if (!p.success) return res.status(400).json({ error: 'Token yoki platforma noto‘g‘ri' });
     await CourierDevice.findOneAndUpdate({ token: p.data.token }, { $set: { platform: p.data.platform, courierId: req.courierId, lastSeen: new Date(), failCount: 0, lastError: '', ...(p.data.environment ? { environment: p.data.environment } : {}), ...(p.data.appVersion !== undefined ? { appVersion: p.data.appVersion } : {}) } }, { upsert: true, setDefaultsOnInsert: true });
     res.status(204).end();
