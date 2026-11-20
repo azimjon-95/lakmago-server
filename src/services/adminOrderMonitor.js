@@ -12,6 +12,7 @@ import { Order } from '../models/Order.js';
 import { AdminOrderPost } from '../models/AdminOrderPost.js';
 import { orderLabel } from './orderNumber.js';
 import { changeOrderStatus, OrderFlowError } from './orderFlow.js';
+import { mapsUrl, escAttr, customerTelegramButton, fulfillmentLine } from '../lib/orderContactLinks.js';
 
 // Boshqa servislar kabi sozlanadigan baza manzil (config.telegramApiBase; standart https://api.telegram.org) — testlanadi
 const TG_API = () => `${config.telegramApiBase}/bot${config.telegramBotToken}`;
@@ -116,6 +117,8 @@ let chatOverride = null;
 export const alertsChatId = () => String(chatOverride || config.adminAlertsChatId || '');
 /** Faqat testlar uchun: migratsiya natijasini tozalaydi */
 export const _resetChatOverride = () => { chatOverride = null; };
+export const _tgRetryForTest = (m, b) => tgRetry(m, b);
+export const _buildForTest = (order, opts) => ({ text: buildText(order), markup: buildKeyboard(order, opts) });
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const SAFE_URL = /^(https?:\/\/|tg:\/\/)/i;
@@ -128,6 +131,11 @@ const stripUnsafeButtons = (markup) => ({
 const hasUnsafeButtons = (markup) => (markup?.inline_keyboard || []).flat().some((b) => b.url && !SAFE_URL.test(b.url));
 // Bir marta rad etilgan bo'lsa — keyingi postlarga tel: tugmalari qo'shilmaydi (har safar qayta urinmaslik uchun)
 let telButtonsBroken = false;
+/** tg://user?id=… tugmasi (username yo'q mijoz) — Telegram mijoz maxfiyligi tufayli rad etsa, shu mijozning postida tugmasiz yuboriladi */
+const isUserIdButton = (b) => typeof b.url === 'string' && b.url.startsWith('tg://user?id=');
+const stripUserIdButtons = (markup) => ({
+  inline_keyboard: (markup?.inline_keyboard || []).map((row) => row.filter((b) => !isUserIdButton(b))).filter((row) => row.length),
+});
 
 /**
  * tg() + vaqtinchalik xatolarda BUYURTMA YO'QOLMASLIGI uchun qayta urinish:
@@ -148,6 +156,12 @@ async function tgRetry(method, body, attempt = 0) {
   if (res.error_code === 429) {
     await sleep(Math.min(Number(res.parameters?.retry_after) || 1, 3) * 1000);
     return tgRetry(method, body, attempt + 1);
+  }
+  // Mijoz maxfiyligi tg://user?id tugmasini rad etdi — post YO'QOLMASIN: profil tugmasiz qayta yuboramiz (amal tugmalari qoladi)
+  if (res.error_code === 400 && body.reply_markup && /BUTTON_USER_(PRIVACY_RESTRICTED|INVALID)/i.test(desc)
+      && (body.reply_markup.inline_keyboard || []).flat().some(isUserIdButton)) {
+    console.warn('[adminOrderMonitor] Telegram mijoz profili tugmasini rad etdi — tugmasiz yuboriladi');
+    return tgRetry(method, { ...body, reply_markup: stripUserIdButtons(body.reply_markup) }, attempt + 1);
   }
   if (res.error_code === 400 && body.reply_markup && hasUnsafeButtons(body.reply_markup)
       && /url|button|port|host/i.test(desc)) {
@@ -262,10 +276,9 @@ function buildKeyboard(order, { showActions = true } = {}) {
   }
   if (contactRow.length) rows.push(contactRow);
 
-  const username = order.userId?.username;
-  if (username) {
-    rows.push([{ text: '👤 Mijoz Telegram', url: `https://t.me/${encodeURIComponent(username)}` }]);
-  }
+  // Username bo'lsa — t.me havola; bo'lmasa — Telegram ID bo'yicha profil tugmasi (rad etilsa tgRetry olib tashlaydi)
+  const tgBtn = customerTelegramButton(order.userId);
+  if (tgBtn) rows.push([{ text: tgBtn.text, url: tgBtn.url }]);
 
   if (showActions && !TERMINAL.has(order.status)) {
     const oid = String(order._id);
@@ -285,6 +298,7 @@ function buildText(order) {
   lines.push(`Holat: <b>${STATUS_LABEL[st] || st}</b>`);
   const dur = durationText(order);
   if (dur) lines.push(`⏱ ${esc(dur)}`);
+  lines.push(fulfillmentLine(order));
   lines.push('');
 
   const u = order.userId && typeof order.userId === 'object' ? order.userId : null;
@@ -293,6 +307,7 @@ function buildText(order) {
   lines.push(`👤 ${esc(name)}`);
   lines.push(`📱 ${esc(phone)}`);
   if (u?.username) lines.push(`Telegram: @${esc(u.username)}`);
+  else if (customerTelegramButton(u)?.kind === 'id') lines.push(`Telegram: <a href="tg://user?id=${escAttr(u.telegramId)}">profilga o‘tish</a>`);
   const restPhoneText = order.restaurantId?.phone || order.restaurantPhone || '';
   if (restPhoneText) lines.push(`☎️ Restoran: ${esc(restPhoneText)}`);
 
@@ -317,8 +332,12 @@ function buildText(order) {
     `To‘lov: ${esc(order.paymentMethod || '—')}${order.isPaid ? ' ✅ to‘langan' : ' (naqd/kutilmoqda)'}`,
   );
 
-  if (order.address || order.deliveryAddress) {
-    lines.push(`📍 ${esc(order.address || order.deliveryAddress)}`);
+  // Manzil faqat yetkazishda. Ko'k havola → Google Maps (aniq koordinata bo'lsa pin, bo'lmasa manzil matni bo'yicha qidiruv)
+  if (order.fulfillment !== 'pickup' && (order.address || order.deliveryAddress)) {
+    const addr = order.address || order.deliveryAddress;
+    const link = mapsUrl({ lat: order.addressLat, lng: order.addressLng, address: addr });
+    lines.push(link ? `📍 <a href="${escAttr(link)}">${esc(addr)}</a>` : `📍 ${esc(addr)}`);
+    if (order.addressNote) lines.push(`🏢 ${esc(order.addressNote)}`);
   }
   lines.push(`Kelgan: ${fmtTime(order.createdAt)}`);
   if (order.acceptedAt) lines.push(`Qabul: ${fmtTime(order.acceptedAt)}`);
