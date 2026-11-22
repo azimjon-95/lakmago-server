@@ -206,6 +206,29 @@ Bu bosqichlar Q1–Q7 javoblari va tasdiq olingandan keyin bajariladi. Ikkinchi 
 
 ---
 
-## 10. Keyingi qadam
+## 10. 2-bosqich holati (`fix/finance-phase2`, main'ga qo'shilmagan)
+
+Egasi javoblari (2026-11-22): Q3 — **menyu narxlari yig'indisi**; Q2 — **0% qabul, admin ogohlantirilsin**; Q1 — tanlov yo'q, shuning uchun **hozirgidek qoldi** (ustama komissiya bazasida); MongoDB turi — noma'lum (tekshirish buyrug'i yuborildi).
+
+| Nuqson | Holat | Qayerda |
+|---|---|---|
+| **F-00** (yangi, 🔴) mijoz `subtotal` i min summa / bepul yetkazish / olib ketish chegirmasi / aksiyani boshqarardi | ✅ tuzatildi — server menyu yig'indisi | `misc.js` |
+| F-08 / F-09 menyu ≠ to'lov, kasr so'm (Paynet) | ✅ ustama va xizmat haqi pozitsiyalardan, jami butun so'm | `customerPricing.itemsCustomerBreakdown`, `orderFinance` |
+| F-04 LokmaGo kuryeri buyurtmasi qaytarishi yozilmasdi | ✅ asl taqsimot (restoran / kuryer / LokmaGo) teskari | `refund.computeRefund` |
+| F-10 qisman qaytarish yaxlitlashi | ✅ teleskopik proporsiya — yig'indi asl summaga aniq teng | `refund.computeRefund` |
+| F-05 hisob-kitobsiz manfiy komissiya | ✅ faqat `settled` bo'lsa | `billing.recordRefund` |
+| **F-22** (yangi) naqd + LokmaGo kuryeri qaytarishi noto'g'ri yo'nalishda | ✅ `isCash` settleOrder bilan bir xil | `billing.recordRefund` |
+| F-15 / Q2 kelishuvsiz restoran | ✅ 0% qoladi; adminga kunlik `finance` bildirishnomasi | `misc.js`, `Notification`, admin `NotificationCenter` |
+| Foiz validatsiyasi (TZ 16-A) | ✅ 0..100 dan tashqari foiz xato beradi | `orderFinance.assertPercent` |
+| F-01 … F-03, F-06, F-07, F-11 … F-14, F-16 … F-21 | ⏳ 3–5 bosqichlar (MongoDB test muhiti va §7 javobi kerak) | — |
+
+**Testlar** (shu branch'da ishga tushirildi):
+- `tests/finance-core.test.mjs`: **139/139 ✓**. Eski kodga qarshi ishga tushirilganda **13 ta nuqsonni ushladi**: masalan, tasodifiy 400 qisman qaytarishdan 126 tasida ortiqcha qaytarish, LokmaGo kuryeri qaytarishi yozilmasligi.
+- To'liq to'plam: **44 o'tdi, 0 yiqildi**. 38 tasi MongoDB talab qiladi va bu yerda ishga tushmadi. `district-resolver` `main` da ham vaqt chegarasidan oshadi (avvaldan bor).
+- **Ishga tushirilmagan va buyurtma yaratishga tegadigan bazali testlar:** `cash-payment`, `commission-source`, `finance-flow`, `tz-finance`, `finance-accountant`, `paynet-amount`, `mandatory-addons`, `dish-variants`, `delivery-baseprice`. **`main`'ga qo'shishdan oldin ular MongoDB bor muhitda o'tishi shart.**
+
+**Xatti-harakat o'zgarishi (bilib qo'yish uchun):** ustama yoki mijoz haqi bor restoranlarda buyurtma summasi bir necha so'mga **kamayadi** (endi menyuda ko'rsatilgani olinadi), LokmaGo mijoz haqi ham shuncha kamayadi. Halol mijozning savat summasi o'zgarmaydi. Eski buyurtmalarga tegilmaydi (`feeRounding` yo'q = eski hisob).
+
+## 11. Keyingi qadam
 
 1-bosqich yakunlandi. **2-bosqich Q1–Q7 javoblari va MongoDB test muhiti (§7) hal bo'lgach boshlanadi.** Production'ga, ENV'ga yoki ma'lumotlarga hech narsa yozilmagan.
