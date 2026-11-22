@@ -25,7 +25,7 @@ Nuqsonlar reestri: `FINANCIAL_AUDIT_REPORT.md` §4. Testlar: `FINANCIAL_TEST_REP
 |---|---|
 | `src/services/financeTx.js` | `detectTopology()` — haqiqiy `hello`. `runFinanceTx(fn)` — replica set yoki sharded bo'lsa `withTransaction` (drayver transient xatolarda qayta urinadi), aks holda tranzaksiyasiz. `FINANCE_TX=off/on` — majburlash. `isDuplicateKey()` — bulk yozuvda faqat **hamma** xato dublikat bo'lsa `true`. |
 | `scripts/finance-audit.mjs` | `npm run finance:audit [-- --json --from= --to=]` — **faqat o'qiydi**. Topadi: baza turi, takroriy settle, balans va jurnal farqi, `payment_in` takrori, Payment dublikatlari, ortiqcha qaytarish, musbatsiz manfiy komissiya, `SETTLING`/`PROCESSING` qolib ketganlar, takroriy `postingKey`. |
-| `tests/finance-core.test.mjs` | Bazasiz formula va xossa testlari (139) |
+| `tests/finance-core.test.mjs` | Bazasiz formula va xossa testlari (140) |
 | `tests/finance-concurrency.test.mjs` | Haqiqiy MongoDB concurrency testlari (53), 3 rejimda |
 | `tests/order-server-pricing.test.mjs` | F-00: haqiqiy `orderController.create` orqali soxta so'rovlar (37) |
 | `tests/paynet-ledger.test.mjs` | Paynet to'lov jurnali va provayder bekor qilishi (14) |
@@ -108,6 +108,7 @@ Nuqsonlar reestri: `FINANCIAL_AUDIT_REPORT.md` §4. Testlar: `FINANCIAL_TEST_REP
 - [x] Barcha moliyaviy testlar local replica set'da o'tdi.
 - [x] Tranzaksiyasiz rejim va standalone'da concurrency testlari o'tdi.
 - [x] F-00 server tekshiruvi haqiqiy controller orqali tasdiqlandi.
+- [x] To'liq test to'plami: branch 79 ✅ / 6 ❌. Bu 6 tasi `main` dagi yiqilishlarning aynan o'zi; `main` 74 ✅ / 7 ❌ (`FINANCIAL_TEST_REPORT.md` §5).
 - [ ] **Production baza turi aniqlandi** (R-1).
 - [ ] `finance:audit` production'da ishga tushirildi va natija ko'rib chiqildi (R-2).
 - [ ] Mavjud 6 ta moliyaga aloqasiz yiqilayotgan test bo'yicha qaror (tuzatish yoki "ma'lum" deb belgilash).
