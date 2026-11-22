@@ -218,11 +218,17 @@ section('F-05/F-22. recordRefund — jurnal yozuvlari');
   const { Ledger } = await import('../src/models/Ledger.js');
   const { Restaurant } = await import('../src/models/Restaurant.js');
   const { recordRefund } = await import('../src/services/billing.js');
+  const { Order } = await import('../src/models/Order.js');
+  process.env.FINANCE_TX = 'off';   // bazasiz: tranzaksiyasiz yo'l (rezerv CAS va postingKey baribir ishlaydi)
   const run = async ({ order, settled }) => {
     const created = []; const incs = [];
+    let cur = { ...order };
+    Order.findById = () => ({ lean: async () => cur });
+    Order.findOneAndUpdate = async (_f, u) => { cur = { ...cur, ...(u.$set || {}) }; return cur; };   // CAS rezerv
     Ledger.find = () => ({ select: () => ({ lean: async () => [] }) });
     Ledger.findOne = () => ({ lean: async () => (settled ? { _id: 'due1', amount: 1 } : null) });
     Ledger.create = async (doc) => { created.push(doc); return doc; };
+    Ledger.insertMany = async (docs) => { docs.forEach((d) => created.push(d)); return docs; };
     Restaurant.updateOne = async (_q, upd) => { incs.push(upd.$inc.balance); return {}; };
     const res = await recordRefund(order, order.paymentMethod);
     return { created, incs, res };
@@ -246,6 +252,7 @@ section('F-05/F-22. recordRefund — jurnal yozuvlari');
   r = await run({ order: cashLokma, settled: true });
   eq(r.incs[0], -95000, 'naqd + LokmaGo kuryeri: restoran ulushi karta kabi teskari −95 000 (F-22)');
   ok(r.created.filter((x) => x.type !== 'refund').every((x) => x.isCash === false), 'naqd + LokmaGo kuryeri: isCash=false (settleOrder bilan bir xil)');
+  ok(r.created.every((x) => /^refund:o2:1:/.test(x.postingKey)), 'har bir qaytarish yozuvida postingKey (refund:<id>:<seq>:*)');
   ok(r.res && r.res.refunded === 120000, 'LokmaGo kuryeri buyurtmasi qaytarishi jurnalga yozildi (F-04)');
 
   const cashOwn = { _id: 'o3', restaurantId: 'r1', userId: 'u1', total: 125000, paymentMethod: 'cash', courierParty: 'restaurant', finance: computeOrderFinance({ foodBaseTiyin: T(100000), deliveryFeeTiyin: T(20000), restaurantCommissionPercent: 5, customerFeePercent: 5 }) };

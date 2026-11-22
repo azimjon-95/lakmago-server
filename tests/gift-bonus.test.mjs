@@ -133,11 +133,36 @@ console.log('\n[10] RESTORANGA QOPLASH (settleOrder) — pul');
   const state = { ledger: [], order: null, restaurant: null };
   const mkOrder = (o = {}) => ({ _id: OID(70), restaurantId: OID(9), userId: OID(5), status: 'delivered', paymentMethod: 'card', subtotal: 120_000, total: 134_500, isPaid: true, deliveredAt: new Date(), bonusItems: [{ ruleId: OID(1), itemName: '1 l Coca-Cola', quantity: 1, reimburse: 12_000 }], finance: { model: 'v2', foodSubtotal: 12_000_000, lokmaGrossCommission: 1_200_000, restaurantPayout: 10_800_000, restaurantCommissionPercent: 10, customerFeePercent: 0, customerFeeAmount: 0, restaurantCommissionAmount: 1_200_000, lokmaNetCommission: 1_200_000, clickFoodFeeAmount: 0 }, ...o });
   const mkRest = (bal = 0) => ({ _id: OID(9), balance: bal, totalOrders: 0, save: async function () { state.saved = this.balance; } });
-  Order.findById = async () => state.order;
-  Order.findOneAndUpdate = async () => null;
-  Ledger.findOne = async (f) => state.ledger.find((l) => String(l.orderId) === String(f.orderId) && l.type === f.type) || null;
-  Ledger.create = async (d) => { state.ledger.push(d); return d; };
-  Restaurant.findById = async () => state.restaurant;
+  /*
+   * settleOrder endi atomik claim + insertMany + $inc ishlatadi (audit F-01/F-02). Soxta modellar shu chaqiruvlarni
+   * MongoDB semantikasi bilan taqlid qiladi — TEKSHIRUVLAR o'zgarmagan (sovg'a qoplash summasi, balans, takrorlanmaslik).
+   */
+  process.env.FINANCE_TX = 'off';   // bu soxta muhitda baza yo'q — tranzaksiyasiz yo'l
+  const thenable = (getter) => { const c = { select: () => c, lean: async () => getter(), then: (res, rej) => Promise.resolve(getter()).then(res, rej) }; return c; };
+  Order.exists = async () => (state.order ? { _id: state.order._id } : null);
+  Order.findById = () => thenable(() => state.order);
+  Order.findOneAndUpdate = async (f, u) => {
+    if (f && Object.prototype.hasOwnProperty.call(f, 'financeSettlement.state')) {
+      if (state.order?.financeSettlement?.state) return null;           // claim allaqachon olingan
+      state.order.financeSettlement = { state: 'SETTLING' };
+      return state.order;
+    }
+    return null;                                                         // finalizeCashPayment (isPaid) — avvalgidek
+  };
+  Order.updateOne = async (f, u) => {
+    if (u?.$set?.['financeSettlement.state']) state.order.financeSettlement = { state: u.$set['financeSettlement.state'] };
+    if (u?.$unset?.financeSettlement) delete state.order.financeSettlement;
+    return {};
+  };
+  Ledger.findOne = (f) => thenable(() => state.ledger.find((l) => String(l.orderId) === String(f.orderId) && l.type === f.type) || null);
+  Ledger.create = async (d) => { (Array.isArray(d) ? d : [d]).forEach((x) => state.ledger.push(x)); return d; };
+  Ledger.insertMany = async (docs) => { docs.forEach((x) => state.ledger.push(x)); return docs; };
+  Restaurant.findById = () => thenable(() => state.restaurant);
+  Restaurant.findOneAndUpdate = (f, u) => thenable(() => {
+    state.restaurant.balance += u.$inc?.balance || 0;
+    state.restaurant.totalOrders += u.$inc?.totalOrders || 0;
+    return { balance: state.restaurant.balance };
+  });
   const run = async (order, bal = 0) => { state.ledger = []; state.order = order; state.restaurant = mkRest(bal); await billing.settleOrder(order._id); return state; };
   const comp = (s) => s.ledger.filter((l) => l.type === 'bonus_compensation');
 

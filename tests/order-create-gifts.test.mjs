@@ -10,6 +10,15 @@ mongoose.set('bufferCommands', false); // soxtalashtirilmagan har qanday so'rov 
 
 const { orderController } = await import('../src/controllers/misc.js');
 const { Order } = await import('../src/models/Order.js');
+const { Dish } = await import('../src/models/Dish.js');
+/*
+ * Pozitsiya bazadagi taomga bog'langan bo'lishi SHART (audit F-00b: dishId'siz / bazada yo'q pozitsiyada narx mijozdan
+ * olinardi — endi rad etiladi). Taom narxi har so'rovda mijoz yuborgan narxga teng — tekshiruvlar ma'nosi o'zgarmaydi.
+ */
+const DISH_ID = 'd'.repeat(24);
+let dishPrice = 0;
+const dishChain = (v) => { const c = { select: () => c, lean: () => Promise.resolve(structuredClone(v)) }; return c; };
+Dish.find = (q) => dishChain(q && q.$or ? [] : [{ _id: DISH_ID, name: 'Margarita', price: dishPrice, optionGroups: [] }]);
 const { User } = await import('../src/models/User.js');
 const { Restaurant } = await import('../src/models/Restaurant.js');
 const { GiftBonus } = await import('../src/models/GiftBonus.js');
@@ -55,8 +64,8 @@ const run = (body) => new Promise((resolve) => {
   orderController.create(req, res, (e) => resolve({ error: e }));
   setTimeout(() => resolve({ timeout: true }), 4000);
 });
-const body = (subtotal, o = {}) => ({
-  orders: [{ restaurantId: REST, restaurantName: 'TOTLI', items: [{ name: 'Margarita', quantity: 1, unitPrice: subtotal }], subtotal, deliveryFee: 0, serviceFee: 0 }],
+const body = (subtotal, o = {}) => (dishPrice = subtotal, {
+  orders: [{ restaurantId: REST, restaurantName: 'TOTLI', items: [{ dishId: DISH_ID, name: 'Margarita', quantity: 1, unitPrice: subtotal }], subtotal, deliveryFee: 0, serviceFee: 0 }],
   fulfillment: 'pickup', paymentMethod: 'cash', address: '', ...o,
 });
 const lastOrder = () => created[created.length - 1];
