@@ -690,8 +690,13 @@ export async function recordRefund(order, provider, transactionId = null, option
    * bo'yicha. Asl `restaurant_due` yozuvi o'zgartirilmaydi.
    */
   const settled = await Ledger.findOne({ orderId: order._id, type: 'restaurant_due' }).lean();
+  /*
+   * RESTORAN naqdni o'zi olganmi — settleOrder bilan AYNAN bir xil ta'rif (audit F-22). LokmaGo kuryeri olgan
+   * naqd buyurtmada restoranga ulush karta kabi (+) yozilgan, shuning uchun qaytarishda ham karta kabi teskari.
+   * Ilgari bu yerda faqat paymentMethod tekshirilardi va bunday buyurtmada teskari yozuv NOTO'G'RI yo'nalishda tushardi.
+   */
+  const isCash = order.paymentMethod === 'cash' && order.courierParty !== 'lokma';
   if (settled) {
-    const isCash = order.paymentMethod === 'cash';
     /*
      * Naqdda pul restoranda qolgan edi va biz faqat komissiyani
      * qarz qilgandik (manfiy yozuv) — qaytarishda o'sha komissiya
@@ -721,15 +726,19 @@ export async function recordRefund(order, provider, transactionId = null, option
     }
   }
 
-  // Komissiya ham teskari yoziladi (LokmaGo daromadi kamayadi)
-  if (refund.lokmaGrossCommission > 0) {
+  /*
+   * Komissiya ham teskari yoziladi (LokmaGo daromadi kamayadi) — FAQAT hisob-kitob bo'lgan buyurtmada (audit F-05).
+   * Komissiya yozuvi settleOrder'da (yetkazilganda) tushadi; yetkazishdan OLDIN bekor qilingan karta buyurtmasida
+   * u hali yo'q — ilgari bu yerda musbatsiz manfiy komissiya yozilib, hisobotdagi komissiya kamayib ko'rinardi.
+   */
+  if (settled && refund.lokmaGrossCommission > 0) {
     await Ledger.create({
       type: 'commission',
       amount: -tiyinToSom(refund.lokmaGrossCommission),
       orderId: order._id,
       restaurantId: order.restaurantId,
       provider: order.paymentMethod || null,
-      isCash: order.paymentMethod === 'cash',
+      isCash,
       meta: { financeModel: 'v2', note: 'Qaytarish — komissiya bekor qilindi' },
     });
   }

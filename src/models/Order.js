@@ -110,6 +110,8 @@ const orderSchema = new Schema(
       discountAmount: Number,
       deliveryMarkupPercent: Number,
       deliveryMarkupAmount: Number,
+      // 'lines' — ustama/xizmat haqi menyu pozitsiyalaridan (mijoz ko'rgan narx = to'lov); yo'q/'percent' — eski hisob
+      feeRounding: { type: String, enum: ['lines', 'percent'], default: undefined },
       foodSubtotal: Number,                // komissiya BAZASI
       deliveryFee: Number,
 

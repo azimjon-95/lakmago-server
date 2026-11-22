@@ -1,4 +1,4 @@
-import { computeOrderFinance, reconcile } from './orderFinance.js';
+import { reconcile } from './orderFinance.js';
 
 /*
  * ═══════════════════════════════════════════════════════════
@@ -106,29 +106,98 @@ export function computeRefund(finance, {
   }
 
   /*
-   * Chegirma proporsional bo'linadi: 10 000 dan 2 000 chegirma
-   * berilgan bo'lsa va yarmi qaytarilsa — 1 000 chegirma ham
-   * teskari qilinadi.
+   * ═══ TELESKOPIK PROPORSIYA (audit F-04, F-10) ═══
+   *
+   * Ilgari qaytariladigan qism foizlar bilan QAYTADAN hisoblanardi (computeOrderFinance). Ikki muammo bor edi:
+   *   1) yetkazuvchi hisobga olinmasdi — LokmaGo kuryeri yetkazgan buyurtmada yetkazish restoran ulushiga
+   *      qo'shilib, tekshiruv yiqilar va qaytarish JURNALGA UMUMAN YOZILMASDI;
+   *   2) ketma-ket qisman qaytarishlar yaxlitlash sabab asl summadan 1–2 tiyin farq qilardi.
+   *
+   * Endi har bir asosiy bo'lak ASL snapshot'dan olinadi:
+   *     qism = round(asl × kumulyativ_keyin / jami) − round(asl × kumulyativ_oldin / jami)
+   * Barcha qismlar yig'indisi asl summaga ANIQ teng (teleskopik), oxirgi qism qoldiqni o'zi oladi.
+   * Qolgan maydonlar shu bo'laklardan keltirib chiqariladi — shuning uchun reconcile() har qismda aniq.
+   * Yetkazish bo'linmaydi: qaytarilsa asl snapshot'dagi taqsimot (restoran / kuryer / LokmaGo) to'liq teskari.
    */
-  const ratio = totalFoodBase > 0 ? refundBase / totalFoodBase : 0;
-  const discountRefund = Math.round((Number(finance.discountAmount) || 0) * ratio);
+  const n = (v) => Math.round(Number(v) || 0);
+  const cumShare = (orig, cum) => {
+    if (!totalFoodBase) return 0;
+    const o = BigInt(n(orig));
+    const neg = o < 0n;
+    const num = (neg ? -o : o) * BigInt(cum) * 2n + BigInt(totalFoodBase);
+    const v = num / (BigInt(totalFoodBase) * 2n);          // yaqin butun songa (half-up)
+    return Number(neg ? -v : v);
+  };
+  const before = already;
+  const after = already + refundBase;
+  const part = (orig) => cumShare(orig, after) - cumShare(orig, before);
 
-  /*
-   * Qaytariladigan qism uchun hisob AYNAN shu foizlar bilan
-   * qayta quriladi — shuning uchun rekonsiliatsiya bu yerda ham
-   * ishlaydi va qaytarilgan pul taqsimoti asl taqsimot bilan
-   * bir xil mantiqda bo'ladi.
-   */
-  const refund = computeOrderFinance({
-    foodBaseTiyin: refundBase,
-    discountTiyin: discountRefund,
-    deliveryFeeTiyin: withDelivery ? (Number(finance.deliveryFee) || 0) : 0,
-    deliveryMarkupPercent: finance.deliveryMarkupPercent || 0,
-    customerFeePercent: finance.customerFeePercent || 0,
-    restaurantCommissionPercent: finance.restaurantCommissionPercent || 0,
-    paymentFeePercent: finance.clickFeePercent || 0,
+  const discountAmount = part(finance.discountAmount);
+  const deliveryMarkupAmount = part(finance.deliveryMarkupAmount);
+  const customerFeeAmount = part(finance.customerFeeAmount);
+  const restaurantCommissionAmount = part(finance.restaurantCommissionAmount);
+  const clickFoodFeeAmount = part(finance.clickFoodFeeAmount);
+  const clickNonDelivery = part(n(finance.clickFeeAmount) - n(finance.clickDeliveryFeeAmount));
+
+  const foodSubtotal = refundBase - discountAmount + deliveryMarkupAmount;
+  const customerFoodTotal = foodSubtotal + customerFeeAmount;
+  const restaurantFoodPayout = foodSubtotal - restaurantCommissionAmount;
+  const lokmaGrossCommission = customerFeeAmount + restaurantCommissionAmount;
+
+  const d = (field) => (withDelivery ? n(finance[field]) : 0);
+  const deliveryFee = d('deliveryFee');
+  // Eski snapshot'larda restaurantDeliveryPayout bo'lmasa — yetkazish restoranniki edi
+  const restaurantDeliveryPayout = withDelivery
+    ? (finance.restaurantDeliveryPayout === undefined || finance.restaurantDeliveryPayout === null
+      ? n(finance.deliveryFee) : n(finance.restaurantDeliveryPayout))
+    : 0;
+  const courierPayout = d('courierPayout');
+  const lokmaDeliveryCommission = d('lokmaDeliveryCommission');
+  const deliverySubsidy = d('deliverySubsidy');
+  const clickDeliveryFeeAmount = d('clickDeliveryFeeAmount');
+
+  const clickFeeAmount = clickNonDelivery + clickDeliveryFeeAmount;
+  const totalCharged = customerFoodTotal + deliveryFee;
+  const restaurantPayout = restaurantFoodPayout + restaurantDeliveryPayout;
+  const lokmaNetCommission = lokmaGrossCommission - clickFeeAmount + lokmaDeliveryCommission - deliverySubsidy;
+
+  const refund = {
+    model: finance.model,
+    currency: finance.currency || 'UZS',
+    unit: 'tiyin',
+    foodBase: refundBase,
+    discountAmount,
+    deliveryMarkupPercent: Number(finance.deliveryMarkupPercent) || 0,
+    deliveryMarkupAmount,
+    foodSubtotal,
+    deliveryFee,
+    customerFeePercent: Number(finance.customerFeePercent) || 0,
+    customerFeeAmount,
+    restaurantCommissionPercent: Number(finance.restaurantCommissionPercent) || 0,
+    restaurantCommissionAmount,
+    customerFoodTotal,
+    totalCharged,
+    clickFeePercent: Number(finance.clickFeePercent) || 0,
+    clickFeeAmount,
+    clickFoodFeeAmount,
+    clickDeliveryFeeAmount,
+    clickResidualAmount: clickNonDelivery - clickFoodFeeAmount,
+    restaurantFoodPayout,
+    restaurantDeliveryPayout,
+    restaurantPayout,
+    lokmaGrossCommission,
+    lokmaFoodPaymentFee: clickFeeAmount,
+    lokmaNetCommission,
+    lokmaCashNet: totalCharged - restaurantPayout - courierPayout - clickFeeAmount,
+    deliveryPayout: restaurantDeliveryPayout,
+    courierParty: finance.courierParty ?? null,
+    courierPayout,
+    lokmaDeliveryCommission,
+    deliverySubsidy,
+    nominalDeliveryFee: d('nominalDeliveryFee'),
     deliveryFeeAbsorbedByLokma: Boolean(finance.deliveryFeeAbsorbedByLokma),
-  });
+    calculatedAt: new Date(),
+  };
 
   const refundedFoodBaseAfter = already + refundBase;
 
@@ -159,7 +228,7 @@ export function validateRefund(finance, refund) {
     if (ref > orig) problems.push(`${field}: qaytarish ${ref} > asl ${orig}`);
   };
 
-  ['totalCharged', 'restaurantPayout', 'lokmaGrossCommission', 'deliveryFee', 'clickFeeAmount']
+  ['totalCharged', 'restaurantPayout', 'lokmaGrossCommission', 'deliveryFee', 'clickFeeAmount', 'courierPayout']
     .forEach(check);
 
   const r = reconcile(refund);

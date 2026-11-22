@@ -22,6 +22,7 @@ const PRIORITY_BY_TYPE = {
   order: 'HIGH',
   reservation: 'NORMAL',
   support: 'NORMAL',
+  finance: 'HIGH',          // moliya: masalan kelishuvsiz restoran 0% bilan buyurtma oldi
 };
 
 /** Har tur uchun ovoz — bitta joyda belgilanadi. */
@@ -31,7 +32,8 @@ const SOUND_BY_TYPE = {
   reservation: 'reservations',
   waiter_call: 'hall-orders',
   bill_request: 'hall-orders',
-  support: 'reservations',   // alohida MP3 yo'q — yumshoq ohang
+  support: 'reservations',
+  finance: 'reservations',   // yumshoq ohang   // alohida MP3 yo'q — yumshoq ohang
 };
 
 /**
