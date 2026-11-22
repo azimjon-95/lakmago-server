@@ -2,7 +2,7 @@
 
 Bu yo'riqnoma `scripts/finance-audit.mjs` ni production bazasida ishga tushirish uchun. U:
 - **deploy qilmaydi**;
-- **production papkasi (`~/lakmago-server`) va uning kodiga tegmaydi**;
+- **production papkasi (`~/projects/lakmago-server`) va uning kodiga tegmaydi**;
 - **PM2 ni restart qilmaydi**;
 - **bazaga hech narsa yozmaydi**.
 
@@ -55,7 +55,7 @@ Network Access'da VPS IP'si allaqachon bor (ilova ulanadi), o'zgartirish shart e
 
 ## 3. VPS'da bajariladigan buyruqlar
 
-Hammasi **alohida papkada** (`~/lokma-audit`). `~/lakmago-server` da faqat **o'qish** buyruqlari ishlatiladi: `git remote get-url` va baza nomini aniqlash.
+Hammasi **alohida papkada** (`~/lokma-audit`). `~/projects/lakmago-server` da faqat **o'qish** buyruqlari ishlatiladi: `git remote get-url` va baza nomini aniqlash.
 
 ### 3.1. Skriptni production papkasidan tashqarida olish
 
@@ -63,7 +63,7 @@ Hammasi **alohida papkada** (`~/lokma-audit`). `~/lakmago-server` da faqat **o'q
 mkdir -p ~/lokma-audit && chmod 700 ~/lokma-audit && cd ~/lokma-audit
 
 # Production repo'sining remote manzilini O'QIYMIZ (hech narsa o'zgarmaydi)
-REPO_URL="$(git -C ~/lakmago-server remote get-url origin)"
+REPO_URL="$(git -C ~/projects/lakmago-server remote get-url origin)"
 
 # Faqat bitta faylni, alohida papkaga (production papkasiga tegmaydi)
 git clone --depth 1 --branch fix/finance-phase2 --filter=blob:none --no-checkout "$REPO_URL" repo
@@ -92,7 +92,7 @@ node -v    # Node 18+ bo'lishi kerak
 ### 3.3. Baza nomini aniqlash (parol ko'rsatilmaydi)
 
 ```bash
-grep -E '^MONGO_URI=' ~/lakmago-server/.env | sed -E 's#(mongodb(\+srv)?://)[^@]*@#\1***:***@#'
+grep -E '^MONGO_URI=' ~/projects/lakmago-server/.env | sed -E 's#(mongodb(\+srv)?://)[^@]*@#\1***:***@#'
 # masalan: MONGO_URI=mongodb+srv://***:***@cluster0.xxxxx.mongodb.net/lokmago?retryWrites=true...
 #                                          ^ klaster xosti          ^ baza nomi
 ```
@@ -119,15 +119,15 @@ Parolda `@ : / ? # %` belgilari bo'lsa, ularni URL-kodlang (masalan `@` → `%40
 cd ~/lokma-audit
 
 # 1) Tez tekshiruv: huquq darvozasidan o'tadimi, bitta kunlik ma'lumot bilan
-nice -n 10 node finance-audit.mjs --from=$(date +%F) --to=$(date +%F) --out=audit-check-$(date +%F-%H%M).json
+nice -n 10 node finance-audit.mjs --db=test --from=$(date +%F) --to=$(date +%F) --out=audit-check-$(date +%F-%H%M).json
 echo "chiqish kodi: $?"
 
 # 2) To'liq audit (butun tarix) — JSON faylga
-nice -n 10 node finance-audit.mjs --out=audit-full-$(date +%F-%H%M).json
+nice -n 10 node finance-audit.mjs --db=test --out=audit-full-$(date +%F-%H%M).json
 echo "chiqish kodi: $?"
 
 # Ixtiyoriy: davr bo'yicha (Toshkent vaqti)
-# nice -n 10 node finance-audit.mjs --from=2026-11-01 --to=2026-11-22 --out=audit-nov.json
+# nice -n 10 node finance-audit.mjs --db=test --from=2026-11-01 --to=2026-11-22 --out=audit-nov.json
 ```
 
 ### 3.6. Chiqish kodlari
@@ -167,10 +167,41 @@ Atlas → Database Access → `lokma_audit_ro` → **Delete**. Vaqtinchalik foyd
 
 ---
 
+> **Baza nomi.** Atlas manzilida baza nomi yo'q bo'lsa, ilova mongoose standarti bo'yicha `test` bazasiga yozadi. Haqiqiy bazani `--db=` bilan bering
+> (production'da: `--db=test`, 2026-11-22 da `ledgers`/`orders` mavjudligi tekshirilgan).
+
 ## 4. Bu yo'riqnomada QILINMAYDIGAN narsalar
 
-- `~/lakmago-server` da `git pull`, `git checkout`, `npm install` — **yo'q**
+- `~/projects/lakmago-server` da `git pull`, `git checkout`, `npm install` — **yo'q**
 - `pm2 restart` / `reload` — **yo'q**
 - `main` ga merge yoki deploy — **yo'q**
 - Ilovaning `MONGO_URI` si yoki o'qish-yozish huquqli foydalanuvchi bilan ishga tushirish — **yo'q** (skript buni rad etadi)
 - Audit topgan muammolarni tuzatish — **yo'q** (faqat ko'rib chiqilgan reja bilan, alohida)
+
+---
+
+## 5. Chuqurlashtirilgan audit (3 restoran + 4 buyurtma)
+
+`scripts/finance-audit-drilldown.mjs` — birinchi audit topgan 3 ta restoran (balans ≠ jurnal) va 4 ta buyurtma (musbatsiz manfiy komissiya) uchun.
+Doira (SCOPE) kod ichida qat'iy belgilangan, parametr bilan kengaytirib bo'lmaydi (`--restaurants`/`--orders` → chiqish kodi 2).
+
+Himoya: yuqoridagi uchta qatlam aynan saqlangan (huquq darvozasi → 4, buyruq ro'yxati / `$out`/`$merge` → 3, kodda yozish metodlari yo'q).
+Shaxsiy ma'lumotlar (telefon, manzil, ism, `userId`, karta rekvizitlari, bekor qilish matni) so'ralmaydi.
+Hisobot har bir restoran va buyurtma uchun **FAKT / TAXMIN / NOMA'LUM** bo'limlariga ajratilgan. Hech narsa tuzatilmaydi.
+
+```bash
+cd ~/lokma-audit
+# Yangi faylni olish (production papkasiga tegmaydi)
+git -C repo fetch --depth 1 origin fix/finance-phase2
+git -C repo sparse-checkout set --no-cone /scripts/finance-audit.mjs /scripts/finance-audit-drilldown.mjs
+git -C repo checkout -q --detach FETCH_HEAD
+cp repo/scripts/finance-audit-drilldown.mjs ./finance-audit-drilldown.mjs
+sha256sum finance-audit-drilldown.mjs
+# kutilgan: 6a592b1a755fe654ebf1209fa78331988d451e1ef35510356105e8fda9376a0b   (mos kelmasa — TO'XTANG)
+
+# FINANCE_AUDIT_URI o'rnatilgan bo'lishi kerak (3.4 bo'limi; faqat "Only read any database" foydalanuvchisi)
+nice -n 10 node finance-audit-drilldown.mjs --db=test --out=drilldown-$(date +%F-%H%M).json
+echo "chiqish kodi: $?"
+```
+
+Chiqish kodlari 3.6 bo'limidagi bilan bir xil. Isbot: `tests/finance-drilldown-readonly.test.mjs` (118 tekshiruv; oplog/dbHash o'zgarmasligi, readWrite/root/autentifikatsiyasiz rad, inject va `$out` ushlanishi).

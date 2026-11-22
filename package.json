@@ -36,6 +36,7 @@
     "test:server-pricing": "node tests/order-server-pricing.test.mjs",
     "test:paynet-ledger": "node tests/paynet-ledger.test.mjs",
     "finance:audit": "node scripts/finance-audit.mjs",
+    "test:finance-drilldown": "node tests/finance-drilldown-readonly.test.mjs",
     "test:finance-audit-readonly": "node tests/finance-audit-readonly.test.mjs",
     "test:baseprice": "node tests/delivery-baseprice.test.mjs",
     "test:address": "node tests/address-update.test.mjs",
