@@ -1,3 +1,4 @@
+import { isDuplicateKey } from './financeTx.js';
 import { Types } from 'mongoose';
 import { Order } from '../models/Order.js';
 import { CourierAccount } from '../models/CourierAccount.js';
@@ -424,6 +425,8 @@ export async function settleCourier(orderId) {
         restaurantId: o.restaurantId,
         courierId: o.lokmaCourier.courierId,
         provider: o.paymentMethod || null,
+        // Unique — qayta urinishda (oldingi urinish yarim yozilgan bo'lsa) shu yozuv takrorlanmaydi (audit F-21)
+        postingKey: `courier:${o._id}:${e.type}`,
         isCash: o.paymentMethod === 'cash',
         meta: {
           note: e.type === 'courier_cash' ? 'Mijozdan naqd olindi (LokmaGo puli)' : 'Yetkazish ulushi',
@@ -431,10 +434,12 @@ export async function settleCourier(orderId) {
           nominalDeliveryFee: tiyinToSom(o.finance?.nominalDeliveryFee),
           freeDeliveryByLokma: Boolean(o.finance?.freeDeliveryByLokma),
         },
-      })));
+      })), { ordered: false });
     }
     return { settled: true, entries };
   } catch (e) {
+    // Hamma xato "allaqachon yozilgan" bo'lsa — hisob to'liq, claim qoladi
+    if (isDuplicateKey(e)) return { settled: true, entries, duplicate: true };
     await Order.updateOne({ _id: o._id }, { $set: { 'lokmaCourier.settledAt': null } }).catch(() => {});
     throw e;
   }

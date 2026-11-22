@@ -632,6 +632,21 @@ export const orderController = {
        * xizmat haqisiz). Moliyaviy snapshot shundan quriladi.
        */
       const priceCheck = await verifyItemPrices(o.items, o.restaurantId);
+      /*
+       * ═══ BAZADA YO'Q POZITSIYA — RAD (audit F-00b) ═══
+       * dishId'siz yoki bazada (shu restoranda) topilmagan pozitsiyada narx faqat MIJOZDAN kelardi, pastdagi
+       * mavjudlik tekshiruvi esa topilmagan ID'ni ushlamasdi: API'ga `unitPrice: 1` bilan soxta pozitsiya
+       * yuborish mumkin edi. Mijoz ilovasi har pozitsiyaga dishId yuboradi (Market mahsulotlari ham Dish),
+       * shuning uchun bu faqat soxta yoki eskirgan (o'chirilgan taom) so'rovni to'xtatadi.
+       */
+      if (priceCheck.unknown?.length) {
+        return res.status(400).json({
+          error: `Mavjud emas: ${priceCheck.unknown.map((u) => u.name || 'noma\u2019lum').join(', ')}`,
+          code: 'DISH_UNAVAILABLE',
+          restaurantId: String(o.restaurantId),
+          dishes: priceCheck.unknown.map((u) => u.name),
+        });
+      }
       o.items = priceCheck.items;
       o._foodBaseSom = priceCheck.foodBaseSom;
 

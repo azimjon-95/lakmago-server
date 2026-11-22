@@ -199,7 +199,8 @@ console.log('\n═══ TEST 8: Bir order ikki marta to‘lanmasin ═══');
   try {
     await recordPayout(restaurant._id, 9000, null, 'test', key);
     const second = await recordPayout(restaurant._id, 9000, null, 'test', key);
-    ok(second?.duplicated === true || second === null, 'takroriy to‘lov rad etildi');
+    // recordPayout takroriy kalitda `{ alreadyExisted: true }` qaytaradi (eski test `duplicated` maydonini kutardi — kod bunday maydon qaytarmaydi)
+    ok(second?.alreadyExisted === true || second?.duplicated === true || second === null, 'takroriy to‘lov rad etildi');
     const payouts = await Ledger.countDocuments({ restaurantId: restaurant._id, type: 'payout' });
     ok(payouts === 1, `payout yozuvi: ${payouts} ta (ikki marta yozilmadi)`);
     const balance = (await Restaurant.findById(restaurant._id).lean()).balance;

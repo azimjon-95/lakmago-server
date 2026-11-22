@@ -43,6 +43,8 @@ export async function verifyItemPrices(items, restaurantId) {
   const byId = new Map(dishes.map((d) => [String(d._id), d]));
 
   const mismatches = [];
+  // Bazada (shu restoranda) topilmagan pozitsiyalar — chaqiruvchi buyurtmani RAD ETADI (audit F-00b)
+  const unknown = [];
   let foodBaseSom = 0;
 
   const verified = list.map((item) => {
@@ -60,6 +62,7 @@ export async function verifyItemPrices(items, restaurantId) {
       if (item?.dishId) {
         mismatches.push({ dishId: String(item.dishId), reason: 'taom bazada topilmadi' });
       }
+      unknown.push({ dishId: item?.dishId ? String(item.dishId) : null, name: String(item?.name || '').slice(0, 80) });
       return { ...item, quantity: qty, unitPrice: unit };
     }
 
@@ -180,5 +183,5 @@ export async function verifyItemPrices(items, restaurantId) {
     };
   });
 
-  return { foodBaseSom, items: verified, mismatches };
+  return { foodBaseSom, items: verified, mismatches, unknown };
 }
