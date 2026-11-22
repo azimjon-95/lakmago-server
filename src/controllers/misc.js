@@ -35,6 +35,8 @@ import { emitOrderToRestaurant } from '../services/orderSocket.js';
 import { customerOrderView, attachRestaurantGeo } from '../services/customerOrderView.js';
 import { getOrderTrack } from '../services/orderTrack.js';
 import { DEMO_RESTAURANT_ONLY_MESSAGE } from '../services/demoAccount.js';
+import { catalogDistrict } from '../services/catalogDistrict.js';
+import { bannerVisibleInDistrict, linkedRestaurantId } from '../services/bannerDistrict.js';
 import { confirmOrderDelivered, syncRestaurantBot } from '../services/deliveryCheck.js';
 import { routeBetween } from '../services/routeGeometry.js';
 import { sendRestaurantContact } from '../services/restaurantContact.js';
@@ -77,7 +79,16 @@ export const bannerController = {
       if (b.kind !== 'restaurant') return true; // platforma bannerlari doim ko'rinadi
       return validRestIds.has(String(b.restaurantId));
     });
-    res.json(visible);
+
+    // ?district= — faqat shu tuman bannerlari (services/bannerDistrict.js). Tuman yo'q/flag o'chiq — AYNAN avvalgidek.
+    const district = catalogDistrict(req);
+    if (!district) return res.json(visible);
+    const linkIds = [...new Set(visible.map(linkedRestaurantId).filter(Boolean))];
+    const linked = linkIds.length
+      ? await Restaurant.find({ _id: { $in: linkIds } }).select('serviceDistrictId serviceAreaDistrictIds').lean()
+      : [];
+    const restById = new Map(linked.map((r) => [String(r._id), r]));
+    res.json(visible.filter((b) => bannerVisibleInDistrict(b, district, restById)));
   }),
 };
 
