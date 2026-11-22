@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { sanitizeDistrictIds } from '../services/bannerDistrict.js';
 import { config } from '../config/index.js';
 import { asyncHandler } from '../middleware/error.js';
 import { Restaurant } from '../models/Restaurant.js';
@@ -742,7 +743,10 @@ export const adminController = {
     });
     const parsed = schema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: 'Banner rasmi majburiy' });
-    const banner = await Banner.create({ ...parsed.data, kind: 'platform', active: true });
+    // Tumanlar (ixtiyoriy): bo'sh — bog'langan restoran tumani yoki hamma tumanda (services/bannerDistrict.js)
+    const dist = sanitizeDistrictIds(req.body.districtIds);
+    if (dist.error) return res.status(400).json({ error: dist.error });
+    const banner = await Banner.create({ ...parsed.data, ...(dist.value?.length ? { districtIds: dist.value } : {}), kind: 'platform', active: true });
     res.status(201).json(banner);
   }),
 
@@ -754,6 +758,11 @@ export const adminController = {
     if ('placement' in req.body) {
       if (!['home', 'market'].includes(req.body.placement)) return res.status(400).json({ error: 'Joylashuv noto‘g‘ri' });
       update.placement = req.body.placement;
+    }
+    if ('districtIds' in req.body) {
+      const dist = sanitizeDistrictIds(req.body.districtIds);
+      if (dist.error) return res.status(400).json({ error: dist.error });
+      update.districtIds = dist.value;   // [] — tanlov olib tashlandi (restoran tumani / hamma tumanda)
     }
     const banner = await Banner.findByIdAndUpdate(req.params.id, update, { new: true });
     if (!banner) return res.status(404).json({ error: 'Banner topilmadi' });

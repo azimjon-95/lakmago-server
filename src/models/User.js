@@ -225,6 +225,8 @@ const bannerSchema = new Schema(
     // Qaysi sahifada: home — bosh sahifa (eski bannerlar ham), market — Lokma Market
     placement: { type: String, enum: ['home', 'market'], default: 'home' },
     restaurantId: { type: Schema.Types.ObjectId, ref: 'Restaurant' },
+    // Qaysi tumanlarda ko'rinadi (services/bannerDistrict.js). Bo'sh/yo'q — bog'langan restoran tumani, u ham yo'q — hamma tumanda.
+    districtIds: { type: [String], default: undefined },
 
     order: { type: Number, default: 0 },
     active: { type: Boolean, default: true },

@@ -1,4 +1,6 @@
 import { isStore } from '../services/storeRules.js';
+import { catalogDistrict } from '../services/catalogDistrict.js';
+import { restaurantInDistrict } from '../services/bannerDistrict.js';
 import { z } from 'zod';
 import { asyncHandler } from '../middleware/error.js';
 import { Ad } from '../models/Ad.js';
@@ -170,23 +172,26 @@ export const adminAdsController = {
    ============================================ */
 export const publicAdsController = {
   // GET /ads/banner — hozir faol reklamalar (tasdiqlangan + muddati ichida)
-  banner: asyncHandler(async (_req, res) => {
+  banner: asyncHandler(async (req, res) => {
     const now = new Date();
+    // ?district= — faqat shu tumandagi restoranlar reklamasi (services/bannerDistrict.js); yo'q — avvalgidek
+    const district = catalogDistrict(req);
     const ads = await Ad.find({
       status: { $in: ['approved', 'active'] },
       startsAt: { $lte: now },
       endsAt: { $gte: now },
     })
       .sort({ createdAt: -1 })
-      .limit(20)
-      .populate('restaurantId', 'name imageUrl isActive isBlocked kind category')
+      .limit(district ? 100 : 20)   // tuman filtri keyin — boshqa tuman reklamalari o'rnini egallamasin
+      .populate('restaurantId', 'name imageUrl isActive isBlocked kind category serviceDistrictId serviceAreaDistrictIds')
       .populate('dishId', 'name price imageUrl')
       .lean();
 
     // Bloklangan/o'chirilgan restoranlarning reklamasi ko'rinmasin
     // Do'kon reklamasi bosh sahifa banneriga chiqmaydi (do'konlar faqat Lokma Market'da)
     const visible = ads.filter((a) => a.restaurantId && a.restaurantId.isActive && !a.restaurantId.isBlocked
-      && !isStore(a.restaurantId));
+      && !isStore(a.restaurantId)
+      && (!district || restaurantInDistrict(a.restaurantId, district))).slice(0, 20);
 
     res.json(visible.map((a) => ({
       id: String(a._id),
