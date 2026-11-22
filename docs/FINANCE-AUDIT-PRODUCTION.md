@@ -205,3 +205,27 @@ echo "chiqish kodi: $?"
 ```
 
 Chiqish kodlari 3.6 bo'limidagi bilan bir xil. Isbot: `tests/finance-drilldown-readonly.test.mjs` (118 tekshiruv; oplog/dbHash o'zgarmasligi, readWrite/root/autentifikatsiyasiz rad, inject va `$out` ushlanishi).
+
+---
+
+## 6. "restaurant_due yozilmagan" 3 buyurtma (Osiyo kafe 2 ta, Volidam Osiyo 1 ta)
+
+`scripts/finance-audit-missing-due.mjs` — yetkazilgan, lekin `restaurant_due` yozuvi yo'q buyurtmalar: nima uchun yozilmagani, ular
+`Restaurant.balance` farqi bilan (Osiyo +166 350, Volidam −82 020, jami 89 430) bog'liqmi. Doira (2 restoran + 3 buyurtma) kod ichida qat'iy.
+Himoya qatlamlari 5-bo'limdagi bilan bir xil; hisobot FAKT / TAXMIN / NOMA'LUM bo'limlariga ajratilgan; hech narsa tuzatilmaydi.
+
+```bash
+cd ~/lokma-audit
+git -C repo fetch --depth 1 origin fix/finance-phase2
+git -C repo sparse-checkout set --no-cone /scripts/finance-audit.mjs /scripts/finance-audit-drilldown.mjs /scripts/finance-audit-missing-due.mjs
+git -C repo checkout -q --detach FETCH_HEAD
+cp repo/scripts/finance-audit-missing-due.mjs ./finance-audit-missing-due.mjs
+sha256sum finance-audit-missing-due.mjs
+# kutilgan: eebe3c7b9bf4d5e6da402cd34dd44ff054b6c1a3cacc708c9c8177e47063a4ba   (mos kelmasa — TO'XTANG)
+
+nice -n 10 node finance-audit-missing-due.mjs --db=test --out=missing-due-$(date +%F-%H%M).json
+echo "chiqish kodi: $?"
+```
+
+Isbot: `tests/finance-missing-due-readonly.test.mjs` (99 tekshiruv: oplog/dbHash o'zgarmasligi, readWrite/root/autentifikatsiyasiz rad,
+`insert` / `$out` / `update` kiritilsa to'xtashi, SCOPE'dan tashqari ma'lumot va PII natijaga tushmasligi).
