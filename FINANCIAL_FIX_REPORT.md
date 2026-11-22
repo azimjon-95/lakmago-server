@@ -24,7 +24,7 @@ Nuqsonlar reestri: `FINANCIAL_AUDIT_REPORT.md` §4. Testlar: `FINANCIAL_TEST_REP
 | Fayl | Vazifa |
 |---|---|
 | `src/services/financeTx.js` | `detectTopology()` — haqiqiy `hello`. `runFinanceTx(fn)` — replica set yoki sharded bo'lsa `withTransaction` (drayver transient xatolarda qayta urinadi), aks holda tranzaksiyasiz. `FINANCE_TX=off/on` — majburlash. `isDuplicateKey()` — bulk yozuvda faqat **hamma** xato dublikat bo'lsa `true`. |
-| `scripts/finance-audit.mjs` | `npm run finance:audit [-- --json --from= --to=]` — **faqat o'qiydi**. Topadi: baza turi, takroriy settle, balans va jurnal farqi, `payment_in` takrori, Payment dublikatlari, ortiqcha qaytarish, musbatsiz manfiy komissiya, `SETTLING`/`PROCESSING` qolib ketganlar, takroriy `postingKey`. |
+| `scripts/finance-audit.mjs` | `FINANCE_AUDIT_URI=… node scripts/finance-audit.mjs [--out= --json --from= --to=]` — **faqat o'qiydi**: huquq darvozasi (faqat read rolli foydalanuvchi), buyruq ruxsat ro'yxati, `$out`/`$merge` taqiqi, `.env` o'qilmaydi. Isbot: `tests/finance-audit-readonly.test.mjs` (oplog/dbHash). Topadi: baza turi, takroriy settle, balans va jurnal farqi, `payment_in` takrori, Payment dublikatlari, ortiqcha qaytarish, musbatsiz manfiy komissiya, `SETTLING`/`PROCESSING` qolib ketganlar, takroriy `postingKey`. |
 | `tests/finance-core.test.mjs` | Bazasiz formula va xossa testlari (140) |
 | `tests/finance-concurrency.test.mjs` | Haqiqiy MongoDB concurrency testlari (53), 3 rejimda |
 | `tests/order-server-pricing.test.mjs` | F-00: haqiqiy `orderController.create` orqali soxta so'rovlar (37) |
@@ -92,7 +92,7 @@ Nuqsonlar reestri: `FINANCIAL_AUDIT_REPORT.md` §4. Testlar: `FINANCIAL_TEST_REP
 1. Shartlar (§6) bajarilgan, PR ko'rib chiqilgan va **siz tasdiqlagansiz**.
 2. **Oldindan, faqat o'qish:**
    - VPS'da `hello` buyrug'i (baza turi);
-   - `npm run finance:audit -- --json > audit-before.json` (joriy holat, takroriy `postingKey` = 0 bo'lishi kerak).
+   - read-only audit — **`docs/FINANCE-AUDIT-PRODUCTION.md`** bo'yicha (alohida read-only Atlas foydalanuvchisi, production kodi va papkasiga tegilmaydi), natija `--out=audit-before.json`.
 3. `git pull` → `pm2 restart lakmago-server`.
 4. Log'da quyidagilar chiqishi kerak:
    - `[finance-tx] baza: …`;
