@@ -782,7 +782,8 @@ export const orderController = {
        */
       const agreement = o._agreement;
       // Kelishuvsiz restoran: komissiya 0% (uydirma foiz YO'Q), lekin bu jim o'tib ketmasin
-      if (!agreement) warnNoAgreement(o.restaurantId, rest?.name);
+      // Demo restoran (App Store sandbox) — haqiqiy dunyoga, jumladan admin bildirishnomalariga tegmaydi
+      if (!agreement && !rest.isDemo && !demoUser) warnNoAgreement(o.restaurantId, rest?.name);
       /*
        * XATO TUZATILDI (2026-10): ilgari `o.paymentMethod` o'qilardi —
        * u har bir restoran bo'lagida YO'Q (singleOrderSchema'da bunday
