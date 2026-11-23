@@ -1,3 +1,4 @@
+import { Types } from 'mongoose';
 import { asyncHandler } from '../middleware/error.js';
 import { Order } from '../models/Order.js';
 import { Table, DineInSession, DineInConfig } from '../models/DineIn.js';
@@ -238,7 +239,8 @@ export const dineInOrderController = {
     const today = await Order.aggregate([
       {
         $match: {
-          waiterId: req.waiterId,
+          // aggregate() turni o'girmaydi: JWT'dagi string ID bilan hech narsa topilmasdi (2026-11-23 audit)
+          waiterId: new Types.ObjectId(String(req.waiterId)),
           status: { $ne: 'cancelled' },
           createdAt: { $gte: todayStart },
         },
