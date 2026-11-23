@@ -11,7 +11,7 @@ import { activePins } from '../services/restaurantPins.js';
 import { Types } from 'mongoose';
 import { dishCategoryValues, discountExpr } from '../constants/dishCategories.js';
 import { NOT_STORE, ONLY_STORE, andWith, isStore } from '../services/storeRules.js';
-import { MARKET_CATEGORY_VALUES, MARKET_TO_CATALOG, marketCategoriesFor, marketSuggestion } from '../constants/marketCategories.js';
+import { MARKET_CATEGORIES, MARKET_CATEGORY_VALUES, MARKET_TO_CATALOG, marketCategoriesFor, marketSuggestion } from '../constants/marketCategories.js';
 import { CatalogProduct } from '../models/CatalogProduct.js';
 import { catalogDistrict, districtClause, districtKeySuffix, withDistrict } from '../services/catalogDistrict.js';
 
@@ -92,6 +92,50 @@ async function withCustomerPrices(dishes) {
 // Mijoz ro'yxati maydonlari (keshlangan so'rov va pin qo'shiladigan restoranlar uchun BIR XIL)
 // lat/lng — Market "Sizga yaqin do'konlar" saralashi uchun (restoran sahifasida ham ochiq ko'rsatiladi)
 const LIST_SELECT = 'name cuisine category kind rating reviewCount deliveryMin deliveryMax deliveryFee freeDeliveryThreshold minOrderAmount discount isFresh tint icon images imageUrl createdAt pickupEnabled deliveryEnabled cashEnabled delivery pickupDiscountPercent prepMinutes shopTypes openTime closeTime timezone workingDays lat lng';
+
+/*
+ * Do'kon menyusining bitta sahifasi (menuItems va menuIndex?preview uchun YAGONA manba —
+ * kesh kaliti bir xil, shuning uchun preview sahifasi va keyingi /menu/items so'rovi mos keladi).
+ */
+const MENU_PAGE = 24;
+const MENU_ITEM_FIELDS = 'restaurantId name description section category prepMinutes price oldPrice weight weightGram volume drinkType calories protein fat carbs ingredients optionGroups isHit isTrending isDiscounted tint icon images imageUrl isAvailable marketCategory unit packSize catalogProductId';
+
+function loadMenuPage(rid, section, cursor, limit) {
+  const key = `rest:${rid}:menu:items:${section || 'all'}:${cursor || '0'}:${limit}`;
+  return cached(key, TTL.dishes, async () => {
+    const filter = { restaurantId: new Types.ObjectId(rid), isAvailable: true };
+    if (section === '__sale__') filter.$expr = discountExpr();
+    else if (section === '__other__') filter.marketCategory = null;
+    else if (section) filter.marketCategory = section;
+    if (cursor) filter._id = { $lt: new Types.ObjectId(cursor) };
+
+    const docs = await Dish.find(filter)
+      .select(MENU_ITEM_FIELDS)
+      .sort({ _id: -1 })
+      .limit(limit + 1)
+      .lean();
+    const hasMore = docs.length > limit;
+    const page = hasMore ? docs.slice(0, limit) : docs;
+    const items = await withCustomerPrices(page);
+    return { items, hasMore, nextCursor: hasMore ? String(page[page.length - 1]._id) : null };
+  });
+}
+
+/**
+ * Bo'limlar ilovada ko'rinadigan tartib (lakmago-client RestaurantPage `sections` bilan bir xil):
+ * chegirmalar → MARKET_CATEGORIES tartibi → ro'yxatda yo'q kalitlar → kategoriyasizlar.
+ */
+export function previewOrder(index) {
+  const byKey = new Map((index.sections || []).map((s) => [s.key, s.count]));
+  const out = [];
+  if (index.sale > 0) out.push('__sale__');
+  for (const c of MARKET_CATEGORIES) {
+    if (byKey.get(c.value) > 0) { out.push(c.value); byKey.delete(c.value); }
+  }
+  byKey.forEach((n, k) => { if (k !== '__other__' && n > 0) out.push(k); });
+  if (byKey.get('__other__') > 0) out.push('__other__');
+  return out;
+}
 
 export const restaurantController = {
   // GET /api/restaurants?category=milliy&cursor=<createdAt>&limit=20
@@ -454,6 +498,22 @@ export const restaurantController = {
         sections: rows.map((r) => ({ key: r._id || '__other__', count: r.count })),
       };
     });
+
+    /*
+     * ?preview=N (1..6) — birinchi N ta bo'limning BIRINCHI SAHIFASI shu javobning o'zida
+     * (sekin internetda indeks → har bo'lim alohida so'rov zanjiri o'rniga bitta so'rov).
+     * Tartib ilovadagi bilan bir xil (previewOrder). Sahifa menuItems bilan AYNAN bir xil
+     * (bir xil kesh kaliti) — ilova uni o'sha bo'limning 1-sahifasi sifatida ishlatadi.
+     * Parametr bo'lmasa javob avvalgidek (eski ilovalar).
+     */
+    const previewN = Math.min(Math.max(Number.parseInt(req.query.preview, 10) || 0, 0), 6);
+    if (previewN > 0) {
+      const keys = previewOrder(data).slice(0, previewN);
+      const pages = await Promise.all(keys.map((k) => loadMenuPage(rid, k, '', MENU_PAGE).catch(() => null)));
+      const preview = {};
+      keys.forEach((k, i) => { if (pages[i]) preview[k] = pages[i]; });
+      return res.json({ ...data, preview, previewLimit: MENU_PAGE });
+    }
     res.json(data);
   }),
 
@@ -469,25 +529,7 @@ export const restaurantController = {
     const rawLimit = Number.parseInt(req.query.limit, 10);
     const limit = Number.isFinite(rawLimit) ? Math.min(Math.max(rawLimit, 1), 48) : 24;
 
-    const key = `rest:${rid}:menu:items:${section || 'all'}:${cursor || '0'}:${limit}`;
-    const data = await cached(key, TTL.dishes, async () => {
-      const filter = { restaurantId: new Types.ObjectId(rid), isAvailable: true };
-      if (section === '__sale__') filter.$expr = discountExpr();
-      else if (section === '__other__') filter.marketCategory = null;
-      else if (section) filter.marketCategory = section;
-      if (cursor) filter._id = { $lt: new Types.ObjectId(cursor) };
-
-      const docs = await Dish.find(filter)
-        .select('restaurantId name description section category prepMinutes price oldPrice weight weightGram volume drinkType calories protein fat carbs ingredients optionGroups isHit isTrending isDiscounted tint icon images imageUrl isAvailable marketCategory unit packSize catalogProductId')
-        .sort({ _id: -1 })
-        .limit(limit + 1)
-        .lean();
-      const hasMore = docs.length > limit;
-      const page = hasMore ? docs.slice(0, limit) : docs;
-      const items = await withCustomerPrices(page);
-      return { items, hasMore, nextCursor: hasMore ? String(page[page.length - 1]._id) : null };
-    });
-    res.json(data);
+    res.json(await loadMenuPage(rid, section, cursor, limit));
   }),
 
   // GET /api/restaurants/:id/orders  (restoran paneli uchun)
