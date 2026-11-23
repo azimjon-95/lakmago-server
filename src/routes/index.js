@@ -181,6 +181,7 @@ router.get('/panel/me', auth, requireRole('restaurant'), restaurantPanelControll
  */
 router.get('/panel/billing/summary', ...R, restaurantBillingController.summary);
 router.get('/panel/billing/daily', ...R, restaurantBillingController.daily);
+router.get('/panel/billing/orders', ...R, restaurantBillingController.orders);
 router.get('/panel/billing/ledger', ...R, restaurantBillingController.ledger);
 router.patch('/panel/me', auth, requireRole('restaurant'), restaurantPanelController.updateProfile);
 router.patch('/panel/me/active', auth, requireRole('restaurant'), restaurantPanelController.toggleActive);

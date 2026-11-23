@@ -1,3 +1,4 @@
+import { Types } from 'mongoose';
 import { asyncHandler } from '../middleware/error.js';
 import { Table, DineInSession, TableRequest, DineInConfig } from '../models/DineIn.js';
 import { Order } from '../models/Order.js';
@@ -397,7 +398,8 @@ export const dineInLiveController = {
     const orders = await Order.aggregate([
       {
         $match: {
-          restaurantId: req.restaurantId,
+          // aggregate() turni o'girmaydi: string ID ObjectId maydonga hech qachon mos kelmasdi (2026-11-23 audit)
+          restaurantId: new Types.ObjectId(String(req.restaurantId)),
           waiterId: { $in: ids },
           status: { $ne: 'cancelled' },
           createdAt: { $gte: from, $lte: to },

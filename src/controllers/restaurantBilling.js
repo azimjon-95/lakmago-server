@@ -1,10 +1,13 @@
 import { asyncHandler } from '../middleware/error.js';
-import {
-  getRestaurantOrderStats,
-  getRestaurantDailyLedger,
-  getRestaurantPendingPayout,
-} from '../services/billing.js';
 import { Ledger } from '../models/Ledger.js';
+import {
+  buildRestaurantSummary,
+  buildRestaurantDaily,
+  buildRestaurantOrderList,
+  reportPeriod,
+  restaurantLedgerView,
+  toOid,
+} from '../services/restaurantReport.js';
 
 /*
  * ═══════════════════════════════════════════════════════════
@@ -17,80 +20,60 @@ import { Ledger } from '../models/Ledger.js';
  * bilan birga, routes/index.js). Ya'ni restoran A hech qanday
  * so'rov bilan restoran B ning moliyaviy ma'lumotini so'ray
  * olmaydi — buni token almashtirib bo'lmaydi.
+ *
+ * Hisob-kitob — services/restaurantReport.js (2026-11-23 audit:
+ * eski aggregate'lar string ID sababli hech narsa topmasdi).
+ * Sana: `from`/`to` — "YYYY-MM-DD" (Toshkent kuni, ikkala chegara
+ * kiradi). Noto'g'ri sana → 400 (PeriodError).
  * ═══════════════════════════════════════════════════════════
  */
 
 export const restaurantBillingController = {
   /**
-   * GET /api/panel/billing/summary?from=&to=
+   * GET /api/panel/billing/summary?from=&to=   (bo'sh — bugun)
    *
-   * Bosh sahifa uchun bitta chaqiruvda hammasi:
-   *   - buyurtmalar soni (jami, naqd, karta) va summalari
-   *   - balans (musbat = LokmaGo qarzdor, manfiy = restoran qarzdor)
-   *   - jami hozirgacha o'tkazilgan summa
-   *
-   * `from`/`to` berilmasa — BUGUN.
+   *   orders  — davrda YETKAZILGAN buyurtmalar: soni, naqd/karta,
+   *             yetkazish/olib ketish/zal, top taomlar, bekorlar
+   *   finance — shu buyurtmalar bo'yicha taom savdosi, restoran
+   *             komissiyasi, mijoz xizmat haqi, ulush, naqdda LokmaGo
+   *             qismi, karta ulushi, davrdagi o'tkazmalar
+   *   payout  — UMUMIY balans (davrga bog'liq emas), oxirgi o'tkazma
    */
   summary: asyncHandler(async (req, res) => {
-    const restaurantId = req.restaurantId;
-    const { from, to } = req.query;
-
-    const [orders, payout] = await Promise.all([
-      getRestaurantOrderStats(restaurantId, from, to),
-      getRestaurantPendingPayout(restaurantId),
-    ]);
-
-    res.json({ orders, payout });
+    res.json(await buildRestaurantSummary(req.restaurantId, req.query));
   }),
 
-  /**
-   * GET /api/panel/billing/daily?from=&to=
-   *
-   * Kunlik jadval — "qachon qancha o'tkazildi" ro'yxati.
-   * Standart oraliq: shu oyning boshidan bugungacha (bitta
-   * kun emas, chunki jadval tabiiy ravishda bir necha kunni
-   * qamrab ko'rsatilishi kutiladi — 'summary' esa bitta kun
-   * uchun).
-   */
+  /** GET /api/panel/billing/daily?from=&to=   (bo'sh — shu oy) */
   daily: asyncHandler(async (req, res) => {
-    const restaurantId = req.restaurantId;
-    let { from, to } = req.query;
+    res.json(await buildRestaurantDaily(req.restaurantId, req.query));
+  }),
 
-    if (!from && !to) {
-      const now = new Date();
-      from = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
-      to = now.toISOString();
-    }
-
-    const rows = await getRestaurantDailyLedger(restaurantId, from, to);
-    res.json(rows);
+  /** GET /api/panel/billing/orders?from=&to=&limit=   (bo'sh — bugun) */
+  orders: asyncHandler(async (req, res) => {
+    res.json(await buildRestaurantOrderList(req.restaurantId, req.query));
   }),
 
   /**
    * GET /api/panel/billing/ledger?from=&to=&type=&limit=
    *
-   * Batafsil jurnal — har bir yozuv alohida qatorda. Restoran
-   * "aynan qaysi buyurtma uchun bu summa" deb so'rasa shu yerdan
-   * ko'radi. LokmaGo admin panelidagi /admin/billing/ledger bilan
-   * bir xil mantiq, farqi: restaurantId SO'ROVDAN emas, TOKEN'dan.
+   * Batafsil jurnal — har bir yozuv alohida qatorda (masalan
+   * type=payout — o'tkazmalar tarixi). `meta` restoranga
+   * CHIQMAYDI (LokmaGo sof daromadi, Click haqi) — faqat izoh.
    */
   ledger: asyncHandler(async (req, res) => {
-    const filter = { restaurantId: req.restaurantId };
-    if (req.query.type) filter.type = req.query.type;
+    const filter = { restaurantId: toOid(req.restaurantId) };
+    if (req.query.type) filter.type = String(req.query.type);
     if (req.query.from || req.query.to) {
-      filter.createdAt = {};
-      if (req.query.from) filter.createdAt.$gte = new Date(req.query.from);
-      if (req.query.to) filter.createdAt.$lte = new Date(req.query.to);
+      filter.createdAt = reportPeriod(req.query).period.cond;
     }
 
     const limit = Math.min(Number(req.query.limit) || 100, 300);
     const items = await Ledger.find(filter)
-      .populate('orderId', 'total status paymentMethod')
+      .populate('orderId', 'total status paymentMethod dailyNumber')
       .sort({ createdAt: -1 })
       .limit(limit)
-      .select('-createdBy')   // admin ID'si restoranga tegishli emas
       .lean();
 
-    res.json(items);
+    res.json(items.map(restaurantLedgerView));
   }),
 };

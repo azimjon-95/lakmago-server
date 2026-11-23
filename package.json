@@ -73,6 +73,7 @@
     "test:backup-resilience": "node tests/db-backup-resilience.test.mjs",
     "test:tg-link": "node tests/tg-link-login.test.mjs",
     "test:restaurant-app": "node tests/restaurant-app.test.mjs",
+    "test:restaurant-report": "node tests/restaurant-report.test.mjs",
     "test:road-distance": "node tests/delivery-road-distance.test.mjs",
     "test:catalog-counts": "node tests/catalog-counts.test.mjs",
     "test:catalog-cache": "node --test tests/catalog-cache.test.mjs",
