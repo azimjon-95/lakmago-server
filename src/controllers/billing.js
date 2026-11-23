@@ -9,10 +9,6 @@ import { User } from '../models/User.js';
 import { orderLabel } from '../services/orderNumber.js';
 import { canAccessPage } from '../config/permissions.js';
 import { resolvePeriod, deliveredWindow, paymentGroupFilter } from '../services/billingPeriod.js';
-import {
-  buildRestaurantWeeks, buildWeekIndex, weekStartOf, isWeekStart,
-  BALANCE_LEDGER_TYPES, WEEK_TZ, WEEK_STARTS_ON,
-} from '../services/weeklySettlement.js';
 
 /*
  * ═══ CLICK ULUSHI ═══
@@ -233,59 +229,6 @@ export const billingController = {
     }));
   }),
 
-  /*
-   * GET /api/admin/billing/weeks[?restaurantId=]
-   *
-   * Haftalik ko'rinish (services/weeklySettlement.js) — FAQAT O'QIYDI.
-   * Mavjud hisobot javoblari (overview, restaurants) o'zgarmaydi; bu ular ustidagi
-   * qulaylik: qaysi hafta to'langan, qaysi haftada LokmaGo yoki restoran qarzi qolgan.
-   *
-   * `drift` — Restaurant.balance va jurnal bo'yicha balans farqi. Yashirilmaydi:
-   * haftalar jurnaldan hisoblanadi, "To'lash" esa Restaurant.balance bilan cheklangan.
-   */
-  weeks: asyncHandler(async (req, res) => {
-    const rid = req.query.restaurantId;
-    if (rid !== undefined && !isObjectId(rid)) return res.status(400).json({ error: 'Noto‘g‘ri restoran ID' });
-
-    const now = new Date();
-    const rows = await Ledger.find({
-      restaurantId: rid || { $ne: null },
-      type: { $in: BALANCE_LEDGER_TYPES },
-    })
-      .select('restaurantId type amount createdAt isCash meta.note meta.weekStart')
-      .sort({ createdAt: 1, _id: 1 })
-      .limit(500000)
-      .lean();
-
-    const byRestaurant = new Map();
-    for (const l of rows) {
-      const k = String(l.restaurantId);
-      if (!byRestaurant.has(k)) byRestaurant.set(k, []);
-      byRestaurant.get(k).push(l);
-    }
-
-    const restaurants = await Restaurant.find(rid ? { _id: rid } : {}).select('name balance').lean();
-    const toT = (v) => Math.round((Number(v) || 0) * 100);
-    const result = restaurants.map((r) => {
-      const built = buildRestaurantWeeks(byRestaurant.get(String(r._id)) || [], { now });
-      return {
-        _id: r._id,
-        name: r.name,
-        storedBalance: r.balance || 0,
-        driftAmount: (toT(r.balance) - toT(built.ledgerBalance)) / 100,
-        ...built,
-      };
-    });
-
-    res.json({
-      timezone: WEEK_TZ,
-      weekStartsOn: WEEK_STARTS_ON,
-      currentWeek: weekStartOf(now),
-      weeks: buildWeekIndex(result, { now }),
-      restaurants: result,
-    });
-  }),
-
   // GET /api/admin/billing/ledger — batafsil jurnal
   ledger: asyncHandler(async (req, res) => {
     const filter = {};
@@ -445,20 +388,10 @@ export const billingController = {
        * unique kalitiga aylantiradi.
        */
       idempotencyKey: z.string().min(8).max(100),
-      /*
-       * Ixtiyoriy: to'lov QAYSI HAFTA uchun (dushanba, YYYY-MM-DD). Balans va jurnal summasiga
-       * ta'sir qilmaydi — faqat haftalik ko'rinishda shu haftaga birinchi navbatda biriktiriladi.
-       * Berilmasa — eng eski ochiq haftadan (avvalgi xulq).
-       */
-      weekStart: z.string().optional(),
     });
     const parsed = schema.safeParse(req.body);
     if (!parsed.success) {
       return res.status(400).json({ error: 'Noto‘g‘ri ma‘lumot' });
-    }
-    const { weekStart } = parsed.data;
-    if (weekStart !== undefined && (!isWeekStart(weekStart) || weekStart > weekStartOf(new Date()))) {
-      return res.status(400).json({ error: 'Hafta noto‘g‘ri (dushanba sanasi, kelajakda emas)' });
     }
 
     try {
@@ -468,7 +401,6 @@ export const billingController = {
         req.userId,
         parsed.data.note,
         parsed.data.idempotencyKey,
-        weekStart ? { weekStart } : {},
       );
       res.json(result);
     } catch (e) {

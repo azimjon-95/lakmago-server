@@ -32,7 +32,6 @@
     "test:support-group": "node tests/support-group.test.mjs",
     "test:finance": "node tests/finance-accountant.test.mjs",
     "test:finance-core": "node tests/finance-core.test.mjs",
-    "test:finance-weekly": "node tests/finance-weekly.test.mjs",
     "test:finance-concurrency": "node tests/finance-concurrency.test.mjs",
     "test:server-pricing": "node tests/order-server-pricing.test.mjs",
     "test:paynet-ledger": "node tests/paynet-ledger.test.mjs",

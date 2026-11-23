@@ -865,7 +865,7 @@ async function recordLegacyRefundCore(order, provider, transactionId, opts) {
  * darajasida rad etiladi — frontenddagi "disabled tugma" ga
  * ishonilmaydi (TZ 17-band aynan shuni talab qildi).
  */
-export async function recordPayout(restaurantId, amount, adminId, note = '', idempotencyKey, { weekStart = null } = {}) {
+export async function recordPayout(restaurantId, amount, adminId, note = '', idempotencyKey) {
   if (!idempotencyKey) {
     throw new Error('idempotencyKey majburiy — takroriy to‘lovdan himoya uchun');
   }
@@ -908,7 +908,7 @@ export async function recordPayout(restaurantId, amount, adminId, note = '', ide
       status: 'PROCESSING',
       idempotencyKey,
       bankProvider: 'manual',
-      snapshot: { ...destinationSnapshot, note, confirmedBy: adminId || null, ...(weekStart ? { weekStart } : {}) },
+      snapshot: { ...destinationSnapshot, note, confirmedBy: adminId || null },
     });
   } catch (e) {
     if (e?.code === 11000) {
@@ -985,8 +985,6 @@ export async function recordPayout(restaurantId, amount, adminId, note = '', ide
         meta: {
           note: note || 'Bank hisobiga o‘tkazildi',
           ...(deducted > 0 ? { promoDebtDeducted: deducted } : {}),
-          // Haftalik ko'rinish uchun: qaysi haftaga to'langan (summaga ta'sir qilmaydi)
-          ...(weekStart ? { weekStart } : {}),
         },
       }], opts);
     }

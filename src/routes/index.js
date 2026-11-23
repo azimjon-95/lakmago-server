@@ -608,7 +608,6 @@ router.get('/maps/delivery-quote', mapsController.deliveryQuote);
 router.get('/admin/billing/overview', ...AS('billing'), billingController.overview);
 router.get('/admin/billing/restaurants', ...AS('billing'), billingController.byRestaurant);
 router.get('/admin/billing/ledger', ...AS('billing'), billingController.ledger);
-router.get('/admin/billing/weeks', ...AS('billing'), billingController.weeks);
 router.get('/admin/billing/restaurant/:id', ...AS('billing'), billingController.restaurantSummary);
 // "Naqd: N ta / Karta: N ta" ortidagi buyurtmalar (taom, yetkazish, jami)
 router.get('/admin/billing/restaurant/:id/orders', ...AS('billing'), billingController.restaurantOrders);
