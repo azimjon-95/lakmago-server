@@ -128,6 +128,16 @@ const ledgerSchema = new Schema(
 
     // Kim yaratdi (admin qo'lda qilsa)
     createdBy: { type: Schema.Types.ObjectId, ref: 'Admin', default: null },
+
+    /*
+     * ═══ POSTING KALITI — TAKRORIY YOZUVDAN BAZA DARAJASIDA HIMOYA (audit F-02, F-19, F-21) ═══
+     * Har bir avtomatik moliyaviy yozuv deterministik kalit oladi, masalan:
+     *   settle:<orderId>:commission · settle:<orderId>:restaurant_due · payment_in:<orderId>
+     *   refund:<orderId>:<seq>:refund · payout:<payoutId> · courier:<orderId>:courier_earning
+     * Unique (partial) indeks: bir xil kalit bilan IKKINCHI yozuv baza tomonidan rad etiladi — "avval tekshir,
+     * keyin yoz" poygasiga ishonilmaydi. Eski yozuvlarda maydon yo'q (indeksga kirmaydi), ular o'zgartirilmaydi.
+     */
+    postingKey: { type: String, default: undefined },
   },
   { timestamps: true },
 );
@@ -143,5 +153,10 @@ ledgerSchema.index({ restaurantId: 1, type: 1, createdAt: -1 });
  * yuboradi, ko'p restoran bo'lganda sekin ishlamasligi kerak.
  */
 ledgerSchema.index({ restaurantId: 1, createdAt: -1, type: 1, isCash: 1 });
+
+ledgerSchema.index(
+  { postingKey: 1 },
+  { unique: true, partialFilterExpression: { postingKey: { $type: 'string' } }, name: 'uniq_postingKey' },
+);
 
 export const Ledger = model('Ledger', ledgerSchema);

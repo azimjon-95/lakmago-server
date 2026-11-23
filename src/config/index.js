@@ -561,6 +561,10 @@ export async function connectDB() {
   try {
     await mongoose.connect(config.mongoUri);
     console.log('✓ MongoDB ulandi');
+    // Moliyaviy yozuvlar arxitekturasi HAQIQIY baza turiga qarab tanlanadi (services/financeTx.js) — log'da ko'rinsin
+    import('../services/financeTx.js')
+      .then(async (m) => console.log(`[finance-tx] baza: ${await m.detectTopology()} · tranzaksiya: ${(await m.transactionsSupported()) ? 'HA' : "YO'Q"}`))
+      .catch((e) => console.error('[finance-tx]', e.message));
   } catch (err) {
     console.error('✗ MongoDB ulanish xatosi:', err);
     process.exit(1);

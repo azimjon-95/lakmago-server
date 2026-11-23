@@ -100,6 +100,27 @@ const orderSchema = new Schema(
      * buyurtmalar (eski, snapshot'dan oldingi) hisobotlarda
      * `legacy` deb ajratiladi va avtomatik migratsiya QILINMAYDI.
      */
+    /*
+     * ═══ MOLIYAVIY HOLAT (audit F-01…F-03, F-10) ═══
+     * financeSettlement — settleOrder ATOMIK claim'i: bir buyurtma faqat BIR marta hisob-kitob qilinadi.
+     *   SETTLING — claim olindi (tranzaksiyasiz bazada jarayon yarim qolsa shu holatda qoladi → finance:audit);
+     *   SETTLED  — yozuvlar va balans yangilandi. Eski buyurtmalarda maydon yo'q (restaurant_due yozuvi bo'yicha aniqlanadi).
+     * financeRefund — qaytarishlar REZERVI (seq bo'yicha CAS): bir vaqtdagi qaytarishlar asl summadan oshmaydi.
+     */
+    financeSettlement: {
+      state: { type: String, enum: ['SETTLING', 'SETTLED'], default: undefined },
+      claimedAt: Date,
+      settledAt: Date,
+      mode: { type: String, enum: ['tx', 'no-tx', 'legacy-ledger'], default: undefined },
+    },
+    financeRefund: {
+      seq: { type: Number, default: undefined },
+      foodBaseTiyin: Number,        // kumulyativ qaytarilgan taom bazasi
+      deliveryRefunded: Boolean,
+      totalSom: Number,             // kumulyativ mijozga qaytarilgan (so'm)
+      legacyFull: Boolean,          // snapshot'siz eski buyurtma to'liq qaytarildi
+    },
+
     finance: {
       model: { type: String, enum: ['v2'], default: undefined },
       currency: { type: String, default: 'UZS' },
@@ -110,6 +131,8 @@ const orderSchema = new Schema(
       discountAmount: Number,
       deliveryMarkupPercent: Number,
       deliveryMarkupAmount: Number,
+      // 'lines' — ustama/xizmat haqi menyu pozitsiyalaridan (mijoz ko'rgan narx = to'lov); yo'q/'percent' — eski hisob
+      feeRounding: { type: String, enum: ['lines', 'percent'], default: undefined },
       foodSubtotal: Number,                // komissiya BAZASI
       deliveryFee: Number,
 

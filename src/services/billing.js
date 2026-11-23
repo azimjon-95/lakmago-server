@@ -7,6 +7,7 @@ import { Payout } from '../models/Payout.js';
 import { getSettings } from '../models/Settings.js';
 import { getIO } from '../sockets/io.js';
 import { tiyinToSom } from './orderFinance.js';
+import { runFinanceTx, isDuplicateKey } from './financeTx.js';
 
 /**
  * Hisob-kitob tizimi.
@@ -333,21 +334,31 @@ export function calcCommission(subtotal, percent, mode) {
  * Restoran buyurtmani bajarmagunicha pul "yo'lda" hisoblanadi.
  */
 export async function recordPayment(order, provider, transactionId = null) {
-  // Takroriy yozuvdan himoya
+  // Tezkor yo'l: allaqachon yozilgan bo'lsa (eski yozuvlarda postingKey yo'q — shu tekshiruv ularni ham qamraydi)
   const exists = await Ledger.findOne({ orderId: order._id, type: 'payment_in' });
   if (exists) return null;
 
-  await Ledger.create({
-    type: 'payment_in',
-    amount: order.total,
-    orderId: order._id,
-    restaurantId: order.restaurantId,
-    userId: order.userId,
-    provider,
-    isCash: provider === 'cash',
-    transactionId,
-    meta: { orderTotal: order.total, note: 'To‘lov qabul qilindi' },
-  });
+  /*
+   * Haqiqiy himoya — unique postingKey (audit F-19): ikki webhook/yo'l bir vaqtda kelsa ham IKKINCHI yozuv
+   * baza tomonidan rad etiladi ("findOne → create" poygasiga ishonilmaydi).
+   */
+  try {
+    await Ledger.create({
+      type: 'payment_in',
+      amount: order.total,
+      orderId: order._id,
+      restaurantId: order.restaurantId,
+      userId: order.userId,
+      provider,
+      isCash: provider === 'cash',
+      transactionId,
+      postingKey: `payment_in:${order._id}`,
+      meta: { orderTotal: order.total, note: 'To‘lov qabul qilindi' },
+    });
+  } catch (e) {
+    if (isDuplicateKey(e)) return null;
+    throw e;
+  }
 
   getIO()?.to('admin').emit('billing:update', { orderId: String(order._id) });
   return { recorded: order.total };
@@ -407,47 +418,88 @@ export async function finalizeCashPayment(orderId) {
 }
 
 export async function settleOrder(orderId) {
-  const order = await Order.findById(orderId);
-  if (!order) return null;
+  const exists = await Order.exists({ _id: orderId });
+  if (!exists) return null;
 
   // Naqd buyurtma — yakunlangan bo'lsa avtomatik "to'langan" (komissiya hisobidan MUSTAQIL)
-  await finalizeCashPayment(order._id).catch((e) => console.error('[billing] finalizeCashPayment:', e.message));
+  await finalizeCashPayment(orderId).catch((e) => console.error('[billing] finalizeCashPayment:', e.message));
 
   /*
-   * LokmaGo kuryeri balansi — restoran hisobidan MUSTAQIL (o'z takror-himoyasi bor: lokmaCourier.settledAt).
+   * LokmaGo kuryeri balansi — restoran hisobidan MUSTAQIL (o'z takror-himoyasi bor: lokmaCourier.settledAt + postingKey).
    * "Yetkazildi"ning BARCHA yo'llari (kuryer, mijoz "Oldim", avtomatik yakunlash) shu funksiyadan o'tadi.
    */
-  if (order.courierParty === 'lokma') {
+  const head = await Order.findById(orderId).select('courierParty').lean();
+  if (head?.courierParty === 'lokma') {
     const { settleCourier } = await import('./courierPool.js');
-    await settleCourier(order._id).catch((e) => console.error('[billing] settleCourier:', e.message));
+    await settleCourier(orderId).catch((e) => console.error('[billing] settleCourier:', e.message));
   }
 
-  // Takroriy hisob-kitobdan himoya
-  const already = await Ledger.findOne({ orderId: order._id, type: 'restaurant_due' });
-  if (already) return null;
+  const result = await runFinanceTx((session) => settleOrderCore(orderId, session));
+  if (!result) return null;
 
-  const restaurant = await Restaurant.findById(order.restaurantId);
+  // ═══ Yon ta'sirlar — FAQAT muvaffaqiyatli hisob-kitobdan keyin, tranzaksiyadan TASHQARIDA ═══
+  if (result.userId) {
+    const { grantBonus } = await import('./promotions.js');
+    grantBonus(result.userId, result.restaurantId, result.orderTotal)
+      .catch((e) => console.error('[bonus]', e.message));
+  }
+  getIO()?.to('admin').emit('billing:update', {
+    restaurantId: String(result.restaurantId),
+    balance: result.balance,
+  });
+
+  const { commission, restaurantShare, percent, mode, isCash, bonusCompensation } = result;
+  return { commission, restaurantShare, percent, mode, isCash, bonusCompensation };
+}
+
+/*
+ * ═══ HISOB-KITOB YADROSI — bitta moliyaviy birlik (audit F-01, F-02, F-03) ═══
+ *
+ * ILGARI: `findOne(restaurant_due)` → yozuvlar → `restaurant.balance = eski + ulush; save()`.
+ *   • ikki "yetkazildi" yo'li bir vaqtda kelsa — ikkalasi ham tekshiruvdan o'tib, komissiya va ulush IKKI marta yozilardi;
+ *   • save() ESKI balans ustidan yozardi — shu oraliqda bajarilgan payout ($inc −X) o'chib ketardi va X qayta
+ *     to'lanishi mumkin edi; bir restoranning ikki buyurtmasi bir vaqtda yakunlansa bitta ulush yo'qolardi.
+ *
+ * ENDI:
+ *   1) Order.financeSettlement ATOMIK claim (findOneAndUpdate, state yo'q bo'lsa) — faqat BITTA so'rov o'tadi;
+ *   2) har bir yozuv deterministik postingKey bilan (unique indeks — ikkinchi yozuv baza darajasida rad etiladi);
+ *   3) balans faqat `$inc` (o'qib-qayta-yozish yo'q);
+ *   4) replica set'da 1–3 bitta tranzaksiyada (hammasi yoki hech biri), standalone'da ketma-ket.
+ * Hisob formulasi va yozuvlar tarkibi O'ZGARMAGAN.
+ */
+async function settleOrderCore(orderId, session) {
+  const opts = session ? { session } : {};
+  const txMode = session ? 'tx' : 'no-tx';
+
+  // 1) CLAIM
+  const order = await Order.findOneAndUpdate(
+    { _id: orderId, 'financeSettlement.state': { $exists: false } },
+    { $set: { 'financeSettlement.state': 'SETTLING', 'financeSettlement.claimedAt': new Date(), 'financeSettlement.mode': txMode } },
+    { new: true, ...opts },
+  );
+  if (!order) return null;   // boshqa so'rov allaqachon olgan yoki hisob-kitob qilingan
+
+  // Shu o'zgarishdan OLDIN hisob-kitob qilingan buyurtma (financeSettlement yo'q, lekin yozuv bor) — qayta yozilmaydi
+  const already = await Ledger.findOne({ orderId: order._id, type: 'restaurant_due' }, null, opts).lean();
+  if (already) {
+    await Order.updateOne({ _id: order._id }, {
+      $set: { 'financeSettlement.state': 'SETTLED', 'financeSettlement.settledAt': new Date(), 'financeSettlement.mode': 'legacy-ledger' },
+    }, opts);
+    return null;
+  }
+
+  const restaurant = await Restaurant.findById(order.restaurantId, null, opts).select('_id balance').lean();
   if (!restaurant) {
+    // Claim qaytariladi — restoran tiklansa qayta urinish mumkin bo'lsin
+    await Order.updateOne({ _id: order._id }, { $unset: { financeSettlement: 1 } }, opts);
     console.error(`[billing] Restoran topilmadi: ${order.restaurantId}`);
     return null;
   }
 
   /*
-   * ═══ KOMISSIYA MANBAI ═══
-   *
-   * YANGI buyurtmalarda hisob `order.finance` snapshot'idan
-   * o'qiladi — u buyurtma yaratilganda CommissionAgreement
-   * asosida muzlatilgan (services/orderFinance.js).
-   *
-   * ESKI buyurtmalarda (snapshot yo'q) avvalgi mantiq saqlanadi:
-   * ularni qayta hisoblash o'tmishdagi hisobotlarni o'zgartirib
-   * yuborardi. Ular `financeModel: 'legacy'` bilan belgilanadi.
-   *
-   * AUDITDA ANIQLANGAN XATO: `calcCommission` da `markup`
-   * rejimida `restaurantShare = subtotal` edi — ya'ni restoranga
-   * TO'LIQ summa yozilardi, komissiya esa hech kimdan
-   * ushlanmasdi. Yangi yo'lda bunday holat yo'q: payout har doim
-   * `foodSubtotal − restaurantCommission`.
+   * ═══ KOMISSIYA MANBAI ═══ (o'zgarmagan)
+   * YANGI buyurtmalarda hisob `order.finance` snapshot'idan o'qiladi (CommissionAgreement asosida muzlatilgan).
+   * ESKI buyurtmalarda (snapshot yo'q) avvalgi mantiq saqlanadi, `financeModel: 'legacy'` bilan belgilanadi.
    */
   const fin = order.finance && order.finance.model === 'v2' ? order.finance : null;
 
@@ -475,7 +527,8 @@ export async function settleOrder(orderId) {
       commissionAgreementId: fin.commissionAgreementId || null,
     };
   } else {
-    const resolved = await resolveCommission(restaurant);
+    const restDoc = await Restaurant.findById(order.restaurantId, null, opts).select('commissionPercent commissionMode').lean();
+    const resolved = await resolveCommission(restDoc || {});
     percent = resolved.percent;
     mode = resolved.mode;
     ({ commission, restaurantShare } = calcCommission(order.subtotal, percent, mode));
@@ -488,90 +541,51 @@ export async function settleOrder(orderId) {
   }
 
   /*
-   * RESTORAN naqdni o'zi oldimi. LokmaGo kuryeri yetkazgan naqd buyurtmada pulni KURYER olgan (uning balansiga yoziladi),
-   * restoranga taom ulushini LokmaGo to'laydi — restoran uchun bu KARTA buyurtmasidek (ulush +, komissiya qarzi emas).
-   * Hisobotlar Ledger.isCash bo'yicha ajratadi, shuning uchun bu yerda aynan RESTORAN nuqtai nazari yoziladi.
+   * RESTORAN naqdni o'zi oldimi. LokmaGo kuryeri yetkazgan naqd buyurtmada pulni KURYER olgan, restoranga taom
+   * ulushini LokmaGo to'laydi — restoran uchun bu KARTA buyurtmasidek (ulush +, komissiya qarzi emas).
    */
   const isCash = order.paymentMethod === 'cash' && order.courierParty !== 'lokma';
-  /*
-   * "Moliya" hisobotida Click/Paynet alohida ko'rsatilishi kerak
-   * (TZ talabi). Order.paymentMethod allaqachon aniq qiymatga
-   * ega — uni Ledger yozuviga ham qo'shamiz, faqat HISOBOT UCHUN,
-   * hisob-kitob FORMULASI o'zgarmaydi.
-   */
   const ledgerProvider = order.paymentMethod || null;
+  const key = (suffix) => `settle:${order._id}:${suffix}`;
 
-  // Komissiya yozuvi (bor bo'lsa)
+  const entries = [];
+  let balanceDelta = 0;
+
   if (commission > 0) {
-    await Ledger.create({
-      type: 'commission',
-      amount: commission,
-      orderId: order._id,
-      restaurantId: restaurant._id,
-      provider: ledgerProvider,
-      isCash,
+    entries.push({
+      type: 'commission', amount: commission, orderId: order._id, restaurantId: restaurant._id,
+      provider: ledgerProvider, isCash, postingKey: key('commission'),
       meta: { ...meta, note: `${percent}% · ${mode}${isCash ? ' · naqd' : ''}` },
     });
   }
 
   if (isCash) {
-    // NAQD: pul restoranda qoldi. Bizga faqat komissiya qarz.
-    // Balans manfiyga ketadi — keyingi karta to'lovlaridan yopiladi.
-    if (commission > 0) {
-      await Ledger.create({
-        type: 'restaurant_due',
-        amount: -commission,
-        orderId: order._id,
-        restaurantId: restaurant._id,
-        provider: ledgerProvider,
-        isCash,
-        meta: { ...meta, note: 'Naqd to‘lov — komissiya qarzi' },
-      });
-      restaurant.balance = (restaurant.balance || 0) - commission;
-    } else {
-      // Komissiya yo'q — hech kim hech kimga qarzdor emas
-      await Ledger.create({
-        type: 'restaurant_due',
-        amount: 0,
-        orderId: order._id,
-        restaurantId: restaurant._id,
-        provider: ledgerProvider,
-        isCash,
-        meta: { ...meta, note: 'Naqd to‘lov — komissiyasiz' },
-      });
-    }
-  } else {
-    // KARTA: pul bizda. Restoran ulushini balansga qo'shamiz.
-    await Ledger.create({
-      type: 'restaurant_due',
-      amount: restaurantShare,
-      orderId: order._id,
-      restaurantId: restaurant._id,
-      provider: ledgerProvider,
-      isCash,
-      meta,
+    // NAQD: pul restoranda qoldi. Bizga faqat komissiya qarz (balans manfiyga ketadi).
+    entries.push({
+      type: 'restaurant_due', amount: commission > 0 ? -commission : 0, orderId: order._id, restaurantId: restaurant._id,
+      provider: ledgerProvider, isCash, postingKey: key('restaurant_due'),
+      meta: { ...meta, note: commission > 0 ? 'Naqd to‘lov — komissiya qarzi' : 'Naqd to‘lov — komissiyasiz' },
     });
-    restaurant.balance = (restaurant.balance || 0) + restaurantShare;
+    if (commission > 0) balanceDelta -= commission;
+  } else {
+    // KARTA: pul bizda. Restoran ulushi balansga qo'shiladi.
+    entries.push({
+      type: 'restaurant_due', amount: restaurantShare, orderId: order._id, restaurantId: restaurant._id,
+      provider: ledgerProvider, isCash, postingKey: key('restaurant_due'), meta,
+    });
+    balanceDelta += restaurantShare;
   }
 
   /*
-   * ═══ LOKMAGO SOVG'A-BONUSI QOPLASH ═══
-   * Restoran buyurtma bilan mijozga BEPUL sovg'a (masalan 1 l Coca-Cola) berdi — uning puli LokmaGo
-   * hisobidan restoranga qoplanadi. Naqd ham, karta ham: har ikkala holatda restoran sovg'ani o'z
-   * zahirasidan bergan, shuning uchun balansi (+) ga o'zgaradi (naqdda — LokmaGo'ga qarzi kamayadi).
-   * Faqat YETKAZILGAN buyurtma uchun (settleOrder shunda chaqiriladi); `already` tekshiruvi tufayli
-   * ikki marta yozilmaydi. Summa buyurtma yaratilgan paytda MUZLATILGAN (qoida keyin o'zgarsa ham).
+   * ═══ LOKMAGO SOVG'A-BONUSI QOPLASH ═══ (o'zgarmagan) — restoran bergan bepul sovg'a puli LokmaGo hisobidan.
+   * Summa buyurtma yaratilgan paytda MUZLATILGAN.
    */
   const bonusCompensation = (order.bonusItems || []).reduce(
     (s, g) => s + (Number(g.reimburse) || 0) * (Number(g.quantity) || 0), 0);
   if (bonusCompensation > 0) {
-    await Ledger.create({
-      type: 'bonus_compensation',
-      amount: bonusCompensation,
-      orderId: order._id,
-      restaurantId: restaurant._id,
-      provider: ledgerProvider,
-      isCash,
+    entries.push({
+      type: 'bonus_compensation', amount: bonusCompensation, orderId: order._id, restaurantId: restaurant._id,
+      provider: ledgerProvider, isCash, postingKey: key('bonus_compensation'),
       meta: {
         note: `LokmaGo sovg‘a-bonusi: ${order.bonusItems.map((g) => `${g.quantity}× ${g.itemName}`).join(', ')}`,
         gifts: order.bonusItems.map((g) => ({
@@ -580,25 +594,29 @@ export async function settleOrder(orderId) {
         })),
       },
     });
-    restaurant.balance = (restaurant.balance || 0) + bonusCompensation;
+    balanceDelta += bonusCompensation;
   }
 
-  restaurant.totalOrders = (restaurant.totalOrders || 0) + 1;
-  await restaurant.save();
+  // 2) YOZUVLAR (unique postingKey)
+  await Ledger.insertMany(entries, { ordered: true, ...opts });
 
-  // Mijozga bonus — buyurtma yetkazilgandan keyin
-  if (order.userId) {
-    const { grantBonus } = await import('./promotions.js');
-    grantBonus(order.userId, restaurant._id, order.total)
-      .catch((e) => console.error('[bonus]', e.message));
-  }
+  // 3) BALANS — faqat atomik $inc
+  const updated = await Restaurant.findOneAndUpdate(
+    { _id: restaurant._id },
+    { $inc: { balance: balanceDelta, totalOrders: 1 } },
+    { new: true, projection: { balance: 1 }, ...opts },
+  ).lean();
 
-  getIO()?.to('admin').emit('billing:update', {
-    restaurantId: String(restaurant._id),
-    balance: restaurant.balance,
-  });
+  // 4) YAKUN
+  await Order.updateOne({ _id: order._id }, {
+    $set: { 'financeSettlement.state': 'SETTLED', 'financeSettlement.settledAt': new Date() },
+  }, opts);
 
-  return { commission, restaurantShare, percent, mode, isCash, bonusCompensation };
+  return {
+    commission, restaurantShare, percent, mode, isCash, bonusCompensation,
+    balance: updated?.balance, restaurantId: restaurant._id,
+    userId: order.userId || null, orderTotal: order.total,
+  };
 }
 
 /**
@@ -607,33 +625,70 @@ export async function settleOrder(orderId) {
  */
 export async function recordRefund(order, provider, transactionId = null, options = {}) {
   /*
-   * ═══ SNAPSHOT ASOSIDA QAYTARISH ═══
+   * ═══ SNAPSHOT ASOSIDA QAYTARISH ═══ (mantiq o'zgarmagan)
+   * `Order.finance` HECH QACHON o'zgartirilmaydi — qaytarish ALOHIDA teskari yozuv bo'lib tushadi.
+   * Eski (snapshot'siz) buyurtmalarda avvalgi mantiq: to'liq summa bir marta qaytariladi.
    *
-   * `Order.finance` HECH QACHON o'zgartirilmaydi — qaytarish
-   * ALOHIDA teskari yozuv bo'lib tushadi. Audit tarixida asl
-   * summa, qaytarilgan summa va qolgani ko'rinib turadi.
-   *
-   * Eski (snapshot'siz) buyurtmalarda avvalgi mantiq saqlanadi:
-   * to'liq summa qaytariladi.
+   * ═══ BIR VAQTDAGI QAYTARISHLAR (audit F-10) ═══
+   * ILGARI: avvalgi qaytarishlar `find` bilan o'qilib, keyin `create` qilinardi — ikki so'rov bir vaqtda kelsa
+   * ikkalasi ham "qolgan" summani ko'rib, jami asldan OSHIB qaytarilishi mumkin edi.
+   * ENDI: Order.financeRefund.seq bo'yicha CAS rezerv (findOneAndUpdate, filtrda joriy seq). Faqat bitta so'rov
+   * rezervni oladi; qolgani yangilangan holatni qayta o'qib hisoblaydi (qolgan 0 bo'lsa — hech narsa yozilmaydi).
+   * Yozuvlar unique postingKey bilan; replica set'da rezerv + yozuvlar + balans bitta tranzaksiyada.
    *
    * @param options.foodBaseRefundTiyin  qisman qaytarish summasi
    * @param options.refundDelivery       yetkazish ham qaytarilsinmi
    */
-  const fin = order.finance && order.finance.model === 'v2' ? order.finance : null;
-
-  // Avval qaytarilgan taom summasi — qisman qaytarishlar yig'indisi
-  const priorRefunds = await Ledger.find({ orderId: order._id, type: 'refund' })
-    .select('meta').lean();
-  const alreadyRefundedFoodBase = priorRefunds
-    .reduce((sum, l) => sum + (Number(l.meta?.refundedFoodBaseTiyin) || 0), 0);
-  // Yetkazish bo'linmaydi — bir marta qaytarilgan bo'lsa, qayta qaytarilmaydi
-  const deliveryAlreadyRefunded = priorRefunds.some((l) => l.meta?.deliveryRefunded === true);
-
-  // Eski buyurtma yoki to'liq qaytarish takrori — avvalgi himoya
-  if (!fin) {
-    if (priorRefunds.length) return null;
-    return recordLegacyRefund(order, provider, transactionId);
+  let res = REFUND_RETRY;
+  for (let attempt = 0; attempt < 8 && res === REFUND_RETRY; attempt += 1) {
+    res = await runFinanceTx((session) => recordRefundCore(order._id, provider, transactionId, options, session));
   }
+  if (res === REFUND_RETRY) {
+    console.error(`[billing] refund: ${order._id} — rezerv 8 urinishda olinmadi (juda ko'p parallel so'rov)`);
+    return null;
+  }
+  if (!res) return null;
+
+  getIO()?.to('admin').emit('billing:update', { restaurantId: String(res.restaurantId) });
+  return res.out;
+}
+
+const REFUND_RETRY = Symbol('refund-retry');
+
+async function recordRefundCore(orderId, provider, transactionId, options, session) {
+  const opts = session ? { session } : {};
+  const order = await Order.findById(orderId, null, opts).lean();
+  if (!order) return null;
+
+  const fin = order.finance && order.finance.model === 'v2' ? order.finance : null;
+  const state = Number.isFinite(order.financeRefund?.seq) ? order.financeRefund : null;
+  const casFilter = state
+    ? { _id: order._id, 'financeRefund.seq': state.seq }
+    : { _id: order._id, 'financeRefund.seq': { $exists: false } };
+
+  // Shu o'zgarishdan OLDIN yozilgan qaytarishlar (financeRefund yo'q) — jurnaldan
+  let prior = [];
+  if (!state) {
+    prior = await Ledger.find({ orderId: order._id, type: 'refund' }, null, opts).select('meta amount').lean();
+  }
+
+  // ═══ ESKI (snapshot'siz) buyurtma — to'liq, bir marta ═══
+  if (!fin) {
+    if (state?.legacyFull || prior.length) return null;
+    const reserved = await Order.findOneAndUpdate(casFilter, {
+      $set: { financeRefund: { seq: 1, legacyFull: true, totalSom: order.total } },
+    }, opts);
+    if (!reserved) return REFUND_RETRY;
+    return recordLegacyRefundCore(order, provider, transactionId, opts);
+  }
+
+  const alreadyFood = state ? Number(state.foodBaseTiyin) || 0
+    : prior.reduce((sum, l) => sum + (Number(l.meta?.refundedFoodBaseTiyin) || 0), 0);
+  const deliveryAlready = state ? Boolean(state.deliveryRefunded)
+    : prior.some((l) => l.meta?.deliveryRefunded === true);
+  const totalBefore = state ? Number(state.totalSom) || 0
+    : prior.reduce((sum, l) => sum + Math.abs(Number(l.amount) || 0), 0);
+  const seq = state ? state.seq : 0;
 
   const { computeRefund, validateRefund } = await import('./refund.js');
 
@@ -642,8 +697,8 @@ export async function recordRefund(order, provider, transactionId = null, option
     calc = computeRefund(fin, {
       foodBaseRefundTiyin: options.foodBaseRefundTiyin ?? null,
       refundDelivery: options.refundDelivery ?? null,
-      alreadyRefundedFoodBaseTiyin: alreadyRefundedFoodBase,
-      deliveryAlreadyRefunded,
+      alreadyRefundedFoodBaseTiyin: alreadyFood,
+      deliveryAlreadyRefunded: deliveryAlready,
     });
   } catch (e) {
     console.error('[billing] refund hisobi:', e.message);
@@ -660,8 +715,23 @@ export async function recordRefund(order, provider, transactionId = null, option
   }
 
   const refundSom = tiyinToSom(refund.totalCharged);
+  const nextSeq = seq + 1;
 
-  await Ledger.create({
+  // REZERV (CAS) — faqat bitta so'rov o'tadi
+  const reserved = await Order.findOneAndUpdate(casFilter, {
+    $set: {
+      financeRefund: {
+        seq: nextSeq,
+        foodBaseTiyin: alreadyFood + refund.foodBase,
+        deliveryRefunded: deliveryAlready || Boolean(calc.deliveryRefunded),
+        totalSom: totalBefore + refundSom,
+      },
+    },
+  }, opts);
+  if (!reserved) return REFUND_RETRY;
+
+  const key = (suffix) => `refund:${order._id}:${nextSeq}:${suffix}`;
+  const entries = [{
     type: 'refund',
     amount: -refundSom,
     orderId: order._id,
@@ -669,6 +739,7 @@ export async function recordRefund(order, provider, transactionId = null, option
     userId: order.userId,
     provider,
     transactionId,
+    postingKey: key('refund'),
     meta: {
       orderTotal: order.total,
       financeModel: 'v2',
@@ -683,106 +754,76 @@ export async function recordRefund(order, provider, transactionId = null, option
       remainingFoodBaseTiyin: remaining.foodBase,
       deliveryRefunded: calc.deliveryRefunded,
     },
-  });
+  }];
 
   /*
-   * Restoran qarzi teskari yoziladi — FAQAT qaytarilgan qism
-   * bo'yicha. Asl `restaurant_due` yozuvi o'zgartirilmaydi.
+   * Restoran qarzi teskari yoziladi — FAQAT qaytarilgan qism bo'yicha. Asl `restaurant_due` o'zgartirilmaydi.
+   * RESTORAN naqdni o'zi olganmi — settleOrder bilan AYNAN bir xil ta'rif (audit F-22).
    */
-  const settled = await Ledger.findOne({ orderId: order._id, type: 'restaurant_due' }).lean();
+  const settled = await Ledger.findOne({ orderId: order._id, type: 'restaurant_due' }, null, opts).lean();
+  const isCash = order.paymentMethod === 'cash' && order.courierParty !== 'lokma';
+  let reverseSom = 0;
   if (settled) {
-    const isCash = order.paymentMethod === 'cash';
-    /*
-     * Naqdda pul restoranda qolgan edi va biz faqat komissiyani
-     * qarz qilgandik (manfiy yozuv) — qaytarishda o'sha komissiya
-     * qarzi bekor qilinadi. Kartada esa restoran ulushi qaytariladi.
-     */
-    const reverseSom = isCash
+    // Naqdda biz faqat komissiyani qarz qilgandik — u bekor qilinadi. Kartada restoran ulushi qaytariladi.
+    reverseSom = isCash
       ? tiyinToSom(refund.lokmaGrossCommission)
       : -tiyinToSom(refund.restaurantPayout);
-
     if (reverseSom !== 0) {
-      await Ledger.create({
-        type: 'restaurant_due',
-        amount: reverseSom,
-        orderId: order._id,
-        restaurantId: order.restaurantId,
-        provider: order.paymentMethod || null,
-        isCash,
-        meta: {
-          financeModel: 'v2',
-          note: isFull ? 'Qaytarish — bekor qilindi' : 'Qisman qaytarish',
-        },
+      entries.push({
+        type: 'restaurant_due', amount: reverseSom, orderId: order._id, restaurantId: order.restaurantId,
+        provider: order.paymentMethod || null, isCash, postingKey: key('restaurant_due'),
+        meta: { financeModel: 'v2', note: isFull ? 'Qaytarish — bekor qilindi' : 'Qisman qaytarish' },
       });
-      await Restaurant.updateOne(
-        { _id: order.restaurantId },
-        { $inc: { balance: reverseSom } },
-      );
     }
   }
 
-  // Komissiya ham teskari yoziladi (LokmaGo daromadi kamayadi)
-  if (refund.lokmaGrossCommission > 0) {
-    await Ledger.create({
-      type: 'commission',
-      amount: -tiyinToSom(refund.lokmaGrossCommission),
-      orderId: order._id,
-      restaurantId: order.restaurantId,
-      provider: order.paymentMethod || null,
-      isCash: order.paymentMethod === 'cash',
+  /*
+   * Komissiya teskari — FAQAT hisob-kitob bo'lgan buyurtmada (audit F-05): yetkazishdan OLDIN bekor qilingan
+   * karta buyurtmasida komissiya hali yozilmagan, musbatsiz manfiy yozuv hisobotni buzardi.
+   */
+  if (settled && refund.lokmaGrossCommission > 0) {
+    entries.push({
+      type: 'commission', amount: -tiyinToSom(refund.lokmaGrossCommission), orderId: order._id,
+      restaurantId: order.restaurantId, provider: order.paymentMethod || null, isCash, postingKey: key('commission'),
       meta: { financeModel: 'v2', note: 'Qaytarish — komissiya bekor qilindi' },
     });
   }
 
-  getIO()?.to('admin').emit('billing:update', {
-    restaurantId: String(order.restaurantId),
-  });
+  await Ledger.insertMany(entries, { ordered: true, ...opts });
+  if (reverseSom !== 0) {
+    await Restaurant.updateOne({ _id: order.restaurantId }, { $inc: { balance: reverseSom } }, opts);
+  }
 
   return {
-    refunded: refundSom,
-    isFull,
-    remainingFoodBaseTiyin: remaining.foodBase,
-    refundFinance: refund,
+    restaurantId: order.restaurantId,
+    out: { refunded: refundSom, isFull, remainingFoodBaseTiyin: remaining.foodBase, refundFinance: refund },
   };
 }
 
 /**
- * Eski (snapshot'siz) buyurtmalar uchun qaytarish.
- * Avvalgi xatti-harakat — o'zgartirilmagan.
+ * Eski (snapshot'siz) buyurtmalar uchun qaytarish — avvalgi xatti-harakat (to'liq summa).
+ * Rezerv chaqiruvchida olingan; balans endi `$inc` bilan (audit F-01: save() eski balans ustidan yozardi).
  */
-async function recordLegacyRefund(order, provider, transactionId) {
-  await Ledger.create({
-    type: 'refund',
-    amount: -order.total,
-    orderId: order._id,
-    restaurantId: order.restaurantId,
-    userId: order.userId,
-    provider,
-    transactionId,
+async function recordLegacyRefundCore(order, provider, transactionId, opts) {
+  const key = (suffix) => `refund:${order._id}:1:${suffix}`;
+  const entries = [{
+    type: 'refund', amount: -order.total, orderId: order._id, restaurantId: order.restaurantId, userId: order.userId,
+    provider, transactionId, postingKey: key('refund'),
     meta: { orderTotal: order.total, financeModel: 'legacy', note: 'Mijozga qaytarildi' },
-  });
-
-  const settled = await Ledger.findOne({ orderId: order._id, type: 'restaurant_due' });
-  if (settled && settled.amount !== 0) {
-    const restaurant = await Restaurant.findById(order.restaurantId);
-    if (restaurant) {
-      await Ledger.create({
-        type: 'restaurant_due',
-        amount: -settled.amount,
-        orderId: order._id,
-        restaurantId: restaurant._id,
-        meta: { financeModel: 'legacy', note: 'Qaytarish sababli bekor qilindi' },
-      });
-      restaurant.balance = (restaurant.balance || 0) - settled.amount;
-      await restaurant.save();
-    }
+  }];
+  const settled = await Ledger.findOne({ orderId: order._id, type: 'restaurant_due' }, null, opts).lean();
+  const reverse = settled && settled.amount !== 0 ? -settled.amount : 0;
+  if (reverse !== 0) {
+    entries.push({
+      type: 'restaurant_due', amount: reverse, orderId: order._id, restaurantId: order.restaurantId,
+      postingKey: key('restaurant_due'), meta: { financeModel: 'legacy', note: 'Qaytarish sababli bekor qilindi' },
+    });
   }
-
-  getIO()?.to('admin').emit('billing:update', {
-    restaurantId: String(order.restaurantId),
-  });
-
-  return { refunded: order.total, isFull: true };
+  await Ledger.insertMany(entries, { ordered: true, ...opts });
+  if (reverse !== 0) {
+    await Restaurant.updateOne({ _id: order.restaurantId }, { $inc: { balance: reverse } }, opts);
+  }
+  return { restaurantId: order.restaurantId, out: { refunded: order.total, isFull: true } };
 }
 
 /*
@@ -883,77 +924,96 @@ export async function recordPayout(restaurantId, amount, adminId, note = '', ide
     throw e;
   }
 
+  /*
+   * ═══ BALANS VA YOZUV — BITTA MOLIYAVIY BIRLIK (audit F-01, F-11) ═══
+   *
+   * ILGARI: avval promo qarzi ushlanardi (markDebtPaid + jurnal), KEYIN balans tekshirilardi. Balans yetmasa
+   * payout FAILED bo'lardi, lekin promo qarz "to'langan" bo'lib qolardi. Balans `amount` ga kamayib, jurnalga
+   * ALOHIDA so'rov bilan yozilardi (oraliqda yiqilsa — balans kamaygan, yozuv yo'q).
+   *
+   * ENDI:
+   *   1) [tranzaksiya] balans atomik yechiladi (`balance ≥ amount` filtri) va Payout'ga "balans olindi" belgisi;
+   *   2) shundan KEYIN promo qarzi ushlanadi (balans yetmasa promo'ga umuman tegilmaydi);
+   *   3) [tranzaksiya] payout yozuvi (postingKey = payout:<id>), totalPaidOut va Payout SUCCESS — birga.
+   * 1 va 3 orasida jarayon uzilsa Payout PROCESSING + balanceClaimed bo'lib qoladi — finance:audit ko'rsatadi
+   * (pul hali yuborilmagan, balans esa band — qo'lda yakunlanadi; ikki marta to'lanmaydi).
+   */
+  let claimed;
   try {
-    // Mijozlarni jalb qilish qarzini ushlab qolamiz (sozlama yoqilgan bo'lsa)
+    claimed = await runFinanceTx(async (session) => {
+      const opts = session ? { session } : {};
+      const upd = await Restaurant.findOneAndUpdate(
+        { _id: restaurantId, balance: { $gte: amount } },
+        { $inc: { balance: -amount } },
+        { new: true, projection: { balance: 1 }, ...opts },
+      ).lean();
+      if (!upd) return null;
+      await Payout.updateOne({ _id: payout._id, status: 'PROCESSING' }, { $set: { 'snapshot.balanceClaimed': true } }, opts);
+      return upd;
+    });
+  } catch (e) {
+    await Payout.updateOne({ _id: payout._id, status: 'PROCESSING' }, { $set: { status: 'FAILED', lastError: String(e.message).slice(0, 200) } }).catch(() => {});
+    throw e;
+  }
+
+  if (!claimed) {
+    await Payout.updateOne({ _id: payout._id, status: 'PROCESSING' }, { $set: { status: 'FAILED', lastError: 'Balansda yetarli emas' } });
+    const fresh = await Restaurant.findById(restaurantId).select('balance').lean();
+    throw new Error(`Balansda yetarli emas. Hozir: ${fresh?.balance ?? 0} so‘m`);
+  }
+
+  // Mijozlarni jalb qilish qarzi — balans tasdiqlangandan KEYIN (sozlama yoqilgan bo'lsa)
+  let deducted = 0;
+  try {
     const { deductFromSettlement } = await import('./promoBilling.js');
-    const deducted = await deductFromSettlement(restaurantId, amount);
-    const payoutAmount = amount - deducted;
+    deducted = await deductFromSettlement(restaurantId, amount);
+  } catch (e) {
+    console.error('[billing] promo qarzi ushlanmadi (payout davom etadi):', e.message);
+    deducted = 0;
+  }
+  const payoutAmount = amount - deducted;
 
-    /*
-     * ATOMIK BALANS YECHISH. Filtrda `balance: { $gte: amount }`
-     * bor — TZ 17-band talab qilgan himoya: ikkinchi (BOSHQA
-     * kalit bilan, boshqa so'rov orqali kelgan) to'lov so'rovi
-     * shu restoran uchun deyarli bir vaqtda kelsa, MongoDB
-     * yozishlarni bitta hujjatda NAVBAT bilan bajaradi — ikkinchi
-     * so'rov birinchisi ALLAQACHON kamaytirgan balansga qarab
-     * tekshiriladi.
-     */
-    const updated = await Restaurant.findOneAndUpdate(
-      { _id: restaurantId, balance: { $gte: amount } },
-      { $inc: { balance: -amount, totalPaidOut: payoutAmount } },
-      { new: true },
-    ).select('balance').lean();
-
-    if (!updated) {
-      payout.status = 'FAILED';
-      payout.lastError = 'Balansda yetarli emas';
-      await payout.save();
-      const fresh = await Restaurant.findById(restaurantId).select('balance').lean();
-      throw new Error(`Balansda yetarli emas. Hozir: ${fresh?.balance ?? 0} so‘m`);
-    }
-
+  const final = await runFinanceTx(async (session) => {
+    const opts = session ? { session } : {};
     if (payoutAmount > 0) {
-      await Ledger.create({
+      await Ledger.create([{
         type: 'payout',
         amount: -payoutAmount,
         restaurantId,
         createdBy: adminId,
+        postingKey: `payout:${payout._id}`,
         meta: {
           note: note || 'Bank hisobiga o‘tkazildi',
           ...(deducted > 0 ? { promoDebtDeducted: deducted } : {}),
         },
-      });
+      }], opts);
     }
+    const r = await Restaurant.findOneAndUpdate(
+      { _id: restaurantId },
+      { $inc: { totalPaidOut: payoutAmount } },
+      { new: true, projection: { balance: 1 }, ...opts },
+    ).lean();
+    const now = new Date();
+    await Payout.updateOne({ _id: payout._id }, {
+      $set: {
+        amount: payoutAmount, status: 'SUCCESS', sentAt: now, confirmedAt: now,
+        'snapshot.promoDebtDeducted': deducted,
+      },
+    }, opts);
+    return r;
+  });
 
-    payout.amount = payoutAmount;
-    payout.status = 'SUCCESS';
-    payout.sentAt = new Date();
-    payout.confirmedAt = new Date();
-    payout.snapshot = { ...payout.snapshot, promoDebtDeducted: deducted };
-    await payout.save();
+  getIO()?.to('admin').emit('billing:update', {
+    restaurantId: String(restaurantId),
+    balance: final?.balance,
+  });
 
-    getIO()?.to('admin').emit('billing:update', {
-      restaurantId: String(restaurantId),
-      balance: updated.balance,
-    });
-
-    return {
-      payoutId: payout._id,
-      balance: updated.balance,
-      paidOut: payoutAmount,
-      promoDebtDeducted: deducted,
-    };
-  } catch (e) {
-    // Kutilmagan xato — Payout PENDING/PROCESSING holatida
-    // qolib ketmasin, aks holda keyingi tekshiruvda chalkashlik
-    // tug'diradi
-    if (payout.status === 'PROCESSING') {
-      payout.status = 'FAILED';
-      payout.lastError = e.message;
-      await payout.save().catch(() => {});
-    }
-    throw e;
-  }
+  return {
+    payoutId: payout._id,
+    balance: final?.balance,
+    paidOut: payoutAmount,
+    promoDebtDeducted: deducted,
+  };
 }
 
 /*

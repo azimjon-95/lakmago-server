@@ -26,7 +26,7 @@ const notificationSchema = new Schema(
     type: {
       type: String,
       required: true,
-      enum: ['order', 'hall_order', 'reservation', 'waiter_call', 'bill_request', 'support'],
+      enum: ['order', 'hall_order', 'reservation', 'waiter_call', 'bill_request', 'support', 'finance'],   // finance — faqat admin (moliya ogohlantirishi)
       index: true,
     },
 

@@ -75,11 +75,58 @@ export function customerPrice(basePrice, ctx) {
  * `item.unitPrice` — server tekshirgan RESTORAN (baza) narxi (priceVerification.js).
  */
 export function itemCustomerUnitPrice(item, ctx) {
+  return itemCustomerUnitBreakdown(item, ctx).price;
+}
+
+/**
+ * Bitta qism (taom/hajm yoki qo'shimcha) narxining bo'laklari — customerPrice() bilan AYNAN bir xil yaxlitlash.
+ * { base, markup, fee, price }, price === base + markup + fee.
+ */
+function partBreakdown(amount, ctx) {
+  const base = Math.round(Number(amount) || 0);
+  if (base <= 0) return { base, markup: 0, fee: 0, price: base };
+  const markup = pctOf(base, ctx.deliveryMarkupPercent);
+  const fee = pctOf(base, ctx.customerFeePercent);
+  return { base, markup, fee, price: base + markup + fee };
+}
+
+/**
+ * Pozitsiyaning 1 donasi uchun bo'laklar (so'm, butun son): restoran bazasi, restoran ustamasi, mijoz xizmat haqi.
+ * `price` === itemCustomerUnitPrice() — mijoz menyuda ko'rgan narx.
+ *
+ * NIMA UCHUN (audit F-08/F-09): buyurtma summasi avval butun savatdan bir marta foiz olib hisoblanardi (tiyinda
+ * yaxlitlash), menyu esa har qismni alohida so'mda yaxlitlaydi — mijoz menyuda ko'rganidan bir necha so'm ko'p
+ * to'lardi va jami kasr so'm (10 849,65) chiqib Paynet summasini buzardi. Endi buyurtma ham shu bo'laklardan
+ * yig'iladi (orderFinance: deliveryMarkupLinesTiyin / customerFeeLinesTiyin).
+ */
+export function itemCustomerUnitBreakdown(item, ctx) {
   const unit = Math.round(Number(item?.unitPrice) || 0);
   const addons = (item?.selectedOptions || []).filter((o) => !o?.variant).map((o) => Math.round(Number(o?.price) || 0));
-  const base = unit - addons.reduce((s, x) => s + x, 0);
-  if (base < 0) return customerPrice(unit, ctx);   // kutilmagan ma'lumot — butun narxga qo'llanadi
-  return customerPrice(base, ctx) + addons.reduce((s, x) => s + (x > 0 ? customerPrice(x, ctx) : x), 0);
+  const addonSum = addons.reduce((s, x) => s + x, 0);
+  const base = unit - addonSum;
+  // kutilmagan ma'lumot (qo'shimchalar narxi umumiydan katta) — butun narxga qo'llanadi
+  const parts = base < 0 ? [unit] : [base, ...addons];
+  const out = { base: 0, markup: 0, fee: 0, price: 0 };
+  for (const p of parts) {
+    const b = partBreakdown(p, ctx);
+    out.base += b.base; out.markup += b.markup; out.fee += b.fee; out.price += b.price;
+  }
+  return out;
+}
+
+/**
+ * Buyurtma pozitsiyalari bo'yicha jami (so'm, butun son) — mijoz savatda ko'rgan summa.
+ * @returns {{ base:number, markup:number, fee:number, price:number }}
+ */
+export function itemsCustomerBreakdown(items, ctx) {
+  const total = { base: 0, markup: 0, fee: 0, price: 0 };
+  for (const it of items || []) {
+    const qty = Math.max(0, Math.round(Number(it?.quantity) || 0));
+    if (!qty) continue;
+    const u = itemCustomerUnitBreakdown(it, ctx);
+    total.base += u.base * qty; total.markup += u.markup * qty; total.fee += u.fee * qty; total.price += u.price * qty;
+  }
+  return total;
 }
 
 /** Zal va bron: narx o'zgarmaydi — restoranning o'z narxi. */

@@ -62,6 +62,31 @@ function applyPercent(amountTiyin, percent) {
 const int = (v) => Math.round(Number(v) || 0);
 
 /**
+ * Foiz 0..100 oralig'idagi chekli son bo'lishi SHART. Noto'g'ri qiymat jimgina 0 ga aylantirilmaydi
+ * (TZ: "uydirma/jim foiz yo'q") — xato beriladi, buyurtma yaratilmaydi.
+ */
+export function assertPercent(name, p) {
+  if (p === undefined || p === null || p === '') return 0;
+  const n = Number(p);
+  if (!Number.isFinite(n) || n < 0 || n > 100) throw new Error(`${name} noto‘g‘ri: ${p} (0..100 bo‘lishi kerak)`);
+  return n;
+}
+
+/**
+ * Pozitsiyalar bo'yicha yig'ilgan summani (chegirmagacha) chegirmadan keyingi bazaga moslash:
+ *   x × (base − discount) / base, natija BUTUN SO'Mga (100 tiyin) yaxlitlanadi.
+ * BigInt — katta summalarda ko'paytma 2^53 dan oshmasin.
+ */
+function scaleLinesToDiscounted(linesTiyin, foodBase, discount) {
+  const x = Math.max(0, int(linesTiyin));
+  if (!discount || !foodBase) return x;
+  const num = BigInt(x) * BigInt(foodBase - discount);
+  const den = BigInt(foodBase) * 100n;
+  const som = (num * 2n + den) / (den * 2n);            // yaqin butun so'mga (half-up)
+  return Number(som) * 100;
+}
+
+/**
  * Buyurtmaning to'liq moliyaviy tasviri.
  *
  * @param {object}  input
@@ -74,6 +99,11 @@ const int = (v) => Math.round(Number(v) || 0);
  * @param {number}  [input.paymentFeePercent]  shlyuz haqi (Click 1.5%). Naqdda 0
  * @param {boolean} [input.deliveryFeeAbsorbedByLokma] delivery Click haqini
  *                  LokmaGo qoplasinmi (standart: yo'q — delivery tomoni qoplaydi)
+ * @param {number}  [input.deliveryMarkupLinesTiyin] pozitsiyalar bo'yicha yig'ilgan restoran ustamasi
+ *                  (chegirmagacha, menyu bilan bir xil yaxlitlash — customerPricing.itemsCustomerBreakdown)
+ * @param {number}  [input.customerFeeLinesTiyin]    pozitsiyalar bo'yicha yig'ilgan mijoz xizmat haqi (xuddi shunday)
+ *                  Ikkalasi berilsa foiz qayta qo'llanmaydi: mijoz to'laydigan taom summasi = menyuda ko'rgan
+ *                  narxlar yig'indisi (chegirma bo'lsa — proporsional, butun so'mda). Berilmasa — avvalgi hisob.
  */
 export function computeOrderFinance({
   foodBaseTiyin,
@@ -84,9 +114,17 @@ export function computeOrderFinance({
   restaurantCommissionPercent = 0,
   paymentFeePercent = 0,
   deliveryFeeAbsorbedByLokma = false,
+  deliveryMarkupLinesTiyin = null,
+  customerFeeLinesTiyin = null,
 } = {}) {
   const foodBase = int(foodBaseTiyin);
   if (foodBase < 0) throw new Error('Taom summasi manfiy bo‘lishi mumkin emas');
+  assertPercent('Restoran ustamasi', deliveryMarkupPercent);
+  assertPercent('Mijoz xizmat haqi', customerFeePercent);
+  assertPercent('Restoran komissiyasi', restaurantCommissionPercent);
+  assertPercent('Shlyuz haqi', paymentFeePercent);
+  const byLines = deliveryMarkupLinesTiyin !== null && deliveryMarkupLinesTiyin !== undefined
+    && customerFeeLinesTiyin !== null && customerFeeLinesTiyin !== undefined;
 
   const deliveryFee = Math.max(0, int(deliveryFeeTiyin));
   const discount = Math.min(Math.max(0, int(discountTiyin)), foodBase);
@@ -98,7 +136,9 @@ export function computeOrderFinance({
    * bergan summadan komissiya olinmaydi.
    */
   const discountedBase = foodBase - discount;
-  const deliveryMarkupAmount = applyPercent(discountedBase, deliveryMarkupPercent);
+  const deliveryMarkupAmount = byLines
+    ? scaleLinesToDiscounted(deliveryMarkupLinesTiyin, foodBase, discount)
+    : applyPercent(discountedBase, deliveryMarkupPercent);
 
   // "foodSubtotal" — restoranning taom bo'yicha summasi (komissiya bazasi)
   const foodSubtotal = discountedBase + deliveryMarkupAmount;
@@ -108,7 +148,9 @@ export function computeOrderFinance({
    * bir-birining ustiga qo'yilmaydi). Avval ustamali summadan olinardi: menyuda 115 000 ko'ringan taom
    * (10 000 baza, 10% ustama + 5% haq) buyurtmada 115 500 bo'lib qolardi. Ustama yoki haq 0 bo'lsa natija o'zgarmaydi.
    */
-  const customerFeeAmount = applyPercent(discountedBase, customerFeePercent);
+  const customerFeeAmount = byLines
+    ? scaleLinesToDiscounted(customerFeeLinesTiyin, foodBase, discount)
+    : applyPercent(discountedBase, customerFeePercent);
   const restaurantCommissionAmount = applyPercent(foodSubtotal, restaurantCommissionPercent);
 
   const customerFoodTotal = foodSubtotal + customerFeeAmount;
@@ -202,6 +244,8 @@ export function computeOrderFinance({
     lokmaCashNet,
     deliveryPayout: restaurantDeliveryPayout,   // eski nom bilan moslik
     deliveryFeeAbsorbedByLokma: Boolean(deliveryFeeAbsorbedByLokma),
+    // 'lines' — ustama/xizmat haqi menyu pozitsiyalari bo'yicha (mijoz ko'rgan narx); 'percent' — eski hisob
+    feeRounding: byLines ? 'lines' : 'percent',
 
     calculatedAt: new Date(),
   };

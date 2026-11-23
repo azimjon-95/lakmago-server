@@ -29,7 +29,7 @@ import { DEFAULT_DISTRICT } from '../constants/districts.js';
 import { assessDevice } from '../services/deviceCheck.js';
 import { resolveGifts } from '../services/giftBonus.js';
 import { activeAgreement } from '../models/CommissionAgreement.js';
-import { itemCustomerUnitPrice } from '../services/customerPricing.js';
+import { itemCustomerUnitPrice, itemsCustomerBreakdown } from '../services/customerPricing.js';
 import { COMPLETABLE_STATUSES } from '../services/reminderRules.js';
 import { emitOrderToRestaurant } from '../services/orderSocket.js';
 import { customerOrderView, attachRestaurantGeo } from '../services/customerOrderView.js';
@@ -48,6 +48,21 @@ function warnNoAgreement(restaurantId, name = '') {
   if (Date.now() - (noAgreementWarned.get(key) || 0) < 3_600_000) return;
   noAgreementWarned.set(key, Date.now());
   console.warn(`[moliya] «${name || key}» restoranida faol kelishuv YO'Q — buyurtma LokmaGo komissiyasi 0% bilan yaratildi. Admin panel → Moliya → Kelishuv.`);
+  /*
+   * Egasi qarori (2026-11-22): kelishuvsiz restoran buyurtmasi BLOKLANMAYDI (0%), lekin admin aniq ogohlantiriladi.
+   * Faqat admin auditoriyasi (restoranga hech narsa ketmaydi). Kuniga bir marta (notificationId unique).
+   */
+  const day = new Date(Date.now() + 5 * 3_600_000).toISOString().slice(0, 10);   // Toshkent sanasi
+  notify({
+    notificationId: `finance:no-agreement:${key}:${day}`,
+    audience: 'admin',
+    type: 'finance',
+    title: 'Kelishuvsiz restoran — 0% komissiya',
+    body: `«${name || key}» buyurtma oldi, lekin faol kelishuv yo'q: LokmaGo komissiyasi 0%. Moliya → Kelishuv.`,
+    refType: 'restaurant',
+    refId: key,
+    meta: { restaurantId: key, reason: 'no_active_agreement' },
+  }).catch((e) => console.error('[notify:finance]', e.message));
 }
 
 export const bannerController = {
@@ -617,8 +632,43 @@ export const orderController = {
        * xizmat haqisiz). Moliyaviy snapshot shundan quriladi.
        */
       const priceCheck = await verifyItemPrices(o.items, o.restaurantId);
+      /*
+       * ═══ BAZADA YO'Q POZITSIYA — RAD (audit F-00b) ═══
+       * dishId'siz yoki bazada (shu restoranda) topilmagan pozitsiyada narx faqat MIJOZDAN kelardi, pastdagi
+       * mavjudlik tekshiruvi esa topilmagan ID'ni ushlamasdi: API'ga `unitPrice: 1` bilan soxta pozitsiya
+       * yuborish mumkin edi. Mijoz ilovasi har pozitsiyaga dishId yuboradi (Market mahsulotlari ham Dish),
+       * shuning uchun bu faqat soxta yoki eskirgan (o'chirilgan taom) so'rovni to'xtatadi.
+       */
+      if (priceCheck.unknown?.length) {
+        return res.status(400).json({
+          error: `Mavjud emas: ${priceCheck.unknown.map((u) => u.name || 'noma\u2019lum').join(', ')}`,
+          code: 'DISH_UNAVAILABLE',
+          restaurantId: String(o.restaurantId),
+          dishes: priceCheck.unknown.map((u) => u.name),
+        });
+      }
       o.items = priceCheck.items;
       o._foodBaseSom = priceCheck.foodBaseSom;
+
+      /*
+       * ═══ TAOM SUMMASI — SERVERDA (audit F-00, F-08) ═══
+       *
+       * Ilgari bu yerdan keyin `o.subtotal` MIJOZ yuborgan qiymat bo'lib qolardi va shundan hisoblanardi:
+       * minimal summa, bepul yetkazish chegarasi, olib ketish chegirmasi va foizli aksiya. API'ga katta
+       * `subtotal` yuborilsa — minimal summa chetlab o'tilardi, yetkazish tekin bo'lardi, chegirma taom
+       * summasigacha o'sardi (CLAUDE.md 5-qoida). Endi u serverda, tekshirilgan narxlardan quriladi:
+       * har pozitsiya menyudagi kabi (customerPricing), ya'ni mijoz savatda ko'rgan summa bilan bir xil.
+       * Halol mijoz uchun natija o'zgarmaydi. Kelishuv shu yerda bir marta olinadi (pastda qayta ishlatiladi).
+       */
+      o._agreement = await activeAgreement(o.restaurantId);
+      o._menu = itemsCustomerBreakdown(o.items, {
+        deliveryMarkupPercent: Number(rest.deliveryMarkupPercent) || 0,
+        customerFeePercent: Number(o._agreement?.customerFeePercent) || 0,
+      });
+      if (Math.abs((Number(o.subtotal) || 0) - o._menu.price) >= 1) {
+        console.warn(`[narx] Mijoz subtotal ${o.subtotal} ≠ server ${o._menu.price} (restoran ${o.restaurantId}) — server qiymati olindi`);
+      }
+      o.subtotal = o._menu.price;
       if (priceCheck.mismatches.length) {
         console.warn(
           `[narx] Buyurtmada farq (restoran ${o.restaurantId}): `
@@ -745,9 +795,10 @@ export const orderController = {
        * Snapshot buyurtma bilan birga MUZLATILADI — shartnoma
        * keyin o'zgarsa ham bu buyurtmaning hisobi o'zgarmaydi.
        */
-      const agreement = await activeAgreement(o.restaurantId);
+      const agreement = o._agreement;
       // Kelishuvsiz restoran: komissiya 0% (uydirma foiz YO'Q), lekin bu jim o'tib ketmasin
-      if (!agreement) warnNoAgreement(o.restaurantId, rest?.name);
+      // Demo restoran (App Store sandbox) — haqiqiy dunyoga, jumladan admin bildirishnomalariga tegmaydi
+      if (!agreement && !rest.isDemo && !demoUser) warnNoAgreement(o.restaurantId, rest?.name);
       /*
        * XATO TUZATILDI (2026-10): ilgari `o.paymentMethod` o'qilardi —
        * u har bir restoran bo'lagida YO'Q (singleOrderSchema'da bunday
@@ -768,6 +819,13 @@ export const orderController = {
         customerFeePercent: Number(agreement?.customerFeePercent) || 0,
         restaurantCommissionPercent: Number(agreement?.restaurantCommissionPercent) || 0,
         paymentFeePercent: feePercent,
+        /*
+         * Ustama va mijoz haqi menyu pozitsiyalaridan (audit F-08/F-09): mijoz to'laydigan taom summasi =
+         * savatda ko'rgan narxlar yig'indisi, butun so'mda. Baza mos kelmasa (kutilmagan) — avvalgi foiz hisobi.
+         */
+        ...(o._menu && o._menu.base === o._foodBaseSom
+          ? { deliveryMarkupLinesTiyin: somToTiyin(o._menu.markup), customerFeeLinesTiyin: somToTiyin(o._menu.fee) }
+          : {}),
       });
       /*
        * ═══ KIM YETKAZADI ═══ (restoran rejimi — FAQAT LokmaGo admini belgilaydi)

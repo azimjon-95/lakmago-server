@@ -1,6 +1,7 @@
 import { config } from '../config/index.js';
 import { Order } from '../models/Order.js';
 import { Transaction } from '../models/Transaction.js';
+import { Payment } from '../models/Payment.js';
 import { recordSuccess } from './paymentRecord.js';
 
 /*
@@ -203,6 +204,18 @@ async function handlePerformTransaction(params) {
     amountTiyin: expectedTiyin,
   });
 
+  /*
+   * Moliyaviy jurnal: payment_in (audit F-07). Click yo'li buni yozardi, Paynet yozmasdi — admin "tushum"
+   * Paynet to'lovlarini ko'rmasdi. recordPayment idempotent (unique postingKey). Yiqilsa to'lov baribir o'tgan —
+   * Paynet'ga xato qaytarilmaydi, faqat log (finance:audit "payment_in yo'q" deb ko'rsatadi).
+   */
+  try {
+    const { recordPayment } = await import('./billing.js');
+    await recordPayment(order, 'paynet', tx._id);
+  } catch (e) {
+    console.error('[paynet] payment_in yozilmadi:', e.message);
+  }
+
   return {
     providerTrnId: shortNumericId(tx._id),
     fields: { client_id: String(fields.client_id) },
@@ -285,10 +298,44 @@ async function handleCancelTransaction(params) {
   tx.cancelTime = Date.now();
   await tx.save();
 
+  /*
+   * ═══ BEKOR QILISH — UMUMIY OQIM ORQALI (audit F-06) ═══
+   * ILGARI: `order.status = 'cancelled'; save()` — changeOrderStatus chetlab o'tilardi: restoranga xabar
+   * ketmasdi (oshxona to'lovi qaytarilgan buyurtmani tayyorlashda davom etishi mumkin edi), refund jurnalga
+   * yozilmasdi, Payment SUCCESS bo'lib qolardi.
+   * ENDI: changeOrderStatus (restoran/admin/mijoz xabarlari + recordRefund), keyin Payment → REFUNDED.
+   * Umumiy oqim rad etsa (kutilmagan holat) — avvalgi yo'l + qaytarish yozuvi, javob Paynet'ga baribir qaytadi.
+   */
   if (order && order.status !== 'delivered' && order.status !== 'cancelled') {
-    order.status = 'cancelled';
-    order.isPaid = false;
-    await order.save();
+    let viaFlow = false;
+    try {
+      const { changeOrderStatus } = await import('./orderFlow.js');
+      await changeOrderStatus({
+        orderId: order._id,
+        restaurantId: order.restaurantId,
+        status: 'cancelled',
+        actorName: 'Paynet',
+        cancelReason: 'To‘lov Paynet tomonidan bekor qilindi',
+        // 'pending' oddiy bekor qilish yo'lidan, qabul qilinganlari admin-tasdiqli yo'ldan (ADMIN_CANCEL_FROM)
+        approvedByAdmin: order.status !== 'pending',
+      });
+      viaFlow = true;
+    } catch (e) {
+      console.error('[paynet] cancel: umumiy oqim rad etdi, zaxira yo‘l:', e.message);
+    }
+    if (!viaFlow) {
+      await Order.updateOne({ _id: order._id, status: { $nin: ['delivered', 'cancelled'] } },
+        { $set: { status: 'cancelled', cancelledAt: new Date() } });
+      if (order.isPaid) {
+        const { recordRefund } = await import('./billing.js');
+        await recordRefund(order, 'paynet', tx._id).catch((e) => console.error('[paynet] refund yozilmadi:', e.message));
+      }
+    }
+    await Order.updateOne({ _id: order._id }, { $set: { isPaid: false } });
+    await Payment.updateMany(
+      { orderId: order._id, provider: 'paynet', providerTransactionId: String(transactionId), status: 'SUCCESS' },
+      { $set: { status: 'REFUNDED', refundReason: 'CUSTOMER_CANCELLED' } },
+    ).catch((e) => console.error('[paynet] Payment REFUNDED:', e.message));
   }
 
   return {
