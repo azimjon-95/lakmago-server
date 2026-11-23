@@ -113,3 +113,30 @@ test('menu/items: birinchi sahifa tez (2000+ mahsulotda ham)', async () => {
   await call(restaurantController.menuItems, { id: String(shop) }, { section: 'sut', limit: '24' });
   assert.ok(Date.now() - t0 < 1500, `sekin: ${Date.now() - t0}ms`);
 });
+
+test('menu/index?preview=N: birinchi N bo\'lim 1-sahifasi bitta javobda, tartib ilovadagidek, /menu/items bilan bir xil', async () => {
+  const { previewOrder } = await import('../src/controllers/catalog.js');
+  const plain = await call(restaurantController.menuIndex, { id: String(shop) });
+  assert.equal(plain.preview, undefined, 'parametrsiz — javob avvalgidek (eski ilovalar)');
+
+  const idx = await call(restaurantController.menuIndex, { id: String(shop) }, { preview: '3' });
+  const order = previewOrder(idx);
+  // Tartib: chegirma (bo'lsa) → MARKET_CATEGORIES tartibi (meva, ... sut, non, go_sht ...) → __other__
+  if (idx.sale > 0) assert.equal(order[0], '__sale__');
+  assert.equal(order[order.length - 1], '__other__', 'kategoriyasizlar oxirida');
+  const keys = Object.keys(idx.preview);
+  assert.deepEqual(keys, order.slice(0, 3), 'faqat birinchi 3 bo\'lim, ilova tartibida');
+  assert.equal(idx.previewLimit, 24);
+
+  for (const k of keys) {
+    const page = await call(restaurantController.menuItems, { id: String(shop) }, { section: k, limit: '24' });
+    assert.deepEqual(idx.preview[k].items.map((d) => String(d._id)), page.items.map((d) => String(d._id)), `${k}: preview = 1-sahifa`);
+    assert.equal(idx.preview[k].nextCursor, page.nextCursor, `${k}: kursor mos`);
+  }
+
+  const capped = await call(restaurantController.menuIndex, { id: String(shop) }, { preview: '999' });
+  assert.ok(Object.keys(capped.preview).length <= 6, 'preview ko\'pi bilan 6 bo\'lim');
+  const bad = await call(restaurantController.menuIndex, { id: String(shop) }, { preview: 'abc' });
+  assert.equal(bad.preview, undefined, 'noto\'g\'ri qiymat — preview yo\'q');
+  assert.deepEqual(await call(restaurantController.menuIndex, { id: String(blocked) }, { preview: '3' }), { total: 0, sale: 0, sections: [] }, 'bloklangan do\'kon — bo\'sh');
+});
