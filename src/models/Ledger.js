@@ -124,6 +124,9 @@ const ledgerSchema = new Schema(
       reason: { type: String, default: undefined },   // masalan: commission_correction
       previousAmount: Number,                         // oldingi summa
       correctedAmount: Number,                        // to'g'ri summa
+
+      // Payout qaysi hafta uchun (dushanba, YYYY-MM-DD) — faqat haftalik ko'rinish uchun
+      weekStart: { type: String, default: undefined },
     },
 
     // Kim yaratdi (admin qo'lda qilsa)
