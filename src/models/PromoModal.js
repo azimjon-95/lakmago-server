@@ -19,6 +19,10 @@ const promoModalSchema = new mongoose.Schema(
     active: { type: Boolean, default: false, index: true },
     order: { type: Number, default: 0 },
     frequency: { type: String, enum: ['daily', 'once'], default: 'daily' },
+    // Kimga ko'rinadi (services/clientChannel.js). not_app — sayt va Telegram (ilovaga taklif uchun).
+    audience: { type: String, enum: ['all', 'app', 'not_app', 'telegram', 'web'], default: 'all' },
+    // Tugma: oddiy havola yoki "Ilovani yuklab olish" (mijoz qurilmasiga mos App Store / Google Play)
+    cta: { type: String, enum: ['link', 'install_app'], default: 'link' },
     startsAt: { type: Date, default: null },
     endsAt: { type: Date, default: null },
     version: { type: Number, default: 1 },

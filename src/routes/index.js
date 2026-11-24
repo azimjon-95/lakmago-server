@@ -20,6 +20,7 @@ import { agreementController } from '../controllers/agreements.js';
 import { restaurantPanelController } from '../controllers/restaurantPanel.js';
 import { uploadController } from '../controllers/upload.js';
 import { promoModalController } from '../controllers/promoModals.js';
+import { appConfigController, channelStatsController } from '../controllers/appConfig.js';
 import { giftBonusController } from '../controllers/giftBonus.js';
 import { backupController } from '../controllers/backup.js';
 import { tgLinkAuthController } from '../controllers/tgLinkAuth.js';
@@ -107,6 +108,7 @@ router.get('/auth/me', auth, panelAuthController.me);                 // umumiy 
 router.get('/banners', bannerController.list);
 // Reklama oynalari: mijoz ilovasi ochilganda navbat bilan (kuniga bir marta)
 router.get('/promo-modals/active', promoModalController.active);
+router.get('/app/config', appConfigController.public);
 router.post('/promo-modals/:id/track', writeLimiter, promoModalController.track);
 // LokmaGo sovg'a-bonusi (masalan 100 000 so'mdan 1 l Coca-Cola): mijoz savati uchun hisob
 router.post('/gift-bonus/quote', auth, writeLimiter, giftBonusController.quote);
@@ -752,6 +754,9 @@ router.get('/admin/gift-bonuses', ...AS('banners'), giftBonusController.list);
 router.post('/admin/gift-bonuses', auth, requireRole('admin'), giftBonusController.create);
 router.patch('/admin/gift-bonuses/:id', auth, requireRole('admin'), giftBonusController.update);
 router.delete('/admin/gift-bonuses/:id', auth, requireRole('admin'), giftBonusController.remove);
+router.get('/admin/app-config', auth, requireRole('admin'), appConfigController.get);
+router.patch('/admin/app-config', auth, requireRole('admin'), appConfigController.update);
+router.get('/admin/stats/channels', auth, requireRole('admin'), channelStatsController);
 router.get('/admin/promo-modals', ...AS('banners'), promoModalController.list);
 router.post('/admin/promo-modals', auth, requireRole('admin'), promoModalController.create);
 router.post('/admin/promo-modals/reorder', auth, requireRole('admin'), promoModalController.reorder);

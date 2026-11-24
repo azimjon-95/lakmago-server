@@ -64,6 +64,20 @@ const settingsSchema = new Schema(
       debtLimitSom: { type: Number, default: 500000, min: 0 },
       maxActiveOrders: { type: Number, default: 1, min: 1, max: 10 },    // mobil ilova hozircha BITTA faol buyurtma ko'rsatadi — oshirish uchun ilovada ro'yxat kerak
     },
+    /*
+     * Mijoz ilovasi (iOS/Android) versiyalari — controllers/appConfig.js, GET /api/app/config.
+     *   *MinVersion — bundan ESKI ilova bloklanadi ("Yangilang", yopib bo'lmaydi). Bo'sh — majburiy emas.
+     *   *StoreUrl   — "Yangilash" va "Ilovani yuklab olish" tugmalari shu yerga olib boradi.
+     *   updatePromptDays — yangi versiya chiqqanda ixtiyoriy taklif necha kunda bir eslatiladi.
+     * Eng so'nggi versiyani ilova do'konning o'zidan oladi (App Store / Google Play) — bu yerda yozilmaydi.
+     */
+    clientApp: {
+      iosMinVersion: { type: String, default: '' },
+      androidMinVersion: { type: String, default: '' },
+      iosStoreUrl: { type: String, default: '' },
+      androidStoreUrl: { type: String, default: 'https://play.google.com/store/apps/details?id=lokma.uz' },
+      updatePromptDays: { type: Number, default: 3, min: 1, max: 30 },
+    },
   },
   { timestamps: true },
 );

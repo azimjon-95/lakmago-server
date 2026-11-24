@@ -28,6 +28,7 @@ import { applyDeliveryParty, initialParty, courierPercentFor } from '../services
 import { DEFAULT_DISTRICT } from '../constants/districts.js';
 import { assessDevice } from '../services/deviceCheck.js';
 import { resolveGifts } from '../services/giftBonus.js';
+import { readClient } from '../services/clientChannel.js';
 import { activeAgreement } from '../models/CommissionAgreement.js';
 import { itemCustomerUnitPrice, itemsCustomerBreakdown } from '../services/customerPricing.js';
 import { COMPLETABLE_STATUSES } from '../services/reminderRules.js';
@@ -414,6 +415,8 @@ export const orderController = {
   // POST /api/orders
   // Bir yoki bir necha restoran buyurtmasini qabul qiladi (batch).
   create: asyncHandler(async (req, res) => {
+    // Qayerdan buyurtma (iOS/Android ilova, Telegram, sayt) — header'dan, faqat belgi; narx/summa hisobiga TA'SIR QILMAYDI
+    const client = readClient(req);
     const parsed = batchOrderSchema.safeParse(req.body);
     if (!parsed.success) {
       return res.status(400).json({ error: 'Ma‘lumot noto‘g‘ri', details: parsed.error.issues });
@@ -1012,6 +1015,8 @@ export const orderController = {
           paidAmount: Math.max(0, (o._foodBaseSom ?? o.subtotal) - (o._promo?.discount || 0) - (o._pickupDiscount || 0)),
           fulfillment,
           paymentMethod,
+          channel: client.channel,          // ilova / Telegram / sayt — kanal shartli sovg'a (services/clientChannel.js)
+          deviceId: client.deviceId,
         });
       } catch (e) {
         console.error('[giftBonus] buyurtma bonussiz davom etadi:', e.message);
@@ -1019,6 +1024,9 @@ export const orderController = {
 
       const doc = await Order.create({
         ...(demoUser ? { isDemo: true } : {}),   // demo buyurtma: hisobotlardan avtomatik chiqariladi (models/plugins/demoScope.js)
+        clientChannel: client.channel,
+        clientAppVersion: client.appVersion,
+        clientDevice: client.deviceId,
         userId: req.userId,
         restaurantId: o.restaurantId,
         restaurantName: o.restaurantName,

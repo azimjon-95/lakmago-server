@@ -1,7 +1,8 @@
 import mongoose from 'mongoose';
 import { PromoModal } from '../models/PromoModal.js';
 import { asyncHandler } from '../middleware/error.js';
-import { MAX_ACTIVE, isLive, publicView, sanitizePromo } from '../services/promoModals.js';
+import { MAX_ACTIVE, audienceMatches, isLive, publicView, sanitizePromo } from '../services/promoModals.js';
+import { readClient } from '../services/clientChannel.js';
 
 /*
  * Mijoz: GET /api/promo-modals/active — faol oynalar (tartib bo'yicha), 30 s kesh.
@@ -17,13 +18,16 @@ async function activeCount(exceptId) {
 }
 
 export const promoModalController = {
-  active: asyncHandler(async (_req, res) => {
+  active: asyncHandler(async (req, res) => {
+    const { channel } = readClient(req);
     const now = Date.now();
     if (!cache.data || now - cache.at > CACHE_MS) {
       const rows = await PromoModal.find({ active: true }).sort({ order: 1, createdAt: 1 }).limit(20).lean();
       cache = { at: now, data: rows };
     }
-    const list = cache.data.filter((p) => isLive(p, new Date(now))).slice(0, MAX_ACTIVE).map(publicView);
+    const list = cache.data
+      .filter((p) => isLive(p, new Date(now)) && audienceMatches(p.audience, channel))
+      .slice(0, MAX_ACTIVE).map(publicView);
     res.set('Cache-Control', 'no-store').json(list);
   }),
 
