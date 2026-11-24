@@ -202,6 +202,10 @@ const orderSchema = new Schema(
     },
     /** Barcha sovg'alar bo'yicha restoranga qoplanadigan jami (so'm) — limit/byudjet hisobi uchun */
     bonusCost: { type: Number, default: 0, min: 0 },
+    // Buyurtma qaysi kanaldan (services/clientChannel.js). null — noma'lum (eski ilova / header yo'q)
+    clientChannel: { type: String, enum: ['ios', 'android', 'telegram', 'web', null], default: null },
+    clientAppVersion: { type: String, default: '' },
+    clientDevice: { type: String, default: '' },   // qurilma ID izi (sha256), xom ID emas
 
     /*
      * OTILGAN KURSLAR — oshxonada tayyorlanishi boshlangan.
@@ -481,6 +485,8 @@ orderSchema.index(
 
 // Sovg'a-bonus limit/byudjet hisobi: qoida bo'yicha buyurtmalarni tez sanash
 orderSchema.index({ 'bonusItems.ruleId': 1, createdAt: -1 }, { sparse: true });
+// Sovg'a "qurilmaga N marta" limiti (giftBonus.usageFor) — faqat qurilma ID bor buyurtmalar
+orderSchema.index({ clientDevice: 1, 'bonusItems.ruleId': 1 }, { partialFilterExpression: { clientDevice: { $gt: '' } } });
 // LokmaGo kuryerlari umumiy qutisi: party=lokma, kuryer yo'q, faol holat, tuman bo'yicha (services/courierPool.js)
 orderSchema.index({ courierParty: 1, 'lokmaCourier.courierId': 1, status: 1, district: 1 });
 

@@ -47,6 +47,8 @@ const giftBonusSchema = new Schema(
     fulfillments: { type: [{ type: String, enum: ['delivery', 'pickup'] }], default: () => ['delivery', 'pickup'] },
     /** Bo'sh = hamma to'lov turi */
     paymentMethods: { type: [{ type: String, enum: ['cash', 'click', 'payme', 'paynet', 'uzum'] }], default: [] },
+    // Qaysi kanaldan buyurtma berilganda (bo'sh — hammasi). 'app' = iOS + Android ilova (services/clientChannel.js)
+    channels: { type: [{ type: String, enum: ['app', 'ios', 'android', 'telegram', 'web'] }], default: [] },
 
     // ── Qachon ──
     startsAt: { type: Date, default: null },
@@ -60,6 +62,8 @@ const giftBonusSchema = new Schema(
     // ── Chegaralar (0 = cheksiz) ──
     perCustomerPerDay: { type: Number, default: 0, min: 0 },
     perCustomerTotal: { type: Number, default: 0, min: 0 },
+    // Bitta QURILMAGA jami necha marta (bir telefonda ko'p akkaunt ochib sovg'a olishning oldini oladi). >0 bo'lsa qurilma ID shart.
+    perDeviceTotal: { type: Number, default: 0, min: 0 },
     dailyLimit: { type: Number, default: 0, min: 0 },
     totalLimit: { type: Number, default: 0, min: 0 },
     /** Umumiy qoplash byudjeti (so'm): shuncha sarflangach qoida o'zi to'xtaydi */

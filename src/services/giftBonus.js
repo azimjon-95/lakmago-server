@@ -1,6 +1,7 @@
 import mongoose from 'mongoose';
 import { FOOD_KINDS, GIFT_KINDS, GiftBonus } from '../models/GiftBonus.js';
 import { Order } from '../models/Order.js';
+import { CHANNEL_TARGETS, channelMatches } from './clientChannel.js';
 
 /*
  * ═══ SOVG'A-BONUS: SOF MANTIQ + HISOB ═══
@@ -58,6 +59,7 @@ export function sanitizeGift(input = {}, { partial = false } = {}) {
     if (!d.fulfillments.length) return { data: d, error: 'Yetkazib berish yoki olib ketishdan kamida bittasini tanlang' };
   }
   if (want('paymentMethods')) d.paymentMethods = uniq((Array.isArray(input.paymentMethods) ? input.paymentMethods : []).filter((k) => ['cash', 'click', 'payme', 'paynet', 'uzum'].includes(k)));
+  if (want('channels')) d.channels = uniq((Array.isArray(input.channels) ? input.channels : []).filter((k) => CHANNEL_TARGETS.includes(k)));
   for (const k of ['startsAt', 'endsAt']) {
     if (want(k)) {
       if (!input[k]) { d[k] = null; continue; }
@@ -75,7 +77,7 @@ export function sanitizeGift(input = {}, { partial = false } = {}) {
     if (f !== null && f === t) return { data: d, error: 'Boshlanish va tugash soati bir xil bo‘lmasin' };
     d.hourFrom = f; d.hourTo = t;
   }
-  for (const k of ['perCustomerPerDay', 'perCustomerTotal', 'dailyLimit', 'totalLimit']) if (want(k)) d[k] = int(input[k], 0, 1_000_000);
+  for (const k of ['perCustomerPerDay', 'perCustomerTotal', 'perDeviceTotal', 'dailyLimit', 'totalLimit']) if (want(k)) d[k] = int(input[k], 0, 1_000_000);
   if (want('budget')) d.budget = int(input.budget, 0, 100_000_000_000);
 
   const min = d.minAmount ?? (partial ? undefined : 100_000);
@@ -110,6 +112,10 @@ export function scopeMatches(rule, ctx) {
   if (!kinds.includes(ctx.restaurantKind || 'restaurant')) return false;
   if (rule.fulfillments?.length && !rule.fulfillments.includes(ctx.fulfillment)) return false;
   if (rule.paymentMethods?.length && ctx.paymentMethod && !rule.paymentMethods.includes(ctx.paymentMethod)) return false;
+  // Kanal (ilova / Telegram / sayt). Noma'lum kanal faqat kanal tanlanmagan qoidaga mos.
+  if (!channelMatches(rule.channels, ctx.channel)) return false;
+  // "Qurilmaga N marta" — qurilma ID bo'lmasa (sayt/Telegram/eski ilova) qoida qo'llanmaydi
+  if (rule.perDeviceTotal > 0 && !ctx.deviceId) return false;
   return true;
 }
 
@@ -121,6 +127,7 @@ export function limitsBlock(rule, usage = {}) {
   if (rule.dailyLimit > 0 && (usage.today || 0) >= rule.dailyLimit) return 'daily_limit';
   if (rule.perCustomerTotal > 0 && (usage.customerTotal || 0) >= rule.perCustomerTotal) return 'customer_total';
   if (rule.perCustomerPerDay > 0 && (usage.customerToday || 0) >= rule.perCustomerPerDay) return 'customer_daily';
+  if (rule.perDeviceTotal > 0 && (usage.deviceTotal || 0) >= rule.perDeviceTotal) return 'device_total';
   const cost = (rule.reimburse || 0) * (rule.quantity || 1);
   if (rule.budget > 0 && (usage.spent || 0) + cost > rule.budget) return 'budget';
   return null;
@@ -182,32 +189,33 @@ const countedFilter = (ruleId, now) => ({
 });
 
 /** Faqat chegarasi bor qoidalar uchun so'rov yuboriladi (qolganlari bepul) */
-export async function usageFor(rule, userId, now = new Date()) {
-  const need = { total: rule.totalLimit > 0, today: rule.dailyLimit > 0, ct: rule.perCustomerTotal > 0 && userId, cd: rule.perCustomerPerDay > 0 && userId, spent: rule.budget > 0 };
+export async function usageFor(rule, userId, now = new Date(), deviceId = '') {
+  const need = { total: rule.totalLimit > 0, today: rule.dailyLimit > 0, ct: rule.perCustomerTotal > 0 && userId, cd: rule.perCustomerPerDay > 0 && userId, dt: rule.perDeviceTotal > 0 && deviceId, spent: rule.budget > 0 };
   if (!Object.values(need).some(Boolean)) return {};
   const base = countedFilter(rule._id, now);
   const dayStart = tashkent(now).dayStart;
-  const [agg, today, customerTotal, customerToday] = await Promise.all([
+  const [agg, today, customerTotal, customerToday, deviceTotal] = await Promise.all([
     (need.total || need.spent) ? Order.aggregate([{ $match: base }, { $group: { _id: null, n: { $sum: 1 }, spent: { $sum: '$bonusCost' } } }]) : [],
     need.today ? Order.countDocuments({ ...base, createdAt: { $gte: dayStart } }) : 0,
     need.ct ? Order.countDocuments({ ...base, userId }) : 0,
     need.cd ? Order.countDocuments({ ...base, userId, createdAt: { $gte: dayStart } }) : 0,
+    need.dt ? Order.countDocuments({ ...base, clientDevice: deviceId }) : 0,
   ]);
-  return { total: agg[0]?.n || 0, spent: agg[0]?.spent || 0, today, customerTotal, customerToday };
+  return { total: agg[0]?.n || 0, spent: agg[0]?.spent || 0, today, customerTotal, customerToday, deviceTotal };
 }
 
 /**
  * Buyurtma yaratishda: sovg'alar ro'yxati (muzlatiladigan qatorlar) va ularning qoplash summasi.
  * Har qanday xatoda bo'sh natija: bonus buyurtmani HECH QACHON to'xtatmasligi kerak.
  */
-export async function resolveGifts({ restaurant, userId, menuAmount, paidAmount, fulfillment, paymentMethod, now = new Date() }) {
+export async function resolveGifts({ restaurant, userId, menuAmount, paidAmount, fulfillment, paymentMethod, channel = null, deviceId = '', now = new Date() }) {
   try {
     const rules = await loadLiveRules(now);
     if (!rules.length) return { items: [], cost: 0 };
-    const ctx = { restaurantId: restaurant._id, restaurantKind: restaurant.kind, fulfillment, paymentMethod, menuAmount, paidAmount, now };
+    const ctx = { restaurantId: restaurant._id, restaurantKind: restaurant.kind, fulfillment, paymentMethod, channel, deviceId, menuAmount, paidAmount, now };
     const candidates = rules.filter((r) => scopeMatches(r, ctx));
     const usage = new Map();
-    for (const r of candidates) usage.set(String(r._id), await usageFor(r, userId, now));
+    for (const r of candidates) usage.set(String(r._id), await usageFor(r, userId, now, deviceId));
     const { gifts } = evaluateGifts(candidates, ctx, (r) => usage.get(String(r._id)));
     return { items: gifts, cost: giftsCost(gifts) };
   } catch (e) {
@@ -217,14 +225,14 @@ export async function resolveGifts({ restaurant, userId, menuAmount, paidAmount,
 }
 
 /** Mijoz savati uchun: har restoran guruhiga sovg'a va "yana X so'm" */
-export async function quoteGifts({ groups, userId, fulfillment, paymentMethod, now = new Date() }) {
+export async function quoteGifts({ groups, userId, fulfillment, paymentMethod, channel = null, deviceId = '', now = new Date() }) {
   const rules = await loadLiveRules(now);
   const out = [];
   for (const g of groups) {
-    const ctx = { restaurantId: g.restaurantId, restaurantKind: g.restaurantKind, fulfillment, paymentMethod, menuAmount: g.menuAmount, paidAmount: g.paidAmount, now };
+    const ctx = { restaurantId: g.restaurantId, restaurantKind: g.restaurantKind, fulfillment, paymentMethod, channel, deviceId, menuAmount: g.menuAmount, paidAmount: g.paidAmount, now };
     const candidates = rules.filter((r) => scopeMatches(r, ctx));
     const usage = new Map();
-    for (const r of candidates) usage.set(String(r._id), await usageFor(r, userId, now));
+    for (const r of candidates) usage.set(String(r._id), await usageFor(r, userId, now, deviceId));
     const { gifts, next } = evaluateGifts(candidates, ctx, (r) => usage.get(String(r._id)));
     out.push({
       restaurantId: String(g.restaurantId),

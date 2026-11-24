@@ -4,6 +4,7 @@ import { GiftBonus } from '../models/GiftBonus.js';
 import { Order } from '../models/Order.js';
 import { Restaurant } from '../models/Restaurant.js';
 import { asyncHandler } from '../middleware/error.js';
+import { readClient } from '../services/clientChannel.js';
 import { MAX_ACTIVE_RULES, invalidateGiftCache, isLive, quoteGifts, sanitizeGift } from '../services/giftBonus.js';
 
 /*
@@ -71,7 +72,8 @@ export const giftBonusController = {
       const pickupDiscount = fulfillment === 'pickup' && r.pickupDiscountPercent > 0 ? Math.round(g.subtotal * r.pickupDiscountPercent / 100) : 0;
       return { restaurantId: g.restaurantId, restaurantKind: r.kind, menuAmount: g.subtotal, paidAmount: Math.max(0, g.subtotal - pickupDiscount) };
     });
-    const out = await quoteGifts({ groups: prepared, userId: req.userId, fulfillment, paymentMethod });
+    const { channel, deviceId } = readClient(req);
+    const out = await quoteGifts({ groups: prepared, userId: req.userId, fulfillment, paymentMethod, channel, deviceId });
     res.set('Cache-Control', 'no-store').json({ groups: out });
   }),
 

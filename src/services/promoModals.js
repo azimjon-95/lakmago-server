@@ -4,6 +4,22 @@
 export const TEMPLATES = ['brush', 'coupon', 'sunburst', 'image'];
 export const LIMITS = { title: 90, footer: 70, link: 200 };
 export const MAX_ACTIVE = 5;
+export const AUDIENCES = ['all', 'app', 'not_app', 'telegram', 'web'];
+export const CTAS = ['link', 'install_app'];
+
+/*
+ * Oyna shu mijozga ko'rinadimi (kanal — services/clientChannel.js readClient).
+ * Kanal NOMA'LUM (header yo'q) — asosan ESKI native ilova: unga faqat "all" oynalar.
+ * Shunday qilinmasa "Ilovani yuklab oling" oynasi ilovaning o'zida chiqib qolardi.
+ */
+export function audienceMatches(audience, channel) {
+  const a = audience || 'all';
+  if (a === 'all') return true;
+  if (!channel) return false;
+  if (a === 'app') return channel === 'ios' || channel === 'android';
+  if (a === 'not_app') return channel === 'telegram' || channel === 'web';
+  return a === channel;
+}
 
 /**
  * Matn: boshqaruv belgilari olinadi, bo'shliqlar yig'iladi, uzunlik cheklanadi.
@@ -73,6 +89,10 @@ export function sanitizePromo(input = {}, { partial = false } = {}) {
   }
   if (!partial || has('active')) data.active = Boolean(input.active);
   if (!partial || has('frequency')) data.frequency = input.frequency === 'once' ? 'once' : 'daily';
+  if (!partial || has('audience')) data.audience = AUDIENCES.includes(input.audience) ? input.audience : 'all';
+  if (!partial || has('cta')) data.cta = CTAS.includes(input.cta) ? input.cta : 'link';
+  // Ilovani yuklashga taklif ilovaning o'zida ma'nosiz
+  if (data.cta === 'install_app' && (data.audience === 'app')) return { data, error: '“Ilovani yuklab olish” tugmasi ilova foydalanuvchilariga ko‘rsatilmaydi — auditoriyani o‘zgartiring' };
   for (const k of ['startsAt', 'endsAt']) {
     if (!partial || has(k)) {
       const d = toDate(input[k]);
@@ -96,4 +116,5 @@ export function isLive(p, now = new Date()) {
 export const publicView = (p) => ({
   id: String(p._id), key: `${p._id}:${p.version ?? 1}`, template: p.template, title: p.title, footer: p.footer || '',
   imageUrl: p.imageUrl || '', link: p.link || '', frequency: p.frequency || 'daily',
+  audience: p.audience || 'all', cta: p.cta || 'link',
 });
