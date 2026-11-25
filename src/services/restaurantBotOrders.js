@@ -1,3 +1,4 @@
+import { customerTrustText } from '../lib/reservationCustomer.js';
 import { config } from '../config/index.js';
 import { formatMeters } from './deviceCheck.js';
 import { REJECT_REASONS } from '../constants/rejectReasons.js';
@@ -769,6 +770,7 @@ export function buildReservationText(r, { title = '', actorName = '', note = '',
     '',
     `👤 ${esc(r.name)}`,
     `📞 ${esc(r.phone)}`,
+    ...(r.customer ? [`🔎 ${esc(customerTrustText(r.customer))}`] : []),
     `📅 ${fmtReservationDate(r.date)}`,
     `🕐 ${esc(r.time)}`,
     `👥 ${Number(r.guests) || 0} kishi`,

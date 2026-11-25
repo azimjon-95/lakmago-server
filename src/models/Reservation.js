@@ -10,7 +10,18 @@ const reservationSchema = new Schema(
     guests: { type: Number, required: true, min: 1 },
     name: { type: String, required: true },
     phone: { type: String, required: true },
-    note: { type: String },
+    note: { type: String, maxlength: 300 },
+
+    // Bron qo'yilgan paytdagi hisob izi (lib/reservationCustomer.js) — restoran va admin guruhi soxta bronni ajratishi uchun
+    customer: {
+      accountName: String, username: String, telegramId: String,
+      accountPhone: String, phoneVerified: Boolean, otherPhone: Boolean,
+      accountAgeDays: Number, prevTotal: Number, prevCame: Number, prevCancelled: Number,
+      deliveredOrders: Number,
+      trust: { type: String, enum: ['new', 'ok', 'risk'] },
+    },
+    // Admin Telegram guruhidagi post (holat o'zgarganda tahrirlanadi)
+    groupPost: { chatId: String, messageId: Number },
 
     // Oldindan tanlangan taomlar — restoran tayyorlab qo'yadi
     preOrder: [{
