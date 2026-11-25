@@ -11,7 +11,7 @@ import { isStore } from '../services/storeRules.js';
 import { User } from '../models/User.js';
 import { blockedPayload } from '../services/customerBlock.js';
 import {
-  checkReservationRequest, buildCustomerSnapshot, cleanNote, NOTE_MAX,
+  checkReservationRequest, buildCustomerSnapshot, cleanNote, customerTrustText, NOTE_MAX,
 } from '../lib/reservationCustomer.js';
 
 const ACTIVE_RESV = ['pending', 'confirmed', 'coming', 'on_way', 'arrived'];
@@ -192,10 +192,13 @@ export const reservationController = {
         ...r,
         userId: u._id ? String(u._id) : null,
         customer: {
+          // Bron paytida muhrlangan hisob izi (tasdiqlangan telefon, oldingi bronlar...) + joriy profil
+          ...(r.customer || {}),
           name: [u.firstName, u.lastName].filter(Boolean).join(' ') || r.name,
           username: u.username || '',
           telegramId: u.telegramId || '',
           photoUrl: u.photoUrl || '',
+          trustText: customerTrustText(r.customer),
         },
       };
     });
