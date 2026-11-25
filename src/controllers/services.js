@@ -8,6 +8,13 @@ import { getDineInMenu } from '../services/dineInPricing.js';
 import { Restaurant } from '../models/Restaurant.js';
 import { zonedToUtc } from '../services/restaurantTime.js';
 import { isStore } from '../services/storeRules.js';
+import { User } from '../models/User.js';
+import { blockedPayload } from '../services/customerBlock.js';
+import {
+  checkReservationRequest, buildCustomerSnapshot, cleanNote, customerTrustText, NOTE_MAX,
+} from '../lib/reservationCustomer.js';
+
+const ACTIVE_RESV = ['pending', 'confirmed', 'coming', 'on_way', 'arrived'];
 
 const reservationSchema = z.object({
   restaurantId: z.string(),
@@ -17,7 +24,7 @@ const reservationSchema = z.object({
   guests: z.number().int().positive(),
   name: z.string().min(2),
   phone: z.string().min(7),
-  note: z.string().optional(),
+  note: z.string().max(NOTE_MAX * 2).optional(),
   // Oldindan tanlangan taomlar
   preOrder: z.array(z.object({
     dishId: z.string().optional().default(''),
@@ -64,17 +71,62 @@ export const reservationController = {
      * talqin qilinardi: UTC serverda Toshkentning 10:00 i 15:00
      * bo'lib yozilar va mijozga eslatmalar 5 soat kech ketardi.
      */
-    const rest = await Restaurant.findById(parsed.data.restaurantId).select('timezone kind category').lean().catch(() => null);
+    const rest = await Restaurant.findById(parsed.data.restaurantId).select('timezone kind category isActive isBlocked').lean().catch(() => null);
     // Do'konda stol bron qilinmaydi
     if (rest && isStore(rest)) {
       return res.status(400).json({ error: 'Do‘konda stol bron qilib bo‘lmaydi', code: 'RESERVATION_NOT_AVAILABLE' });
     }
     const scheduledAt = zonedToUtc(parsed.data.date, parsed.data.time, rest?.timezone || 'Asia/Tashkent');
 
+        if (rest === null) return res.status(404).json({ error: 'Restoran topilmadi' });
+    if (rest.isBlocked || rest.isActive === false) {
+      return res.status(400).json({ error: 'Bu restoran hozir bron qabul qilmaydi', code: 'RESERVATION_NOT_AVAILABLE' });
+    }
+
+    /*
+     * SOXTA BRONDAN HIMOYA (lib/reservationCustomer.js):
+     * bloklangan hisob, o'tgan/juda uzoq sana, soxta raqam, takroriy va ko'p bronlar rad etiladi.
+     * Mijoz izi (Telegram, tasdiqlangan telefon, oldingi bronlar) bronga muhrlanadi.
+     */
+    const me = await User.findById(req.userId)
+      .select('status blockInfo telegramId username firstName lastName phone phoneVerified createdAt').lean();
+    if (!me || me.status === 'BLOCKED') {
+      return res.status(403).json(blockedPayload(me));
+    }
+    const now = new Date();
+    const rid = parsed.data.restaurantId;
+    const [duplicate, sameDay, activeUpcoming, created24h, total, came, cancelled, deliveredOrders] = await Promise.all([
+      Reservation.exists({ userId: req.userId, restaurantId: rid, date: parsed.data.date, time: parsed.data.time, status: { $in: ACTIVE_RESV } }),
+      Reservation.countDocuments({ userId: req.userId, restaurantId: rid, date: parsed.data.date, status: { $in: ACTIVE_RESV } }),
+      Reservation.countDocuments({ userId: req.userId, status: { $in: ACTIVE_RESV }, scheduledAt: { $gte: new Date(now.getTime() - 3 * 3_600_000) } }),
+      Reservation.countDocuments({ userId: req.userId, createdAt: { $gte: new Date(now.getTime() - 86_400_000) } }),
+      Reservation.countDocuments({ userId: req.userId }),
+      Reservation.countDocuments({ userId: req.userId, status: { $in: ['arrived', 'completed'] } }),
+      Reservation.countDocuments({ userId: req.userId, status: { $in: ['cancelled', 'not_coming'] } }),
+      Order.countDocuments({ userId: req.userId, status: 'delivered' }),
+    ]);
+    const bad = checkReservationRequest({
+      data: parsed.data,
+      scheduledAt,
+      now,
+      counts: { duplicate: Boolean(duplicate), sameDay, activeUpcoming, created24h },
+    });
+    if (bad) return res.status(bad.status).json({ error: bad.error, code: bad.code });
+
+    const customer = buildCustomerSnapshot({
+      user: me,
+      contactPhone: parsed.data.phone,
+      hist: { total, came, cancelled, deliveredOrders },
+      now,
+    });
+
     const reservation = await Reservation.create({
       ...parsed.data,
+      name: parsed.data.name.trim(),
+      note: cleanNote(parsed.data.note),
       userId: req.userId,
       scheduledAt: scheduledAt || undefined,
+      customer,
     });
 
     // Restoranga real-time xabar (to'liq ma'lumot bilan)
@@ -87,6 +139,7 @@ export const reservationController = {
       date: reservation.date,
       time: reservation.time,
       guests: reservation.guests,
+      note: reservation.note || '',
     });
     getIO()?.to('admin').emit('reservation:new', { reservationId: String(reservation._id) });
 
@@ -97,6 +150,11 @@ export const reservationController = {
     import('../services/restaurantBotOrders.js')
       .then((m) => m.notifyNewReservation(reservation._id))
       .catch((e) => console.error('[restaurantBot] bron:', e.message));
+
+    // Admin guruhiga qisqa post (buyurtma kartalari tushadigan guruh)
+    import('../services/reservationGroupNotify.js')
+      .then((m) => m.notifyReservationGroup(reservation._id))
+      .catch((e) => console.error('[reservationGroup] bron:', e.message));
 
     notify({
       notificationId: `reservation:${reservation._id}`,
@@ -134,10 +192,13 @@ export const reservationController = {
         ...r,
         userId: u._id ? String(u._id) : null,
         customer: {
+          // Bron paytida muhrlangan hisob izi (tasdiqlangan telefon, oldingi bronlar...) + joriy profil
+          ...(r.customer || {}),
           name: [u.firstName, u.lastName].filter(Boolean).join(' ') || r.name,
           username: u.username || '',
           telegramId: u.telegramId || '',
           photoUrl: u.photoUrl || '',
+          trustText: customerTrustText(r.customer),
         },
       };
     });
@@ -175,6 +236,9 @@ export const reservationController = {
     import('../services/restaurantBotOrders.js')
       .then((m) => m.notifyReservationChangedByCustomer(reservation._id))
       .catch((e) => console.error('[restaurantBot] bron bekor:', e.message));
+    import('../services/reservationGroupNotify.js')
+      .then((m) => m.refreshReservationGroupPost(reservation._id))
+      .catch(() => {});
     import('../services/notifications.js')
       .then((m) => m.resolveReservationNotification(reservation))
       .catch(() => {});
@@ -234,6 +298,9 @@ export const reservationController = {
     import('../services/restaurantBotOrders.js')
       .then((m) => m.refreshReservationMessages(reservation._id))
       .catch((e) => console.error('[restaurantBot] bron:', e.message));
+    import('../services/reservationGroupNotify.js')
+      .then((m) => m.refreshReservationGroupPost(reservation._id))
+      .catch(() => {});
     import('../services/notifications.js')
       .then((m) => m.resolveReservationNotification(reservation))
       .catch(() => {});
