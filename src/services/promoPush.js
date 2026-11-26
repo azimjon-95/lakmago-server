@@ -131,7 +131,7 @@ export function buildPayload(platform, msg, { url, pp, imageUrl = '', now = new 
     },
     headers: {
       'apns-push-type': 'alert',
-      'apns-priority': '5',
+      'apns-priority': '10',          // ko'rinadigan xabar: darhol yetkazilsin (5 — Apple kechiktirishi mumkin)
       'apns-topic': config.customerApnsBundleId,
       'apns-expiration': String(Math.floor(now.getTime() / 1000) + 3600),
       'apns-collapse-id': 'lokma-promo',
@@ -151,16 +151,26 @@ export async function deliver(device, msg, meta) {
   return dev.ok ? { ...dev, environment: 'development' } : dev;
 }
 
+/** Qurilmaning o'ziga bog'liq bo'lmagan xatolar (tarmoq, Apple/Google nosozligi, sozlama) qurilmani o'chirmaydi */
+export function isDeviceFault(res) {
+  if (!res || res.ok || res.transient) return false;
+  return !/APNs 40[13]|APNs 429|APNs 5\d\d|TopicDisallowed|MissingTopic|BadCertificate|InvalidProviderToken|ExpiredProviderToken|FCM (401|403|429|5\d\d)|timeout|ECONN|ETIMEDOUT|ENOTFOUND|EAI_AGAIN/i.test(res.error || '');
+}
+
 async function finishDevice(device, res) {
   const now = new Date();
   if (res.ok) {
     await CustomerDevice.updateOne({ _id: device._id }, {
       $set: { lastSentAt: now, lastError: '', failCount: 0, ...(res.environment ? { environment: res.environment } : {}) },
     });
-  } else if (res.dead) {
+  } else if (res.dead && !/DeviceTokenNotForTopic/.test(res.error || '')) {
     await CustomerDevice.updateOne({ _id: device._id }, { $set: { token: '', lastError: String(res.error || '').slice(0, 200) } });
   } else {
-    await CustomerDevice.updateOne({ _id: device._id }, { $set: { lastError: String(res.error || '').slice(0, 200) }, $inc: { failCount: 1 } });
+    // Sozlama/tarmoq xatosi (masalan bundle id noto'g'ri) tokenni ham, hisobni ham buzmaydi: faqat qurilma aybi sanaladi
+    await CustomerDevice.updateOne({ _id: device._id }, {
+      $set: { lastError: String(res.error || '').slice(0, 200) },
+      ...(isDeviceFault(res) ? { $inc: { failCount: 1 } } : {}),
+    });
   }
 }
 

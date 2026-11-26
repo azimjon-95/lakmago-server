@@ -108,7 +108,8 @@
     "diagnose:order": "node scripts/diagnose-order.js",
     "test:district": "node tests/district-resolver.test.mjs",
     "district:extract": "node scripts/extract-district-boundaries.js",
-    "district:migrate": "node scripts/migrate-service-districts.js"
+    "district:migrate": "node scripts/migrate-service-districts.js",
+    "test:apns-resilience": "node --test tests/apns-resilience.test.mjs"
   },
   "dependencies": {
     "@socket.io/redis-adapter": "^8.3.0",
