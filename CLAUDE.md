@@ -108,6 +108,8 @@ Ism, familiya, telefon, manzil, geolokatsiya, Telegram kanaliga obuna —
 
 Istisno (egasi qarori, 2026-11-16): tuman avto-aniqlash uchun GPS ruxsati ochilishda, splash bilan parallel,
 24 soatda ko'pi bilan bir marta so'raladi — bloklamaydi, manzilga yozilmaydi. Batafsil: `lakmago-client/CLAUDE.md` 2-qoida.
+Istisno (egasi qarori, 2026-11-26): iOS/Android ilovada taom takliflari push'iga rozilik — bir marta, bloklamaydi.
+Server (`services/promoPush.js`) kuniga ko'pi bilan 2 ta yuboradi; standart O'CHIQ (admin yoqadi). Batafsil: `lakmago-client/CLAUDE.md` 2-qoida.
 
 ---
 
