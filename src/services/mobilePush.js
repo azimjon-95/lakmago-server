@@ -169,31 +169,51 @@ function apnsConn(host) {
   return session;
 }
 
-export function sendApns(token, payload, headers, environment = null) {
-  if (transports?.apns) return transports.apns(token, payload, headers, environment);
+/** Bitta urinish. `transient: true` — qayta urinsa bo'ladigan xato (tarmoq, Apple 429/5xx, eskirgan JWT). */
+function apnsOnce(token, payload, headers, environment) {
   return new Promise((resolve) => {
     let req;
+    let settled = false;
+    const done = (v) => { if (!settled) { settled = true; resolve(v); } };
     try {
       req = apnsConn(apnsHostFor(environment)).request({
         ':method': 'POST', ':path': `/3/device/${token}`, authorization: `bearer ${apnsAuth()}`,
         'apns-topic': config.apnsBundleId, 'content-type': 'application/json', ...headers,
       });
-    } catch (e) { apnsSessions.delete(apnsHostFor(environment)); resolve({ ok: false, error: `APNs ${e.message}` }); return; }
+    } catch (e) { apnsSessions.delete(apnsHostFor(environment)); done({ ok: false, transient: true, error: `APNs ${e.message}` }); return; }
     let status = 0; let body = '';
-    req.setTimeout(config.mobilePushTimeoutMs, () => { req.close(); resolve({ ok: false, error: 'APNs timeout' }); });
+    req.setTimeout(config.mobilePushTimeoutMs, () => { req.close(); done({ ok: false, transient: true, error: 'APNs timeout' }); });
     req.on('response', (h) => { status = h[':status']; });
     req.setEncoding('utf8');
     req.on('data', (c) => { body += c; });
     req.on('end', () => {
-      if (status === 200) { resolve({ ok: true }); return; }
+      if (status === 200) { done({ ok: true }); return; }
       let reason = ''; try { reason = JSON.parse(body).reason || ''; } catch { /* bo'sh javob */ }
-      if (reason === 'ExpiredProviderToken') apnsJwt = { value: '', at: 0 };
+      const jwtBad = reason === 'ExpiredProviderToken' || reason === 'InvalidProviderToken';
+      if (jwtBad) apnsJwt = { value: '', at: 0 };
       const dead = status === 410 || ['BadDeviceToken', 'Unregistered', 'DeviceTokenNotForTopic'].includes(reason);
-      resolve({ ok: false, dead, error: `APNs ${status} ${reason}`.trim() });
+      const transient = jwtBad || status === 429 || status >= 500 || status === 0;
+      done({ ok: false, dead, transient, jwtBad, error: `APNs ${status} ${reason}`.trim() });
     });
-    req.on('error', (e) => { apnsSessions.delete(apnsHostFor(environment)); resolve({ ok: false, error: `APNs ${e.message}` }); });
+    req.on('error', (e) => { apnsSessions.delete(apnsHostFor(environment)); done({ ok: false, transient: true, error: `APNs ${e.message}` }); });
     req.end(JSON.stringify(payload));
   });
+}
+
+const APNS_RETRY_MS = [400, 1500];   // 3 urinish: darhol, +0.4 s, +1.5 s
+/**
+ * iOS'ga yuborish. Uzilgan/eskirgan HTTP/2 ulanish, Apple 429/5xx, eskirgan JWT — avtomatik qayta uriniladi
+ * (yangi ulanish ochiladi, JWT qayta imzolanadi). Takror yuborilsa ham `apns-collapse-id` bo'lsa ekranda bitta chiqadi.
+ */
+export async function sendApns(token, payload, headers, environment = null) {
+  if (transports?.apns) return transports.apns(token, payload, headers, environment);
+  let res;
+  for (let i = 0; i <= APNS_RETRY_MS.length; i++) {
+    res = await apnsOnce(token, payload, headers, environment);
+    if (res.ok || !res.transient || i === APNS_RETRY_MS.length) break;
+    await new Promise((r) => setTimeout(r, res.jwtBad ? 0 : APNS_RETRY_MS[i]));
+  }
+  return res;
 }
 
 /* ─────────────── xabarlar ─────────────── */

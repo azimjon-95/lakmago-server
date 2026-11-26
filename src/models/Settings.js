@@ -78,6 +78,17 @@ const settingsSchema = new Schema(
       androidStoreUrl: { type: String, default: 'https://play.google.com/store/apps/details?id=lokma.uz' },
       updatePromptDays: { type: Number, default: 3, min: 1, max: 30 },
     },
+    /*
+     * TAOM TAKLIFLARI PUSH'I (mijoz ilovasi, services/promoPush.js). Kuniga 2 slot, Toshkent vaqti.
+     * Standart O'CHIQ — admin sinab ko'rib yoqadi.
+     */
+    promoPush: {
+      enabled: { type: Boolean, default: false },
+      lunchFrom: { type: String, default: '11:30' },
+      lunchTo: { type: String, default: '12:30' },
+      dinnerFrom: { type: String, default: '18:00' },
+      dinnerTo: { type: String, default: '19:30' },
+    },
   },
   { timestamps: true },
 );

@@ -75,6 +75,7 @@
     "test:restaurant-app": "node tests/restaurant-app.test.mjs",
     "test:restaurant-report": "node tests/restaurant-report.test.mjs",
     "test:reservation-guard": "node tests/reservation-guard.test.mjs",
+    "test:promo-push": "node --test tests/promo-push.test.mjs",
     "test:app-channel": "node --test tests/app-channel.test.mjs",
     "test:road-distance": "node tests/delivery-road-distance.test.mjs",
     "test:catalog-counts": "node tests/catalog-counts.test.mjs",
@@ -107,7 +108,8 @@
     "diagnose:order": "node scripts/diagnose-order.js",
     "test:district": "node tests/district-resolver.test.mjs",
     "district:extract": "node scripts/extract-district-boundaries.js",
-    "district:migrate": "node scripts/migrate-service-districts.js"
+    "district:migrate": "node scripts/migrate-service-districts.js",
+    "test:apns-resilience": "node --test tests/apns-resilience.test.mjs"
   },
   "dependencies": {
     "@socket.io/redis-adapter": "^8.3.0",

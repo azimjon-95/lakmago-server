@@ -426,6 +426,11 @@ async function main() {
   initMobilePush();
   // Qabul qilinmagan yangi buyurtma: push qayta yuboriladi (iOS o'zi takrorlay olmaydi)
   setInterval(() => checkPendingOrderPushes().catch((e) => console.error('[mobilePush]', e.message)), 10_000);
+  // Mijoz ilovasiga taom takliflari (kuniga 2: tushlik va kechki). Admin yoqmaguncha hech narsa qilmaydi.
+  {
+    const { promoPushTick } = await import('./services/promoPush.js');
+    setInterval(() => promoPushTick().catch((e) => console.error('[promoPush]', e.message)), 60_000);
+  }
   // Kuryer ilovasi: ochiq takliflarni smenadagi YAQIN kuryerlarga yuborish (5 s) va unutilgan smenalarni yopish (10 daq)
   setInterval(() => dispatchOffers().catch((e) => console.error('[courierPush]', e.message)), 5_000);
   setInterval(() => closeStaleShifts().catch((e) => console.error('[courierShift]', e.message)), 10 * 60_000);

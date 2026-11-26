@@ -431,6 +431,8 @@ export const config = {
   apnsBundleId: process.env.APNS_BUNDLE_ID || 'uz.lokmago.restaurant',
   apnsProduction: process.env.APNS_PRODUCTION === 'true',
   apnsHost: process.env.APNS_HOST || '',            // faqat test/diagnostika: APNs manzilini almashtirish
+  // MIJOZ ilovasi (Lokma Go) iOS bundle — taom takliflari push'i (services/promoPush.js). Kalit (.p8) o'sha, mavzu boshqa.
+  customerApnsBundleId: process.env.CUSTOMER_APNS_BUNDLE_ID || 'uz.lokma.go',
   // Qabul qilinmagan yangi buyurtma uchun push qayta yuborish oralig'i va chegarasi
   // Kuryer ilovasi (BOSQICH 2). Kuryer JWT'si BOSHQA kalit bilan imzolanadi: mijoz/restoran/admin `auth` middleware'i uni qabul qilmaydi.
   courierJwtSecret: process.env.COURIER_JWT_SECRET || `${jwtSecret}:courier`,
