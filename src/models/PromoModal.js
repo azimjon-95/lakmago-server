@@ -16,6 +16,18 @@ const promoModalSchema = new mongoose.Schema(
     imageUrl: { type: String, default: '' },
     /** Bosilganda ochiladigan sahifa: ilova ichidagi yo'l (/market) yoki https havola; bo'sh — faqat yopiladi */
     link: { type: String, default: '', maxlength: 200 },
+    /**
+     * "Faqat rasm" oynasining pastki tugmalari (0–2 ta): nom + havola. Boshqa shablonlarda bo'sh.
+     * `clicks` — shu tugma bosilgan soni (umumiy stats.clicked ham oshadi).
+     */
+    buttons: {
+      type: [new mongoose.Schema({
+        label: { type: String, required: true, maxlength: 24 },
+        link: { type: String, required: true, maxlength: 200 },
+        clicks: { type: Number, default: 0 },
+      }, { _id: false })],
+      default: [],
+    },
     active: { type: Boolean, default: false, index: true },
     order: { type: Number, default: 0 },
     frequency: { type: String, enum: ['daily', 'once'], default: 'daily' },

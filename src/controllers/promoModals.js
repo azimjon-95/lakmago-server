@@ -1,7 +1,7 @@
 import mongoose from 'mongoose';
 import { PromoModal } from '../models/PromoModal.js';
 import { asyncHandler } from '../middleware/error.js';
-import { MAX_ACTIVE, audienceMatches, isLive, publicView, sanitizePromo } from '../services/promoModals.js';
+import { MAX_ACTIVE, MAX_BUTTONS, audienceMatches, isLive, publicView, sanitizePromo } from '../services/promoModals.js';
 import { readClient } from '../services/clientChannel.js';
 
 /*
@@ -35,7 +35,14 @@ export const promoModalController = {
   track: asyncHandler(async (req, res) => {
     const { id } = req.params;
     const kind = req.body?.kind === 'click' ? 'clicked' : 'shown';
-    if (validId(id)) await PromoModal.updateOne({ _id: id }, { $inc: { [`stats.${kind}`]: 1 } }).catch(() => {});
+    if (validId(id)) {
+      await PromoModal.updateOne({ _id: id }, { $inc: { [`stats.${kind}`]: 1 } }).catch(() => {});
+      // Qaysi tugma bosilgani (faqat mavjud indeks — massivga bo'sh element qo'shilmasin)
+      const btn = Number(req.body?.btn);
+      if (kind === 'clicked' && Number.isInteger(btn) && btn >= 0 && btn < MAX_BUTTONS) {
+        await PromoModal.updateOne({ _id: id, [`buttons.${btn}`]: { $exists: true } }, { $inc: { [`buttons.${btn}.clicks`]: 1 } }).catch(() => {});
+      }
+    }
     res.status(204).end();
   }),
 

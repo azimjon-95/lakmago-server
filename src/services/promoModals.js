@@ -2,7 +2,8 @@
  * Reklama oynalari — sof mantiq (bazasiz testlanadi): matnni tozalash, faollik, mijozga ko'rinish.
  */
 export const TEMPLATES = ['brush', 'coupon', 'sunburst', 'image'];
-export const LIMITS = { title: 90, footer: 70, link: 200 };
+export const LIMITS = { title: 90, footer: 70, link: 200, buttonLabel: 24 };
+export const MAX_BUTTONS = 2;
 export const MAX_ACTIVE = 5;
 export const AUDIENCES = ['all', 'app', 'not_app', 'telegram', 'web'];
 export const CTAS = ['link', 'install_app'];
@@ -57,6 +58,29 @@ export function cleanLink(raw) {
   return '';
 }
 
+/**
+ * "Faqat rasm" tugmalari: ko'pi bilan 2 ta, har birida nom (1–24 belgi, oddiy matn) va to'g'ri havola
+ * (/yo'l yoki https). Butunlay bo'sh qator — tashlab yuboriladi; yarim to'ldirilgan — xato.
+ * @returns {{ buttons: Array<{label:string, link:string}>, error?: string }}
+ */
+export function cleanButtons(raw) {
+  const out = [];
+  const list = Array.isArray(raw) ? raw : [];
+  if (list.length > MAX_BUTTONS) return { buttons: [], error: `Ko‘pi bilan ${MAX_BUTTONS} ta tugma qo‘shish mumkin` };
+  for (let i = 0; i < list.length; i++) {
+    const b = list[i] || {};
+    const label = cleanText(String(b.label ?? '').replace(/\*/g, ''), LIMITS.buttonLabel).replace(/\n/g, ' ').trim();
+    const rawLink = String(b.link ?? '').trim();
+    if (!label && !rawLink) continue;
+    if (!label) return { buttons: [], error: `${i + 1}-tugma: nomini yozing` };
+    if (!rawLink) return { buttons: [], error: `${i + 1}-tugma: havolani yozing` };
+    const link = cleanLink(rawLink);
+    if (!link) return { buttons: [], error: `${i + 1}-tugma: havola noto‘g‘ri — /market kabi yo‘l yoki https:// manzil yozing` };
+    out.push({ label, link });
+  }
+  return { buttons: out };
+}
+
 const cleanUrl = (raw) => (/^https:\/\/[^\s<>"']+$/i.test(String(raw ?? '').trim()) ? String(raw).trim().slice(0, 500) : '');
 const toDate = (v) => { if (!v) return null; const d = new Date(v); return Number.isNaN(d.getTime()) ? undefined : d; };
 
@@ -86,6 +110,15 @@ export function sanitizePromo(input = {}, { partial = false } = {}) {
   if (!partial || has('link')) {
     data.link = cleanLink(input.link);
     if (input.link && !data.link) return { data, error: 'Havola noto‘g‘ri: /market kabi yo‘l yoki https:// manzil yozing' };
+  }
+  // Tugmalar faqat "Faqat rasm" oynasida; boshqa shablonga o'tilsa tozalanadi
+  if (!partial || has('buttons') || (has('template') && data.template !== 'image')) {
+    if (data.template && data.template !== 'image') data.buttons = [];
+    else {
+      const r = cleanButtons(input.buttons);
+      if (r.error) return { data, error: r.error };
+      data.buttons = r.buttons;
+    }
   }
   if (!partial || has('active')) data.active = Boolean(input.active);
   if (!partial || has('frequency')) data.frequency = input.frequency === 'once' ? 'once' : 'daily';
@@ -117,4 +150,5 @@ export const publicView = (p) => ({
   id: String(p._id), key: `${p._id}:${p.version ?? 1}`, template: p.template, title: p.title, footer: p.footer || '',
   imageUrl: p.imageUrl || '', link: p.link || '', frequency: p.frequency || 'daily',
   audience: p.audience || 'all', cta: p.cta || 'link',
+  buttons: p.template === 'image' ? (p.buttons || []).slice(0, MAX_BUTTONS).map((b) => ({ label: b.label, link: b.link })) : [],
 });

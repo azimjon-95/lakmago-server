@@ -3,7 +3,7 @@
  * npm run test:promo-modals
  */
 process.env.JWT_SECRET = process.env.JWT_SECRET || 'x'.repeat(40);
-const { cleanText, cleanLink, sanitizePromo, isLive, publicView, MAX_ACTIVE } = await import('../src/services/promoModals.js');
+const { cleanText, cleanLink, cleanButtons, sanitizePromo, isLive, publicView, MAX_ACTIVE } = await import('../src/services/promoModals.js');
 const { PromoModal } = await import('../src/models/PromoModal.js');
 const { promoModalController: C, invalidatePromoCache } = await import('../src/controllers/promoModals.js');
 
@@ -51,6 +51,28 @@ console.log('\n[3] sanitizePromo');
   ok(/Sarlavhani/.test(r.error || ''), 'boshqa dizaynda sarlavha hamon majburiy');
   r = sanitizePromo({ active: false }, { partial: true });
   ok(!r.error && Object.keys(r.data).join() === 'active', 'PATCH faqat berilgan maydon');
+}
+
+console.log('\n[3b] "Faqat rasm" tugmalari');
+{
+  const img = 'https://res.cloudinary.com/x/image/upload/a.png';
+  let r = cleanButtons([{ label: ' Buyurtma *bering* ', link: '/market' }, { label: 'Kanal', link: 'https://t.me/lokmago' }]);
+  ok(!r.error && r.buttons.length === 2 && r.buttons[0].label === 'Buyurtma bering', 'ikkita tugma, * olib tashlanadi');
+  ok(cleanButtons([{ label: 'A', link: '/a' }, { label: 'B', link: '/b' }, { label: 'C', link: '/c' }]).error, '3 ta tugma — xato');
+  ok(cleanButtons([{ label: '', link: '' }]).buttons.length === 0, 'bo‘sh qator tashlab yuboriladi');
+  ok(/nomini/.test(cleanButtons([{ label: '', link: '/x' }]).error || ''), 'nomsiz tugma — xato');
+  ok(/havolani/.test(cleanButtons([{ label: 'A', link: '' }]).error || ''), 'havolasiz tugma — xato');
+  ok(/noto‘g‘ri/.test(cleanButtons([{ label: 'A', link: 'javascript:alert(1)' }]).error || ''), 'xavfli havola — xato');
+  ok(cleanButtons([{ label: 'x'.repeat(60), link: '/a' }]).buttons[0].label.length === 24, 'nom 24 belgigacha');
+  ok(cleanButtons('zzz').buttons.length === 0, 'massiv bo‘lmasa — bo‘sh');
+  r = sanitizePromo({ template: 'image', imageUrl: img, buttons: [{ label: 'Ko‘rish', link: '/market' }] });
+  ok(!r.error && r.data.buttons.length === 1, 'image shablonida tugma saqlanadi');
+  r = sanitizePromo({ template: 'brush', title: 'Yaxshi taklif', buttons: [{ label: 'Ko‘rish', link: '/market' }] });
+  ok(!r.error && r.data.buttons.length === 0, 'boshqa shablonda tugmalar tozalanadi');
+  r = sanitizePromo({ template: 'sunburst' }, { partial: true });
+  ok(Array.isArray(r.data.buttons) && r.data.buttons.length === 0, 'shablon image’dan boshqasiga o‘tsa — tugmalar tozalanadi (PATCH)');
+  ok(publicView({ _id: 'a', template: 'image', buttons: [{ label: 'A', link: '/a', clicks: 7 }] }).buttons[0].clicks === undefined, 'mijozga bosilish soni chiqmaydi');
+  ok(publicView({ _id: 'a', template: 'brush', buttons: [{ label: 'A', link: '/a' }] }).buttons.length === 0, 'image bo‘lmasa tugma yuborilmaydi');
 }
 
 console.log('\n[4] Faollik (jadval)');
